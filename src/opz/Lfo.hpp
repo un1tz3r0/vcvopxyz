@@ -60,7 +60,11 @@ struct Lfo {
 			held = random();
 			done = true;
 		}
-		float p = phase;
+		return value(shape, phase, held, done, external);
+	}
+
+	/** A shape's value at a phase, given the random shapes' current value and whether the single saw is done. */
+	static float value(int shape, float p, float held, bool done, float external) {
 		switch (shape) {
 			case SINE: return std::sin(2.f * 3.14159265f * p);
 			case TRIANGLE: return 1.f - 4.f * std::fabs(p + 0.25f - std::floor(p + 0.25f) - 0.5f);

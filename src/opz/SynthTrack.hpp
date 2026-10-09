@@ -5,6 +5,7 @@
 #include "../dsp/Svf.hpp"
 #include "Lfo.hpp"
 #include "NoteStack.hpp"
+#include "../TripleBuffer.hpp"
 #include <atomic>
 
 /*
@@ -119,8 +120,8 @@ struct Meter {
 };
 
 
-template <class Engine>
-struct SynthTrack : Module {
+/** What every synth track has in common, whatever its engine, and all a Screen beside it needs to know. */
+struct Track : Module {
 	enum ParamId {
 		P1_PARAM, P2_PARAM, FILTER_PARAM, RESONANCE_PARAM,
 		ATTACK_PARAM, DECAY_PARAM, SUSTAIN_PARAM, RELEASE_PARAM,
@@ -151,6 +152,77 @@ struct SynthTrack : Module {
 	static constexpr int PPQN[] = {1, 2, 4, 8, 12, 16, 24, 48, 96};
 	static constexpr float FLASH = 0.3f; // seconds the dial LEDs flash a new page's colour
 
+	/** The audio thread's moving parts, published for a Screen about 60 times a second. */
+	struct Snapshot {
+		static constexpr int SCOPE = 1024;
+		float scope[SCOPE];                  // the output's last samples, oldest first
+		float levels[PORT_MAX_CHANNELS];     // each voice's envelope
+		int stages[PORT_MAX_CHANNELS];
+		float lfoPhase, lfoValue;
+		float outputs[4];                    // peak levels since the last snapshot
+	};
+	TripleBuffer<Snapshot> snapshots;
+
+	/** Shows each key's name, or in track mode what its slot does. */
+	struct KeyQuantity : SwitchQuantity {
+		std::string getLabel() override {
+			static const char* const names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+			Track* track = static_cast<Track*>(module);
+			int key = paramId - KEY_PARAM;
+			if (track->trackMode && keySlot(key) >= 0)
+				return string::f("Slot %d: click to load, hold to save", keySlot(key) + 1);
+			return string::f("%s%d", names[key % 12], 3 + track->octave + key / 12);
+		}
+	};
+
+	float secondsPerBeat = 0.5f; // 120 BPM until a clock says otherwise
+	int ppqn = 4;                // clock pulses per beat: 4 is one per sixteenth, one per step
+	int page = PAGE_SOUND;
+	bool trackMode = false;
+	int octave = 0;
+	float flash = 0.f;
+	// The quick slots, which the widget loads and saves; the module only lights them.
+	std::atomic<int> slotsFilled{0}, slot{-1};
+	std::atomic<bool> slotSaved{false};
+
+	static constexpr const char* PAGE_NAMES[PAGES_LEN] = {"SOUND", "ENVELOPE", "LFO", "MIX", "TRACK"};
+
+	/** A dial's name as the panel's legend prints it; the engine's two are named after its params. */
+	std::string dialName(int param) {
+		static const char* const names[] = {nullptr, nullptr, "FILTER", "RESO", "ATTACK", "DECAY", "SUSTAIN", "RELEASE",
+			"AMOUNT", "SPEED", "TARGET", "SHAPE", "FX 1", "FX 2", "PAN", "LEVEL", "STYLE", "GLIDE"};
+		return names[param] ? names[param] : string::uppercase(paramQuantities[param]->name);
+	}
+
+	/** The page the dials are showing: one of the four, or the track settings. */
+	int shownPage() const {
+		return trackMode ? PAGE_TRACK : page;
+	}
+
+	void showPage(int p) {
+		page = p;
+		trackMode = false;
+		flash = FLASH;
+	}
+
+	void setTrackMode(bool on) {
+		trackMode = on;
+		flash = FLASH;
+	}
+
+	/** Called by the widget when it loads or saves a quick slot. */
+	void showSlot(int s, bool saved) {
+		slot = s;
+		if (saved)
+			slotSaved = true;
+	}
+};
+
+
+template <class Engine>
+struct SynthTrack : Track {
+	dsp::BooleanTrigger pageButton, selectButtons[PAGES_LEN], octaveDown, octaveUp;
+
 	struct Voice {
 		typename Engine::Voice sound;
 		xyz::Adsr envelope;
@@ -170,18 +242,6 @@ struct SynthTrack : Module {
 		xyz::Adsr::Shape envelope;
 	};
 
-	/** Shows each key's name, or in track mode what its slot does. */
-	struct KeyQuantity : SwitchQuantity {
-		std::string getLabel() override {
-			static const char* const names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-			SynthTrack* track = static_cast<SynthTrack*>(module);
-			int key = paramId - KEY_PARAM;
-			if (track->trackMode && keySlot(key) >= 0)
-				return string::f("Slot %d: click to load, hold to save", keySlot(key) + 1);
-			return string::f("%s%d", names[key % 12], 3 + track->octave + key / 12);
-		}
-	};
-
 	Voice voices[PORT_MAX_CHANNELS];
 	uint32_t notesPlayed = 0;
 	dsp::SchmittTrigger gates[PORT_MAX_CHANNELS];
@@ -197,21 +257,13 @@ struct SynthTrack : Module {
 	dsp::ClockDivider controlDivider, lightDivider;
 	dsp::SchmittTrigger clock, reset;
 	float sinceClock = 0.f;
-	float secondsPerBeat = 0.5f; // 120 BPM until a clock says otherwise
-	int ppqn = 4;                // clock pulses per beat: 4 is one per sixteenth, one per step
-
-	int page = PAGE_SOUND;
-	bool trackMode = false;
-	int octave = 0;
-	float flash = 0.f;
-	dsp::BooleanTrigger pageButton, selectButtons[PAGES_LEN], octaveDown, octaveUp;
-	// The quick slots, which the widget loads and saves; the module only lights them.
-	std::atomic<int> slotsFilled{0}, slot{-1};
-	std::atomic<bool> slotSaved{false};
 	float slotFlash = 0.f;
 	Meter inputMeters[INPUTS_LEN], outputMeters[OUTPUTS_LEN];
 	float outputPeaks[OUTPUTS_LEN] = {};
 	bool limiting = false;
+	float scope[Snapshot::SCOPE] = {};
+	int scopeEnd = 0;
+	float sinceSnapshot = 0.f;
 
 	SynthTrack() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -264,28 +316,6 @@ struct SynthTrack : Module {
 		lightDivider.setDivision(64);
 	}
 
-	/** The page the dials are showing: one of the four, or the track settings. */
-	int shownPage() const {
-		return trackMode ? PAGE_TRACK : page;
-	}
-
-	void showPage(int p) {
-		page = p;
-		trackMode = false;
-		flash = FLASH;
-	}
-
-	void setTrackMode(bool on) {
-		trackMode = on;
-		flash = FLASH;
-	}
-
-	/** Called by the widget when it loads or saves a quick slot. */
-	void showSlot(int s, bool saved) {
-		slot = s;
-		if (saved)
-			slotSaved = true;
-	}
 
 	float velocity(int channel) {
 		return inputs[VELOCITY_INPUT].isConnected() ? clamp(inputs[VELOCITY_INPUT].getPolyVoltage(channel) / 10.f, 0.f, 1.f) : 1.f;
@@ -516,6 +546,8 @@ struct SynthTrack : Module {
 			outputPeaks[i] = std::fmax(outputPeaks[i], std::fabs(out[i]));
 		}
 		limiting |= std::fabs(x) > 5.f;
+		scope[scopeEnd] = y;
+		scopeEnd = (scopeEnd + 1) % Snapshot::SCOPE;
 
 		if (lightDivider.process())
 			updateLights(args.sampleTime * lightDivider.getDivision());
@@ -586,6 +618,27 @@ struct SynthTrack : Module {
 			lights[OUTPUT_LIGHT + 2 * i].setBrightness(outputMeters[i].peak);
 			lights[OUTPUT_LIGHT + 2 * i + 1].setBrightness(outputMeters[i].clip > 0.f);
 		}
+
+		sinceSnapshot += dt;
+		if (sinceSnapshot >= 1.f / 60.f) {
+			sinceSnapshot = 0.f;
+			publishSnapshot();
+		}
+	}
+
+	void publishSnapshot() {
+		Snapshot& s = snapshots.write();
+		for (int i = 0; i < Snapshot::SCOPE; i++)
+			s.scope[i] = scope[(scopeEnd + i) % Snapshot::SCOPE];
+		for (int i = 0; i < PORT_MAX_CHANNELS; i++) {
+			s.levels[i] = voices[i].envelope.level;
+			s.stages[i] = voices[i].envelope.stage;
+		}
+		s.lfoPhase = lfo.phase;
+		s.lfoValue = lfoValue;
+		for (int i = 0; i < OUTPUTS_LEN; i++)
+			s.outputs[i] = outputMeters[i].peak;
+		snapshots.publish();
 	}
 
 	void onReset(const ResetEvent& e) override {

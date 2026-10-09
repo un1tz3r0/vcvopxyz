@@ -13,7 +13,7 @@ EXTRA_CXXFLAGS += -std=c++17
 # Link static libraries only: you can't assume anything about the user's shared library search path.
 LDFLAGS +=
 
-SOURCES += $(wildcard src/*.cpp)
+SOURCES += $(wildcard src/*.cpp src/*/*.cpp)
 
 # Files packaged by `make dist` alongside the plugin binary and plugin.json
 DISTRIBUTABLES += res

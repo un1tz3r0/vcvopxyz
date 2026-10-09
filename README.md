@@ -44,6 +44,26 @@ the dials says what each one does on each page, and clicking a page's name there
 - **Jack LEDs:** green follows each jack's level. Red means clipping: above 10V on an input, or into the soft
   limiter that keeps the outputs within ±10V.
 
+### Screen
+
+The OP-Z's phone app, as an expander: the OP-Z famously has no screen, since you already carry one. Place it
+directly to the right of an OP-Z engine. Its top line names the engine, the page the dials are on and the tempo, and
+under it is the dial last turned, in its colour, with its value.
+
+The middle shows a picture of the page:
+
+| Page | Picture |
+| --- | --- |
+| Sound | A scope of the output, with the filter pair's response over it |
+| Envelope | The envelope, a stage per dial colour, with a dot riding it for each sounding voice |
+| LFO | One cycle of the shape, as deep as the amount, with the speed, the target and a dot at the current phase |
+| Mix | The two sends, the pan, the output meters and the level |
+| Track | The note style, the glide as a slide between two notes, and the 14 quick slots |
+
+Below that, every dial of every page is an arc in its colour, with the page the dials are on lit up. Click one to
+select it and jump to its page (the track row switches track mode on), then drag up or down anywhere on the screen to
+turn it, finely with Ctrl, like the app's touch pad. Each drag is one undo step.
+
 Coming next: a sequencer modelled on an OP-Z synth track, then parameter locks between the two.
 
 ## Building
@@ -93,6 +113,7 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | `src/opz/` | The OP-Z synth track every engine shares (`SynthTrack.hpp`), its panel (`SynthTrackWidget.hpp`), its LFO and note handling. |
 | `src/dsp/` | Building blocks that know nothing of Rack: filter, envelope. |
 | `src/Digital.cpp` | The Digital engine. |
+| `src/opz/Screen.cpp` | The Screen expander. |
 | `src/Screen.*` | A reusable display widget whose readouts line up with the controls around it. |
 | `src/ui.hpp` | Panel layout lookup, plus the custom dials, keys, buttons and lights. |
 | `src/TripleBuffer.hpp` | Lock-free hand-off of data from the audio thread to the UI thread. |
