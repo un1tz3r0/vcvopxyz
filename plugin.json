@@ -1,0 +1,17 @@
+{
+  "slug": "vcvopxyz",
+  "name": "vcvopxyz",
+  "version": "2.0.0",
+  "license": "MIT",
+  "brand": "un1tz3r0",
+  "author": "Victor Condino",
+  "authorEmail": "",
+  "authorUrl": "https://github.com/un1tz3r0",
+  "pluginUrl": "https://github.com/un1tz3r0/vcvopxyz",
+  "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#readme",
+  "sourceUrl": "https://github.com/un1tz3r0/vcvopxyz",
+  "donateUrl": "",
+  "changelogUrl": "https://github.com/un1tz3r0/vcvopxyz/releases",
+  "minRackVersion": "2.4.0",
+  "modules": []
+}
