@@ -60,10 +60,15 @@ THEMES = {
 }
 PASTELS = dict(yellow='#F4D394', green='#C4DDAB', teal='#A4D9D5', lavender='#B7C0F2',
                salmon='#F5B3A6', cyan='#ABE6F5', pink='#F7BDD6')
+# The OP-Z's four dials, and the colours its LEDs give each page of them (white while Track is held).
+DIALS = dict(green='#8FCC88', blue='#8DB2EC', yellow='#F2CE62', red='#F09484')
+PAGE_LEDS = ['#3BE07A', '#3D8BFF', '#FFC82E', '#FF4D3D', '#FFFFFF']
 COMPONENT_COLORS = dict(PARAM='#FF0000', INPUT='#00FF00', OUTPUT='#0000FF', LIGHT='#FF00FF', WIDGET='#FFFF00')
 
 HP = 5.08
-KNOB_R, SOFT_R, BUTTON_R = 5.5, 3.75, 3.6  # radii (mm) of the components generated below
+KNOB_R, SOFT_R, BUTTON_R, DIAL_R = 5.5, 3.75, 3.6, 7.0  # radii (mm) of the components generated below
+# Key sizes (mm): the keyboard's white and black keys, PAGE, and the small function keys.
+WHITE_KEY, BLACK_KEY, PAGE_KEY, FUNCTION_KEY = (4.9, 7.4), (3.9, 5.4), (6.4, 6.0), (5.6, 4.4)
 LABEL = 2.6  # label font size (mm)
 
 
@@ -137,6 +142,38 @@ def knob_pointer(r, length, width):
     c = num(r)
     return document(2 * r, 2 * r, f'  <path d="M{c} {num(r * (1 - length[0]))}V{num(r * (1 - length[1]))}" '
                                   f'stroke="#202023" stroke-width="{num(width)}" stroke-linecap="round"/>')
+
+
+def dial_bg(r, cap):
+    """Static part of an OP-Z style dial: a flat coloured cap whose rim catches the light from the top left."""
+    c = num(r)
+    return document(2 * r, 2 * r, f'''  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="{num(2 * r)}" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="{mix(cap, '#FFFFFF', 0.35)}"/><stop offset="1" stop-color="{mix(cap, '#000000', 0.3)}"/>
+    </linearGradient>
+  </defs>
+  <circle cx="{c}" cy="{c}" r="{c}" fill="url(#rim)"/>
+  <circle id="cap" cx="{c}" cy="{c}" r="{num(r - 0.6)}" fill="{cap}"/>''')
+
+
+def dial_pointer(r):
+    """Rotating part of a dial: a small dimple near the rim."""
+    c = num(r)
+    return document(2 * r, 2 * r, f'  <circle cx="{c}" cy="{num(r * 0.3)}" r="{num(r * 0.09)}" fill="#000000" fill-opacity="0.35"/>')
+
+
+def key(size, face, pressed, glyph=None):
+    """A key with a little depth: its face sits on a darker edge, and sinks into it when pressed."""
+    w, h = size
+    edge = mix(face, '#000000', 0.25)
+    if pressed:
+        face = mix(face, '#000000', 0.06)
+    lift = 0.15 if pressed else 0.45
+    body = (f'  <rect x="0" y="0" width="{num(w)}" height="{num(h)}" rx="0.9" fill="{edge}"/>\n'
+            f'  <rect x="0" y="{num(0.45 - lift)}" width="{num(w)}" height="{num(h - 0.45)}" rx="0.9" fill="{face}"/>')
+    if glyph:
+        body += f'\n  <path d="{NUNITO.path(glyph, w / 2, (h - lift) / 2 + 0.1, 3.0)}" fill="{mix(face, "#000000", 0.55)}"/>'
+    return document(w, h, body)
 
 
 def button(r, fill):

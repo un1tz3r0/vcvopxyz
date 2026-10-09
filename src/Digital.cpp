@@ -5,7 +5,7 @@ Two oscillators, each a 32-bit binary counter whose top five bits index a 32-ste
 interpolation, so the steps and their aliasing are part of the sound. One modulates the phase of the other:
 OCTAVE sets the modulator's frequency in octaves above or below the carrier, FEEDBACK how hard it modulates.
 */
-#include "opz/SynthTrack.hpp"
+#include "opz/SynthTrackWidget.hpp"
 #include <array>
 
 struct Digital {

@@ -3,10 +3,11 @@
 
 namespace opz {
 
-/** The channels holding a note down, oldest first. In mono and legato the newest one plays, and releasing it falls
-back to the one held before. */
+/** The notes held down, oldest first: gate channels, or keys of the panel's keyboard. In mono and legato the newest
+one plays, and releasing it falls back to the one held before. */
 struct NoteStack {
-	int channels[16];
+	static constexpr int CAPACITY = 24;
+	int notes[CAPACITY];
 	int size = 0;
 
 	bool empty() const {
@@ -14,16 +15,16 @@ struct NoteStack {
 	}
 
 	int top() const {
-		return channels[size - 1];
+		return notes[size - 1];
 	}
 
-	void push(int channel) {
-		remove(channel);
-		channels[size++] = channel;
+	void push(int note) {
+		remove(note);
+		notes[size++] = note;
 	}
 
-	void remove(int channel) {
-		size = std::remove(channels, channels + size, channel) - channels;
+	void remove(int note) {
+		size = std::remove(notes, notes + size, note) - notes;
 	}
 
 	void clear() {
