@@ -84,4 +84,11 @@ struct PushButton : app::SvgSwitch {
 	}
 };
 
+/** Rack's themed screws in the four corners. */
+inline void addScrews(app::ModuleWidget* w) {
+	float right = w->box.size.x - 2 * RACK_GRID_WIDTH;
+	for (math::Vec pos : {math::Vec(RACK_GRID_WIDTH, 0), math::Vec(right, 0), math::Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH), math::Vec(right, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)})
+		w->addChild(createWidget<ThemedScrew>(pos));
+}
+
 /* your components here */

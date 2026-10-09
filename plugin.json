@@ -13,5 +13,21 @@
   "donateUrl": "",
   "changelogUrl": "https://github.com/un1tz3r0/vcvopxyz/releases",
   "minRackVersion": "2.4.0",
-  "modules": []
+  "modules": [
+    {
+      "slug": "Digital",
+      "name": "Digital",
+      "description": "The OP-Z's raw digital FM engine on a full synth track: filter, envelope, LFO, note styles and portamento",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#digital",
+      "tags": [
+        "Synth voice",
+        "Hardware clone",
+        "Digital",
+        "Polyphonic",
+        "Filter",
+        "Envelope generator",
+        "Low-frequency oscillator"
+      ]
+    }
+  ]
 }
