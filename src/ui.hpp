@@ -48,6 +48,14 @@ struct PanelLayout {
 	math::Vec center(const char* id) const {
 		return box(id).getCenter();
 	}
+
+	math::Rect box(const std::string& id) const {
+		return box(id.c_str());
+	}
+
+	math::Vec center(const std::string& id) const {
+		return center(id.c_str());
+	}
 };
 
 
@@ -84,4 +92,164 @@ struct PushButton : app::SvgSwitch {
 	}
 };
 
-/* your components here */
+/** Rack's themed screws in the four corners. */
+inline void addScrews(app::ModuleWidget* w) {
+	float right = w->box.size.x - 2 * RACK_GRID_WIDTH;
+	for (math::Vec pos : {math::Vec(RACK_GRID_WIDTH, 0), math::Vec(right, 0), math::Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH), math::Vec(right, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)})
+		w->addChild(createWidget<ThemedScrew>(pos));
+}
+
+
+/** The colours of the OP-Z's pages of dials, as its LEDs show them, then white for the track settings. They follow the
+order of the dial colours, since TE's guide doesn't list them. */
+inline const NVGcolor PAGE_COLORS[] = {nvgRGB(0x3b, 0xe0, 0x7a), nvgRGB(0x3d, 0x8b, 0xff), nvgRGB(0xff, 0xc8, 0x2e), nvgRGB(0xff, 0x4d, 0x3d), nvgRGB(0xff, 0xff, 0xff)};
+/** Held notes, on the keys and the voice LEDs. */
+inline const NVGcolor NOTE_COLOR = nvgRGB(0xff, 0x7a, 0x2e);
+
+/** One LED that takes the colour of whichever page it shows. */
+struct PageLight : GrayModuleLightWidget {
+	PageLight() {
+		for (NVGcolor c : PAGE_COLORS)
+			addBaseColor(c);
+	}
+};
+
+struct NoteLight : GrayModuleLightWidget {
+	NoteLight() {
+		addBaseColor(NOTE_COLOR);
+	}
+};
+
+/** A 1.5 mm LED, between Rack's tiny and small ones. */
+template <typename TBase>
+struct DotLight : TBase {
+	DotLight() {
+		this->box.size = mm2px(math::Vec(1.5f, 1.5f));
+	}
+};
+
+/** A light painted over whatever is under it, rather than added to it as Rack's LEDs are, so it shows up on light
+surfaces too: the inside of a key, or a bar of colour. `off` is drawn while it's dark. */
+struct SolidLight : app::ModuleLightWidget {
+	float radius = 0.f;
+	NVGcolor off = nvgRGBA(0, 0, 0, 0);
+
+	void fill(const DrawArgs& args, NVGcolor c) {
+		if (c.a <= 0.f)
+			return;
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, 0, 0, box.size.x, box.size.y, radius);
+		nvgFillColor(args.vg, c);
+		nvgFill(args.vg);
+	}
+	void draw(const DrawArgs& args) override {
+		fill(args, off);
+	}
+	void drawLayer(const DrawArgs& args, int layer) override {
+		if (layer == 1)
+			fill(args, color);
+		Widget::drawLayer(args, layer);
+	}
+};
+
+/** The bar under a page's name in the legend: faint in the page's colour, bright while that page is showing. */
+struct PageBar : SolidLight {
+	void setPage(int page) {
+		addBaseColor(PAGE_COLORS[page]);
+		off = nvgTransRGBAf(PAGE_COLORS[page], 0.25f);
+	}
+};
+
+inline std::shared_ptr<window::Svg> dialCap(int color) {
+	static const char* const colors[] = {"green", "blue", "yellow", "red"};
+	return Svg::load(asset::plugin(pluginInstance, std::string("res/components/Dial_bg-") + colors[color] + ".svg"));
+}
+
+/** OP-Z style dial: a big flat cap in one of the four dial colours (0 to 3: green, blue, yellow, red), with a dimple
+that shows where it points. */
+struct Dial : RoundKnob {
+	Dial() {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/Dial.svg")));
+	}
+	Dial* color(int c) {
+		bg->setSvg(dialCap(c));
+		return this;
+	}
+};
+
+/** A dial with nothing to do on this page: it looks like the others, but doesn't turn. */
+struct IdleDial : widget::Widget {
+	explicit IdleDial(int color) {
+		widget::SvgWidget* cap = new widget::SvgWidget;
+		cap->setSvg(dialCap(color));
+		app::CircularShadow* shadow = new app::CircularShadow;
+		shadow->box = math::Rect(math::Vec(0, cap->box.size.y * 0.1f), cap->box.size);
+		box.size = cap->box.size;
+		addChild(shadow);
+		addChild(cap);
+	}
+};
+
+/** Momentary key with a little travel. Its two frames are res/components/<name>_0.svg (up) and _1.svg (down). */
+struct Key : app::SvgSwitch {
+	void setGraphics(const std::string& name) {
+		momentary = true;
+		shadow->opacity = 0.f;
+		addFrame(Svg::load(asset::plugin(pluginInstance, "res/components/" + name + "_0.svg")));
+		addFrame(Svg::load(asset::plugin(pluginInstance, "res/components/" + name + "_1.svg")));
+	}
+};
+
+/** A key that lights up from inside, like the OP-Z's, for createLightParamCentered. */
+struct LitKey : Key {
+	SolidLight* light = new SolidLight;
+
+	void setGraphics(const std::string& name) {
+		Key::setGraphics(name);
+		light->addBaseColor(NOTE_COLOR);
+		light->radius = mm2px(0.5f);
+		light->box = box.zeroPos().shrink(mm2px(math::Vec(0.5f, 0.6f)));
+		addChild(light);
+	}
+	app::ModuleLightWidget* getLight() {
+		return light;
+	}
+};
+
+struct PageKey : Key {
+	PageKey() {
+		setGraphics("PageKey");
+	}
+};
+
+struct WhiteKey : LitKey {
+	WhiteKey() {
+		setGraphics("WhiteKey");
+	}
+};
+
+struct BlackKey : LitKey {
+	BlackKey() {
+		setGraphics("BlackKey");
+	}
+};
+
+struct OctaveDownKey : LitKey {
+	OctaveDownKey() {
+		setGraphics("OctaveDown");
+	}
+};
+
+struct OctaveUpKey : LitKey {
+	OctaveUpKey() {
+		setGraphics("OctaveUp");
+	}
+};
+
+/** An invisible momentary button, for making printed artwork clickable. */
+struct HotSpot : app::Switch {
+	HotSpot() {
+		momentary = true;
+	}
+};
+
