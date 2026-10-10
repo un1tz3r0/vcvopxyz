@@ -103,6 +103,8 @@ inline void addScrews(app::ModuleWidget* w) {
 /** The colours of the OP-Z's pages of dials, as its LEDs show them, then white for the track settings. They follow the
 order of the dial colours, since TE's guide doesn't list them. */
 inline const NVGcolor PAGE_COLORS[] = {nvgRGB(0x3b, 0xe0, 0x7a), nvgRGB(0x3d, 0x8b, 0xff), nvgRGB(0xff, 0xc8, 0x2e), nvgRGB(0xff, 0x4d, 0x3d), nvgRGB(0xff, 0xff, 0xff)};
+/** The dials' cap colours, as res-src/panelkit.py draws them. */
+inline const NVGcolor DIAL_COLORS[] = {nvgRGB(0x8f, 0xcc, 0x88), nvgRGB(0x8d, 0xb2, 0xec), nvgRGB(0xf2, 0xce, 0x62), nvgRGB(0xf0, 0x94, 0x84)};
 /** Held notes, on the keys and the voice LEDs. */
 inline const NVGcolor NOTE_COLOR = nvgRGB(0xff, 0x7a, 0x2e);
 

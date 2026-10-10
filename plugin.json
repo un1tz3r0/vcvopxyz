@@ -28,6 +28,16 @@
         "Envelope generator",
         "Low-frequency oscillator"
       ]
+    },
+    {
+      "slug": "Screen",
+      "name": "Screen",
+      "description": "The OP-Z's phone app as an expander: place it to the right of an OP-Z engine to see its pages, its sound and every dial, and to edit them by touch",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#screen",
+      "tags": [
+        "Visual",
+        "Expander"
+      ]
     }
   ]
 }
