@@ -8,4 +8,5 @@ void init(Plugin* p) {
 	pluginInstance = p;
 	p->addModel(modelDigital);
 	p->addModel(modelScreen);
+	p->addModel(modelSequencer);
 }
