@@ -10,8 +10,7 @@
 
 /*
 An OP-Z synth track, whatever its engine: four dials that step through four pages (sound, envelope, LFO, mix) plus
-the track settings, note styles, portamento, polyphony, and a two-octave keyboard whose white keys double as quick
-slots. The engine supplies only the sound, through two dials of its own. It is a struct with:
+the track settings, note styles, portamento, polyphony. The notes come from the inputs, usually from a Sequencer. The engine supplies only the sound, through two dials of its own. It is a struct with:
 
 	static constexpr const char* SLUG;                     // module slug, and the name of its panel in res/
 	static void configSound(Module* m, int p1, int p2);    // configures its two sound dials
@@ -93,19 +92,6 @@ struct SpeedQuantity : ParamQuantity {
 };
 
 
-/** The keyboard on the panel: two octaves, C3 to B4 until the octave keys move it. */
-constexpr int KEYS = 24;
-/** Its white keys, which double as the quick slots in track mode. */
-constexpr int SLOTS = 14;
-constexpr int WHITE_KEYS[7] = {0, 2, 4, 5, 7, 9, 11};
-inline int slotKey(int slot) {
-	return 12 * (slot / 7) + WHITE_KEYS[slot % 7];
-}
-inline int keySlot(int key) {
-	const int* k = std::find(std::begin(WHITE_KEYS), std::end(WHITE_KEYS), key % 12);
-	return k == std::end(WHITE_KEYS) ? -1 : 7 * (key / 12) + int(k - WHITE_KEYS);
-}
-
 /** The pages the four dials step through, then the track settings, which take over the dials in track mode. */
 enum Page { PAGE_SOUND, PAGE_ENVELOPE, PAGE_LFO, PAGE_MIX, PAGE_TRACK, PAGES_LEN };
 
@@ -128,14 +114,14 @@ struct Track : Module {
 		LFO_AMOUNT_PARAM, LFO_SPEED_PARAM, LFO_TARGET_PARAM, LFO_SHAPE_PARAM,
 		FX1_PARAM, FX2_PARAM, PAN_PARAM, LEVEL_PARAM,
 		STYLE_PARAM, GLIDE_PARAM,
-		PAGE_PARAM, ENUMS(SELECT_PARAM, PAGES_LEN), OCTAVE_DOWN_PARAM, OCTAVE_UP_PARAM, ENUMS(KEY_PARAM, KEYS),
+		PAGE_PARAM, ENUMS(SELECT_PARAM, PAGES_LEN),
 		PARAMS_LEN
 	};
 	enum InputId { VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, CLOCK_INPUT, RESET_INPUT, EXT_INPUT, INPUTS_LEN };
 	enum OutputId { LEFT_OUTPUT, RIGHT_OUTPUT, FX1_OUTPUT, FX2_OUTPUT, OUTPUTS_LEN };
 	enum LightId {
 		ENUMS(DIAL_LIGHT, 4 * PAGES_LEN), ENUMS(PAGE_LIGHT, PAGES_LEN), ENUMS(SELECT_LIGHT, PAGES_LEN),
-		ENUMS(KEY_LIGHT, KEYS), ENUMS(VOICE_LIGHT, PORT_MAX_CHANNELS), OCTAVE_DOWN_LIGHT, OCTAVE_UP_LIGHT,
+		ENUMS(VOICE_LIGHT, PORT_MAX_CHANNELS),
 		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * OUTPUTS_LEN),
 		LIGHTS_LEN
 	};
@@ -163,27 +149,11 @@ struct Track : Module {
 	};
 	TripleBuffer<Snapshot> snapshots;
 
-	/** Shows each key's name, or in track mode what its slot does. */
-	struct KeyQuantity : SwitchQuantity {
-		std::string getLabel() override {
-			static const char* const names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-			Track* track = static_cast<Track*>(module);
-			int key = paramId - KEY_PARAM;
-			if (track->trackMode && keySlot(key) >= 0)
-				return string::f("Slot %d: click to load, hold to save", keySlot(key) + 1);
-			return string::f("%s%d", names[key % 12], 3 + track->octave + key / 12);
-		}
-	};
-
 	float secondsPerBeat = 0.5f; // 120 BPM until a clock says otherwise
 	int ppqn = 4;                // clock pulses per beat: 4 is one per sixteenth, one per step
 	int page = PAGE_SOUND;
 	bool trackMode = false;
-	int octave = 0;
 	float flash = 0.f;
-	// The quick slots, which the widget loads and saves; the module only lights them.
-	std::atomic<int> slotsFilled{0}, slot{-1};
-	std::atomic<bool> slotSaved{false};
 
 	static constexpr const char* PAGE_NAMES[PAGES_LEN] = {"SOUND", "ENVELOPE", "LFO", "MIX", "TRACK"};
 
@@ -209,19 +179,12 @@ struct Track : Module {
 		trackMode = on;
 		flash = FLASH;
 	}
-
-	/** Called by the widget when it loads or saves a quick slot. */
-	void showSlot(int s, bool saved) {
-		slot = s;
-		if (saved)
-			slotSaved = true;
-	}
 };
 
 
 template <class Engine>
 struct SynthTrack : Track {
-	dsp::BooleanTrigger pageButton, selectButtons[PAGES_LEN], octaveDown, octaveUp;
+	dsp::BooleanTrigger pageButton, selectButtons[PAGES_LEN];
 
 	struct Voice {
 		typename Engine::Voice sound;
@@ -247,9 +210,6 @@ struct SynthTrack : Track {
 	dsp::SchmittTrigger gates[PORT_MAX_CHANNELS];
 	NoteStack held;
 	int style = POLY;
-	bool keyboard = false;         // the keys play the track, because GATE is unpatched
-	bool keysDown[KEYS] = {};
-	float keyPitch[KEYS] = {};     // where each key's note started, in case the octave moves while it's held
 	Lfo lfo;
 	float lfoValue = 0.f;
 	xyz::Svf lowpass, highpass;
@@ -257,7 +217,6 @@ struct SynthTrack : Track {
 	dsp::ClockDivider controlDivider, lightDivider;
 	dsp::SchmittTrigger clock, reset;
 	float sinceClock = 0.f;
-	float slotFlash = 0.f;
 	Meter inputMeters[INPUTS_LEN], outputMeters[OUTPUTS_LEN];
 	float outputPeaks[OUTPUTS_LEN] = {};
 	bool limiting = false;
@@ -293,16 +252,12 @@ struct SynthTrack : Track {
 		const char* const pages[] = {"Sound page", "Envelope page", "LFO page", "Mix page", "Track mode"};
 		for (int i = 0; i < PAGES_LEN; i++)
 			configButton(SELECT_PARAM + i, pages[i]);
-		getParamQuantity(SELECT_PARAM + PAGE_TRACK)->description = "On and off: the dials set the note style and portamento, and the white keys are quick slots";
-		configButton(OCTAVE_DOWN_PARAM, "Keyboard octave down");
-		configButton(OCTAVE_UP_PARAM, "Keyboard octave up");
-		for (int i = 0; i < KEYS; i++)
-			configButton<KeyQuantity>(KEY_PARAM + i)->description = "Plays while GATE is unpatched";
+		getParamQuantity(SELECT_PARAM + PAGE_TRACK)->description = "On and off: the dials set the note style and portamento";
 		for (int i = 0; i < PORT_MAX_CHANNELS; i++)
 			configLight(VOICE_LIGHT + i, string::f("Voice %d", i + 1));
 
 		configInput(VOCT_INPUT, "1V/octave pitch");
-		configInput(GATE_INPUT, "Gate; the keys play while it's unpatched");
+		configInput(GATE_INPUT, "Gate");
 		configInput(VELOCITY_INPUT, "Velocity (0-10V)");
 		configInput(CLOCK_INPUT, "Clock, for the synced LFO speeds");
 		configInput(RESET_INPUT, "LFO reset");
@@ -321,12 +276,8 @@ struct SynthTrack : Track {
 		return inputs[VELOCITY_INPUT].isConnected() ? clamp(inputs[VELOCITY_INPUT].getPolyVoltage(channel) / 10.f, 0.f, 1.f) : 1.f;
 	}
 
-	float noteVelocity(int note) {
-		return keyboard ? 1.f : velocity(note);
-	}
-
 	float notePitch(int note) {
-		return keyboard ? keyPitch[note] : inputs[VOCT_INPUT].getPolyVoltage(note);
+		return inputs[VOCT_INPUT].getPolyVoltage(note);
 	}
 
 	void trigger(Voice& v, float velocity) {
@@ -337,38 +288,17 @@ struct SynthTrack : Track {
 			lfo.restart();
 	}
 
-	/** A voice for a key: a silent one, else the quietest of those releasing, else the one playing longest. */
-	int freeVoice() {
-		int best = -1;
-		for (int i = 0; i < PORT_MAX_CHANNELS; i++)
-			if (!voices[i].envelope.active())
-				return i;
-		for (int i = 0; i < PORT_MAX_CHANNELS; i++)
-			if (voices[i].note < 0 && (best < 0 || voices[i].envelope.level < voices[best].envelope.level))
-				best = i;
-		if (best >= 0)
-			return best;
-		for (int i = 0; i < PORT_MAX_CHANNELS; i++)
-			if (best < 0 || voices[i].started < voices[best].started)
-				best = i;
-		return best;
-	}
-
-	/** Poly plays each note on a voice of its own: a gate channel on the voice with its number, a key on whichever is
-	free. Mono and legato play the newest held note on voice 0. */
+	/** Poly plays each gate channel on the voice with its number. Mono and legato play the newest held note on voice 0. */
 	void noteOn(int note) {
 		if (style == POLY) {
-			Voice& v = voices[keyboard ? freeVoice() : note];
-			v.note = note;
-			if (keyboard)
-				v.pitch = keyPitch[note];
-			trigger(v, noteVelocity(note));
+			voices[note].note = note;
+			trigger(voices[note], velocity(note));
 		}
 		else {
 			bool slur = style == LEGATO && !held.empty();
 			held.push(note);
 			if (!slur)
-				trigger(voices[0], noteVelocity(note));
+				trigger(voices[0], velocity(note));
 		}
 	}
 
@@ -387,7 +317,7 @@ struct SynthTrack : Track {
 		if (held.empty())
 			voices[0].envelope.gate(false);
 		else if (playing && style == MONO)
-			trigger(voices[0], noteVelocity(held.top()));
+			trigger(voices[0], velocity(held.top()));
 	}
 
 	void releaseAll() {
@@ -400,14 +330,10 @@ struct SynthTrack : Track {
 
 	void handleNotes() {
 		int newStyle = (int) params[STYLE_PARAM].getValue();
-		bool newKeyboard = !inputs[GATE_INPUT].isConnected();
-		if (newStyle != style || newKeyboard != keyboard) {
+		if (newStyle != style) {
 			style = newStyle;
-			keyboard = newKeyboard;
 			releaseAll();
 		}
-		if (keyboard)
-			return;
 		// Channels beyond the gate input's count read as low, so dropping channels releases their notes.
 		int channels = inputs[GATE_INPUT].getChannels();
 		for (int c = 0; c < PORT_MAX_CHANNELS; c++) {
@@ -419,8 +345,7 @@ struct SynthTrack : Track {
 		}
 	}
 
-	/** The panel's buttons and keys, at control rate. In track mode the keys are quick slots, which the widget
-	handles, so they only let go of their notes. */
+	/** The page buttons, at control rate. */
 	void handleButtons(float dt) {
 		if (pageButton.process(params[PAGE_PARAM].getValue() > 0.f))
 			showPage(trackMode ? page : (page + 1) % PAGE_TRACK);
@@ -432,26 +357,7 @@ struct SynthTrack : Track {
 					showPage(i);
 			}
 		}
-		if (octaveDown.process(params[OCTAVE_DOWN_PARAM].getValue() > 0.f))
-			octave = std::max(octave - 1, -3);
-		if (octaveUp.process(params[OCTAVE_UP_PARAM].getValue() > 0.f))
-			octave = std::min(octave + 1, 3);
 		flash = std::fmax(flash - dt, 0.f);
-
-		for (int k = 0; k < KEYS; k++) {
-			bool down = params[KEY_PARAM + k].getValue() > 0.f;
-			if (down == keysDown[k])
-				continue;
-			keysDown[k] = down;
-			if (!keyboard)
-				continue;
-			if (!down)
-				noteOff(k);
-			else if (!trackMode) {
-				keyPitch[k] = octave - 1.f + k / 12.f;
-				noteOn(k);
-			}
-		}
 	}
 
 	void trackTempo(float sampleTime) {
@@ -527,7 +433,7 @@ struct SynthTrack : Track {
 			Voice& v = voices[i];
 			if (!v.envelope.active())
 				continue;
-			if (style == POLY && !keyboard)
+			if (style == POLY)
 				v.pitch = inputs[VOCT_INPUT].getPolyVoltage(i);
 			float frequency = dsp::FREQ_C4 * dsp::exp2_taylor5(v.pitch + controls.pitch);
 			float level = v.envelope.process(controls.envelope) * v.velocity;
@@ -566,36 +472,6 @@ struct SynthTrack : Track {
 			lights[PAGE_LIGHT + p].setBrightness(p == shown);
 			lights[SELECT_LIGHT + p].setBrightness(p == shown);
 		}
-		lights[OCTAVE_DOWN_LIGHT].setBrightness(octave < 0 ? 0.2f - 0.2f * octave : 0.f);
-		lights[OCTAVE_UP_LIGHT].setBrightness(octave > 0 ? 0.2f + 0.2f * octave : 0.f);
-
-		// The keys light up under held notes, or in track mode show which slots are filled and which was used last.
-		float keys[KEYS] = {};
-		if (slotSaved.exchange(false))
-			slotFlash = 0.6f;
-		slotFlash = std::fmax(slotFlash - dt, 0.f);
-		if (trackMode) {
-			int filled = slotsFilled, current = slot;
-			for (int s = 0; s < SLOTS; s++) {
-				float b = (filled >> s) & 1 ? 0.3f : 0.f;
-				if (s == current)
-					b = slotFlash > 0.f && std::fmod(slotFlash, 0.2f) < 0.1f ? 0.f : 1.f;
-				keys[slotKey(s)] = b;
-			}
-		}
-		else if (keyboard) {
-			for (int k = 0; k < KEYS; k++)
-				keys[k] = keysDown[k];
-		}
-		else {
-			for (int c = 0; c < inputs[GATE_INPUT].getChannels(); c++) {
-				int k = (int) std::round((inputs[VOCT_INPUT].getPolyVoltage(c) - octave + 1.f) * 12.f);
-				if (gates[c].isHigh() && k >= 0 && k < KEYS)
-					keys[k] = 1.f;
-			}
-		}
-		for (int k = 0; k < KEYS; k++)
-			lights[KEY_LIGHT + k].setBrightness(keys[k]);
 		for (int i = 0; i < PORT_MAX_CHANNELS; i++)
 			lights[VOICE_LIGHT + i].setBrightnessSmooth(voices[i].envelope.level * voices[i].velocity, dt);
 
@@ -646,7 +522,6 @@ struct SynthTrack : Track {
 		ppqn = 4;
 		page = PAGE_SOUND;
 		trackMode = false;
-		octave = 0;
 	}
 
 	/** Buttons are saved like any param, so one held down while saving would come back stuck. */
@@ -656,12 +531,11 @@ struct SynthTrack : Track {
 			params[i].setValue(0.f);
 	}
 
-	/** Track mode isn't saved: the quick slots are saved in it, and loading one shouldn't switch it on. */
+	/** Track mode isn't saved, so a patch always opens on the dials' pages. */
 	json_t* dataToJson() override {
 		json_t* root = json_object();
 		json_object_set_new(root, "ppqn", json_integer(ppqn));
 		json_object_set_new(root, "page", json_integer(page));
-		json_object_set_new(root, "octave", json_integer(octave));
 		return root;
 	}
 
@@ -670,8 +544,6 @@ struct SynthTrack : Track {
 			ppqn = std::max((int) json_integer_value(j), 1);
 		if (json_t* j = json_object_get(root, "page"))
 			page = clamp((int) json_integer_value(j), 0, PAGE_TRACK - 1);
-		if (json_t* j = json_object_get(root, "octave"))
-			octave = clamp((int) json_integer_value(j), -3, 3);
 	}
 };
 

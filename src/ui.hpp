@@ -217,49 +217,9 @@ struct Key : app::SvgSwitch {
 	}
 };
 
-/** A key that lights up from inside, like the OP-Z's, for createLightParamCentered. */
-struct LitKey : Key {
-	SolidLight* light = new SolidLight;
-
-	void setGraphics(const std::string& name) {
-		Key::setGraphics(name);
-		light->addBaseColor(NOTE_COLOR);
-		light->radius = mm2px(0.5f);
-		light->box = box.zeroPos().shrink(mm2px(math::Vec(0.5f, 0.6f)));
-		addChild(light);
-	}
-	app::ModuleLightWidget* getLight() {
-		return light;
-	}
-};
-
 struct PageKey : Key {
 	PageKey() {
 		setGraphics("PageKey");
-	}
-};
-
-struct WhiteKey : LitKey {
-	WhiteKey() {
-		setGraphics("WhiteKey");
-	}
-};
-
-struct BlackKey : LitKey {
-	BlackKey() {
-		setGraphics("BlackKey");
-	}
-};
-
-struct OctaveDownKey : LitKey {
-	OctaveDownKey() {
-		setGraphics("OctaveDown");
-	}
-};
-
-struct OctaveUpKey : LitKey {
-	OctaveUpKey() {
-		setGraphics("OctaveUp");
 	}
 };
 

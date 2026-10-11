@@ -69,8 +69,7 @@ COMPONENT_COLORS = dict(PARAM='#FF0000', INPUT='#00FF00', OUTPUT='#0000FF', LIGH
 HP = 5.08
 KNOB_R, SOFT_R, BUTTON_R, DIAL_R = 5.5, 3.75, 3.6, 7.0  # radii (mm) of the components generated below
 SMALL_DIAL_R = 5.45  # the Sequencer's dials, which fill two of its key columns as the OP-Z's do
-# Key sizes (mm): the keyboard's white and black keys, PAGE, and the small function keys.
-WHITE_KEY, BLACK_KEY, PAGE_KEY, FUNCTION_KEY = (4.9, 7.4), (3.9, 5.4), (6.4, 6.0), (5.6, 4.4)
+PAGE_KEY = (6.4, 6.0)  # PAGE's size (mm)
 LABEL = 2.6  # label font size (mm)
 
 
@@ -164,7 +163,7 @@ def dial_pointer(r):
     return document(2 * r, 2 * r, f'  <circle cx="{c}" cy="{num(r * 0.3)}" r="{num(r * 0.09)}" fill="#000000" fill-opacity="0.35"/>')
 
 
-def key(size, face, pressed, glyph=None):
+def key(size, face, pressed):
     """A key with a little depth: its face sits on a darker edge, and sinks into it when pressed."""
     w, h = size
     edge = mix(face, '#000000', 0.25)
@@ -173,8 +172,6 @@ def key(size, face, pressed, glyph=None):
     lift = 0.15 if pressed else 0.45
     body = (f'  <rect x="0" y="0" width="{num(w)}" height="{num(h)}" rx="0.9" fill="{edge}"/>\n'
             f'  <rect x="0" y="{num(0.45 - lift)}" width="{num(w)}" height="{num(h - 0.45)}" rx="0.9" fill="{face}"/>')
-    if glyph:
-        body += f'\n  <path d="{NUNITO.path(glyph, w / 2, (h - lift) / 2 + 0.1, 3.0)}" fill="{mix(face, "#000000", 0.55)}"/>'
     return document(w, h, body)
 
 

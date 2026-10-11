@@ -13,6 +13,8 @@ SHIFT latch.
 
 namespace opz {
 
+/** The keyboard: two octaves, F to E. */
+constexpr int KEYS = 24;
 /** The black keys, in semitones above F, double as the value keys: 1 to 9 then 0 from the left. */
 constexpr int BLACK_KEYS[5] = {1, 3, 5, 8, 10};
 inline int keyValue(int key) {

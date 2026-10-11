@@ -10,8 +10,8 @@ Needs fontTools:  python3 -m pip install fonttools
 import importlib
 
 from opz import SYMBOLS, symbol_svg
-from panelkit import (BLACK_KEY, BUTTON_R, DIAL_R, DIALS, FUNCTION_KEY, KNOB_R, PAGE_KEY, PASTELS, ROOT, SMALL_DIAL_R, SOFT_R,
-                      THEMES, WHITE_KEY, button, dial_bg, dial_pointer, key, knob_bg, knob_pointer, write)
+from panelkit import (BUTTON_R, DIAL_R, DIALS, KNOB_R, PAGE_KEY, PASTELS, ROOT, SMALL_DIAL_R, SOFT_R,
+                      THEMES, button, dial_bg, dial_pointer, key, knob_bg, knob_pointer, write)
 
 if __name__ == '__main__':
     for path in sorted((ROOT / 'res-src/panels').glob('*.py')):
@@ -32,9 +32,5 @@ if __name__ == '__main__':
         write(components / f'{kind}.svg', dial_pointer(r))
     for name in [*SYMBOLS, *'0123456789']:
         write(components / f'symbols/{name}.svg', symbol_svg(name))
-    keys = dict(WhiteKey=(WHITE_KEY, '#EDECE8', None), BlackKey=(BLACK_KEY, '#4A4B4F', None),
-                PageKey=(PAGE_KEY, '#EDECE8', None), OctaveDown=(FUNCTION_KEY, '#EDECE8', '\u2212'),
-                OctaveUp=(FUNCTION_KEY, '#EDECE8', '+'))
-    for name, (size, face, glyph) in keys.items():
-        for pressed in range(2):
-            write(components / f'{name}_{pressed}.svg', key(size, face, pressed, glyph))
+    for pressed in range(2):
+        write(components / f'PageKey_{pressed}.svg', key(PAGE_KEY, '#EDECE8', pressed))

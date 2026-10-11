@@ -75,12 +75,9 @@ the dials says what each one does on each page, and clicking a page's name there
 | Track (white) | **Style** (poly, mono, legato) on the second dial, **Glide** (mono and legato) on the fourth |
 
 - **Track mode:** click **TRACK** in the legend to switch it on, and again to switch it off. It stands in for holding
-  the hardware's track key. The dials set the track settings, and the white keys become 14 quick slots: click one to
-  load it, or hold it for a second to save the sound to it. Filled slots glow dimly, and the last one used glows
-  brightly. Slots are ordinary presets in a `Slots` folder, so every Digital shares them and they also appear in the
-  module's Preset menu. The context menu opens the folder.
-- **Keyboard:** two octaves, C3 to B4 until **−** and **+** move it. The keys play while **GATE** is unpatched, and
-  light up under every held note, whether it comes from the keys or the inputs. The 16 dots above them are the voices.
+  the hardware's track key, and the dials set the track settings.
+- **Notes:** Digital has no keys of its own. It plays the poly **V/OCT**, **GATE** and **VEL** inputs, usually from a
+  Sequencer beside it, whose keys play it live. The 16 dots under **VOICES** light with each voice's envelope.
 - **Note styles:** poly plays each gate channel on its own voice. Mono plays the newest held note and retriggers
   the envelope on every change, including falling back to an older note. Legato does the same without retriggering.
 - **LFO shapes:** sine, triangle, square, saw, random and external are free-running and bipolar. Bell, triangle,
@@ -107,7 +104,7 @@ The middle shows a picture of the page:
 | Envelope | The envelope, a stage per dial colour, with a dot riding it for each sounding voice |
 | LFO | One cycle of the shape, as deep as the amount, with the speed, the target and a dot at the current phase |
 | Mix | The two sends, the pan, the output meters and the level |
-| Track | The note style, the glide as a slide between two notes, and the 14 quick slots |
+| Track | The note style, and the glide as a slide between two notes |
 
 Below that, every dial of every page is an arc in its colour, with the page the dials are on lit up. Click one to
 select it and jump to its page (the track row switches track mode on), then drag up or down anywhere on the screen to

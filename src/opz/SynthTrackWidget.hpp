@@ -10,20 +10,15 @@ dial of its own, with its tooltip, MIDI mapping and undo, while the panel looks 
 template <class Engine>
 struct SynthTrackWidget : ModuleWidget {
 	using Track = SynthTrack<Engine>;
-	static constexpr double HOLD = 1.0; // seconds to hold a slot's key to save to it
 
 	app::ParamWidget* dials[PAGES_LEN][4] = {};
 	IdleDial* idle[4] = {};
-	double pressed[SLOTS];
-	bool saved[SLOTS] = {};
-	bool wasTrackMode = false;
 
 	SynthTrackWidget(Track* module) {
 		setModule(module);
 		std::string panel = asset::plugin(pluginInstance, string::f("res/%s.svg", Engine::SLUG));
 		setPanel(createPanel(panel, asset::plugin(pluginInstance, string::f("res/%s-dark.svg", Engine::SLUG))));
 		addScrews(this);
-		std::fill(std::begin(pressed), std::end(pressed), -1.0);
 
 		PanelLayout layout(panel);
 #define AT(ID) layout.center(#ID), module, Track::ID
@@ -54,17 +49,8 @@ struct SynthTrackWidget : ModuleWidget {
 			addParam(button);
 		}
 
-		addParam(createLightParamCentered<OctaveDownKey>(AT(OCTAVE_DOWN_PARAM), Track::OCTAVE_DOWN_LIGHT));
-		addParam(createLightParamCentered<OctaveUpKey>(AT(OCTAVE_UP_PARAM), Track::OCTAVE_UP_LIGHT));
 		for (int i = 0; i < PORT_MAX_CHANNELS; i++)
 			addChild(createLightCentered<DotLight<NoteLight>>(layout.center(string::f("VOICE%d_LIGHT", i)), module, Track::VOICE_LIGHT + i));
-		for (int k = 0; k < KEYS; k++) {
-			math::Vec pos = layout.center(string::f("KEY%d_PARAM", k));
-			if (keySlot(k) >= 0)
-				addParam(createLightParamCentered<WhiteKey>(pos, module, Track::KEY_PARAM + k, Track::KEY_LIGHT + k));
-			else
-				addParam(createLightParamCentered<BlackKey>(pos, module, Track::KEY_PARAM + k, Track::KEY_LIGHT + k));
-		}
 
 		static const char* const inputs[] = {"VOCT", "GATE", "VELOCITY", "CLOCK", "RESET", "EXT"};
 		static const char* const outputs[] = {"LEFT", "RIGHT", "FX1", "FX2"};
@@ -79,70 +65,6 @@ struct SynthTrackWidget : ModuleWidget {
 #undef AT
 	}
 
-	std::string slotPath(int s) {
-		return system::join(model->getUserPresetDirectory(), "Slots", string::f("Slot %02d.vcvm", s + 1));
-	}
-
-	void refreshSlots(Track* track) {
-		int filled = 0;
-		for (int s = 0; s < SLOTS; s++)
-			if (system::isFile(slotPath(s)))
-				filled |= 1 << s;
-		track->slotsFilled = filled;
-	}
-
-	void saveSlot(Track* track, int s) {
-		system::createDirectories(system::getDirectory(slotPath(s)));
-		save(slotPath(s));
-		track->showSlot(s, true);
-		refreshSlots(track);
-	}
-
-	/** A slot holds a sound, so the page, the keyboard's octave and the clock setting stay as they are. */
-	void loadSlot(Track* track, int s) {
-		if (!system::isFile(slotPath(s)))
-			return;
-		int page = track->page, octave = track->octave, ppqn = track->ppqn;
-		try {
-			loadAction(slotPath(s));
-		}
-		catch (Exception& e) {
-			WARN("Could not load %s: %s", slotPath(s).c_str(), e.what());
-			return;
-		}
-		track->page = page;
-		track->octave = octave;
-		track->ppqn = ppqn;
-		track->showSlot(s, false);
-	}
-
-	/** In track mode the white keys are quick slots, like the hardware's: a click loads one, and holding the key
-	for a second saves to it. Slots are presets in a Slots folder, so every copy of the module shares them. */
-	void handleSlots(Track* track) {
-		if (track->trackMode && !wasTrackMode)
-			refreshSlots(track);
-		wasTrackMode = track->trackMode;
-		double now = system::getTime();
-		for (int s = 0; s < SLOTS; s++) {
-			bool down = track->params[Track::KEY_PARAM + slotKey(s)].getValue() > 0.f;
-			if (down && track->trackMode) {
-				if (pressed[s] < 0.0) {
-					pressed[s] = now;
-					saved[s] = false;
-				}
-				else if (!saved[s] && now - pressed[s] >= HOLD) {
-					saveSlot(track, s);
-					saved[s] = true;
-				}
-			}
-			else if (pressed[s] >= 0.0) {
-				if (!saved[s] && track->trackMode)
-					loadSlot(track, s);
-				pressed[s] = -1.0;
-			}
-		}
-	}
-
 	void step() override {
 		Track* track = getModule<Track>();
 		int shown = track ? track->shownPage() : PAGE_SOUND;
@@ -152,8 +74,6 @@ struct SynthTrackWidget : ModuleWidget {
 					dials[p][d]->setVisible(p == shown);
 			idle[d]->setVisible(!dials[shown][d]);
 		}
-		if (track)
-			handleSlots(track);
 		ModuleWidget::step();
 	}
 
@@ -166,11 +86,6 @@ struct SynthTrackWidget : ModuleWidget {
 		menu->addChild(createIndexSubmenuItem("Clock pulses per beat", labels,
 			[=]() { return std::find(std::begin(Track::PPQN), std::end(Track::PPQN), module->ppqn) - std::begin(Track::PPQN); },
 			[=](size_t i) { module->ppqn = Track::PPQN[i]; }));
-		menu->addChild(createMenuItem("Open the quick slots folder", "", [=]() {
-			std::string dir = system::getDirectory(slotPath(0));
-			system::createDirectories(dir);
-			system::openDirectory(dir);
-		}));
 	}
 };
 
