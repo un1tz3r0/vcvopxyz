@@ -8,6 +8,46 @@ Not affiliated with or endorsed by teenage engineering. OP-Z and OP-XY are their
 
 ## Modules
 
+### Sequencer
+
+An OP-Z synth track's sequencer: 16 steps of up to four notes each, with micro timing, note lengths, step count and
+step length. Place it to the left of an engine, whose keyboard and jacks it lines up with, and patch **V/OCT**,
+**GATE** and **VEL** across, plus **CLOCK** for the engine's synced LFO.
+
+- **Steps:** click an empty step to paste the last notes played (a chord, if they were down together), or a lit step
+  to clear it. Steps past the step count glow dimly and don't play. Right-click a step to set its notes' velocity,
+  micro timing and length.
+- **Holding a step:** Rack can't hold one button while clicking another, so a long press or a Ctrl+click (⌘+click
+  on a Mac) picks a step up, and it blinks until clicked again. Either can be switched off in the context menu. While
+  a step is held, the keys add and remove its notes, clicking another step makes its notes last to the end of that
+  one (blue LEDs show how far; the same click again restores the default length), and **−** and **+** nudge it a
+  tick, 1/24 of a step. Picking a step up while stopped plays it, and copies it for pasting.
+- **Dials:** **Tempo**, 40 to 200 BPM. **Swing**, from 50% (straight) to 75%, delays every second sixteenth.
+  **Length** is the note length for notes left at the default: 1/64 to a bar with the dotted values between, then
+  drone, which holds a note until its channel is needed again. **Quant** pulls micro timing towards the grid as it
+  plays, leaving the recorded timing as it is.
+- **Track mode:** click **TRACK** to switch it on, and again to switch it off. The steps set the step count (the last
+  one glows brightly), the black keys set the step length (1 to 8 for ×1 to ×8, 9 for ×16, 0 for one step per
+  trigger on **ADV**), and **−** and **+** shift the pattern a step within the step count. **STOP** lets go of the
+  notes, and held for a second clears the pattern.
+- **Recording:** click **REC** to switch it on. While playing, notes from the keys and inputs go into the nearest
+  step with their micro timing and length. Hold notes on the inputs and click **−** to erase them from the steps
+  they pass instead, until they're released. While stopped, REC records a step at a time: each note or chord goes
+  into the blinking step, which moves on when they're released. Click a step to move it there.
+- **Transport:** **PLAY** starts from the first step, or again from it while playing. **STOP** stops, and when
+  stopped already, lets go of every note, the live ones too. Pattern edits can be undone like any other change.
+- **Clock:** the display shows the tempo, with **INT** lit. A patched **CLOCK**, at 4 pulses per beat unless you
+  change it in the context menu, takes over and lights **EXT**, and the display shows dashes until it has timed two
+  pulses. PLAY then waits for the next pulse, which plays the first step, and the sequencer follows the pulses as they
+  speed up, slow down or stop. **RESET** starts again from the first step (with a clock patched, at its next pulse).
+  The **CLOCK** and **RESET** outputs follow the sequencer while it plays.
+- **Keys and inputs:** the keys play while they're down, and so do notes on the poly **V/OCT**, **GATE** and **VEL**
+  inputs (from MIDI-CV, say), which follow their V/OCT while held. **−** and **+** move the keyboard an octave. Keys
+  light under every note sounding, and the dots above them are the output channels.
+- **Outputs:** poly **V/OCT**, **GATE** (10V) and **VEL** (0 to 10V; velocity 127 is 10V), with 4 channels unless
+  you change it in the context menu. A new note takes the channel silent longest, or failing that the one playing
+  longest, and its gate drops for a sample so the engine retriggers.
+
 ### Digital
 
 The OP-Z's raw digital engine on a full OP-Z synth track. Two binary-counter oscillators read a 32-step, 4-bit sine
@@ -64,7 +104,7 @@ Below that, every dial of every page is an arc in its colour, with the page the 
 select it and jump to its page (the track row switches track mode on), then drag up or down anywhere on the screen to
 turn it, finely with Ctrl, like the app's touch pad. Each drag is one undo step.
 
-Coming next: a sequencer modelled on an OP-Z synth track, then parameter locks between the two.
+Coming next: the sequencer's step components, then parameter locks between it and the engine beside it.
 
 ## Building
 
@@ -111,6 +151,8 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | `plugin.json` | The manifest: plugin and module metadata, and the version. |
 | `src/plugin.*` | The plugin's entry point, which registers each module's `Model`. |
 | `src/opz/` | The OP-Z synth track every engine shares (`SynthTrack.hpp`), its panel (`SynthTrackWidget.hpp`), its LFO and note handling. |
+| `src/opz/Sequence.hpp` | The sequencer's steps and the player that schedules them, knowing nothing of Rack. |
+| `src/opz/Sequencer.cpp` | The Sequencer module. |
 | `src/dsp/` | Building blocks that know nothing of Rack: filter, envelope. |
 | `src/Digital.cpp` | The Digital engine. |
 | `src/opz/Screen.cpp` | The Screen expander. |

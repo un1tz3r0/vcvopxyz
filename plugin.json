@@ -15,6 +15,18 @@
   "minRackVersion": "2.4.0",
   "modules": [
     {
+      "slug": "Sequencer",
+      "name": "Sequencer",
+      "description": "The OP-Z's synth track sequencer: 16 steps of up to four notes, micro timing, step count and length, live and step recording",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#sequencer",
+      "tags": [
+        "Sequencer",
+        "Hardware clone",
+        "Polyphonic",
+        "Clock generator"
+      ]
+    },
+    {
       "slug": "Digital",
       "name": "Digital",
       "description": "The OP-Z's raw digital FM engine on a full synth track: filter, envelope, LFO, note styles and portamento",

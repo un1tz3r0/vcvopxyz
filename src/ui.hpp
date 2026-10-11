@@ -122,6 +122,14 @@ struct NoteLight : GrayModuleLightWidget {
 	}
 };
 
+/** An LED in one of the page colours: 0 to 4 for green, blue, yellow, red and white. */
+template <int C>
+struct ColorLight : GrayModuleLightWidget {
+	ColorLight() {
+		addBaseColor(PAGE_COLORS[C]);
+	}
+};
+
 /** A 1.5 mm LED, between Rack's tiny and small ones. */
 template <typename TBase>
 struct DotLight : TBase {
@@ -202,13 +210,15 @@ struct Key : app::SvgSwitch {
 	}
 };
 
-/** A key that lights up from inside, like the OP-Z's, for createLightParamCentered. */
+/** A key that lights up from inside, like the OP-Z's, for createLightParamCentered. Several colours make a
+multicoloured light, one light id each. */
 struct LitKey : Key {
 	SolidLight* light = new SolidLight;
 
-	void setGraphics(const std::string& name) {
+	void setGraphics(const std::string& name, std::initializer_list<NVGcolor> colors = {NOTE_COLOR}) {
 		Key::setGraphics(name);
-		light->addBaseColor(NOTE_COLOR);
+		for (NVGcolor c : colors)
+			light->addBaseColor(c);
 		light->radius = mm2px(0.5f);
 		light->box = box.zeroPos().shrink(mm2px(math::Vec(0.5f, 0.6f)));
 		addChild(light);
@@ -245,6 +255,30 @@ struct OctaveDownKey : LitKey {
 struct OctaveUpKey : LitKey {
 	OctaveUpKey() {
 		setGraphics("OctaveUp");
+	}
+};
+
+struct FunctionKey : Key {
+	FunctionKey() {
+		setGraphics("FunctionKey");
+	}
+};
+
+struct RecKey : Key {
+	RecKey() {
+		setGraphics("RecKey");
+	}
+};
+
+struct PlayKey : Key {
+	PlayKey() {
+		setGraphics("PlayKey");
+	}
+};
+
+struct StopKey : Key {
+	StopKey() {
+		setGraphics("StopKey");
 	}
 };
 
