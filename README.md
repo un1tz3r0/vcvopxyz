@@ -11,8 +11,14 @@ Not affiliated with or endorsed by teenage engineering. OP-Z and OP-XY are their
 ### Sequencer
 
 An OP-Z synth track's sequencer: 16 steps of up to four notes each, with micro timing, note lengths, step count and
-step length. Place it to the left of an engine, whose keyboard and jacks it lines up with, and patch **V/OCT**,
-**GATE** and **VEL** across, plus **CLOCK** for the engine's synced LFO.
+step length. Place it to the left of an engine, whose jacks it lines up with, and patch **V/OCT**, **GATE** and
+**VEL** across, plus **CLOCK** for the engine's synced LFO.
+
+Its face copies the OP-Z's, icons and all: four dials over 17 columns of round keys. **TRACK**, **REC** and **−**,
+**PLAY** and **+**, **STOP** and **SHIFT** on the left, the 16 steps along the top under the track icons, the black
+keys numbered 1 to 0 on the column lines, and the white keys along the bottom under the step component icons. Each key
+has an RGB LED that lights up its symbol: a dot, a number or an icon. The tempo display and the output channels' dots
+sit where the OP-Z's speaker is.
 
 - **Steps:** click an empty step to paste the last notes played (a chord, if they were down together), or a lit step
   to clear it. Steps past the step count glow dimly and don't play. Right-click a step to set its notes' velocity,
@@ -27,8 +33,8 @@ step length. Place it to the left of an engine, whose keyboard and jacks it line
   drone, which holds a note until its channel is needed again. **Quant** pulls micro timing towards the grid as it
   plays, leaving the recorded timing as it is.
 - **Track mode:** click **TRACK** to switch it on, and again to switch it off. The steps set the step count (the last
-  one glows brightly), the black keys set the step length (1 to 8 for ×1 to ×8, 9 for ×16, 0 for one step per
-  trigger on **ADV**), and **−** and **+** shift the pattern a step within the step count. **STOP** lets go of the
+  one glows brightly), the black keys set the step length in blue (1 to 8 for ×1 to ×8, 9 for ×16, 0 for one step
+  per trigger on **ADV**), and **−** and **+** shift the pattern a step within the step count. **STOP** lets go of the
   notes, and held for a second clears the pattern.
 - **Recording:** click **REC** to switch it on. While playing, notes from the keys and inputs go into the nearest
   step with their micro timing and length. Hold notes on the inputs and click **−** to erase them from the steps
@@ -41,9 +47,12 @@ step length. Place it to the left of an engine, whose keyboard and jacks it line
   pulses. PLAY then waits for the next pulse, which plays the first step, and the sequencer follows the pulses as they
   speed up, slow down or stop. **RESET** starts again from the first step (with a clock patched, at its next pulse).
   The **CLOCK** and **RESET** outputs follow the sequencer while it plays.
-- **Keys and inputs:** the keys play while they're down, and so do notes on the poly **V/OCT**, **GATE** and **VEL**
-  inputs (from MIDI-CV, say), which follow their V/OCT while held. **−** and **+** move the keyboard an octave. Keys
-  light under every note sounding, and the dots above them are the output channels.
+- **Keys and inputs:** the keys, F3 to E5 as on the OP-Z, play while they're down, and so do notes on the poly
+  **V/OCT**, **GATE** and **VEL** inputs (from MIDI-CV, say), which follow their V/OCT while held. **−** and **+**
+  move the keyboard an octave. Keys light under every note sounding, and the 16 dots beside the display are the
+  output channels.
+- **SHIFT** latches like TRACK, and a Shift+click on any key is a shifted press too. It lights for now; the step
+  components it places come next.
 - **Outputs:** poly **V/OCT**, **GATE** (10V) and **VEL** (0 to 10V; velocity 127 is 10V), with 4 channels unless
   you change it in the context menu. A new note takes the channel silent longest, or failing that the one playing
   longest, and its gate drops for a sample so the engine retriggers.
@@ -162,6 +171,7 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | `res/` | Panels and component graphics, shipped with the plugin. Generated, so don't edit by hand. |
 | `res-src/panelkit.py` | Fonts as outlines, colour themes, the `Panel` class and the shared component graphics. |
 | `res-src/synth_track.py` | The panel layout every synth track shares. |
+| `res-src/opz.py` | The OP-Z's track, step component and key icons, and its round keys. |
 | `res-src/panels/<slug>.py` | Each module's panel, built with `panelkit`. |
 | `res-src/panel.py` | Writes every panel and component graphic into `res/`. |
 

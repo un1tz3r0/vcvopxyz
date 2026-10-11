@@ -3,16 +3,18 @@ Sequencer: an OP-Z synth track's sequencer. Sixteen steps of up to four notes ea
 from poly V/OCT, GATE and VEL inputs, and played out as poly V/OCT, GATE and VEL for an engine beside it. It keeps the
 tempo until a master module takes that over: its own, or a patched clock's.
 
-Rack can't hold one button down while clicking another, so a long press or a Ctrl+click picks a step up, and it
-stays held (blinking) until it's clicked again. TRACK and REC latch.
+Its keys are laid out as on the OP-Z: TRACK, REC and −, PLAY and +, STOP and SHIFT, then the 16 steps along the top,
+the numbered black keys and the white keys from F to E. Rack can't hold one button down while clicking another, so
+a long press or a Ctrl+click picks a step up, and it stays held (blinking) until it's clicked again. TRACK, REC and
+SHIFT latch.
 */
 #include "SynthTrack.hpp"
 #include "Sequence.hpp"
 
 namespace opz {
 
-/** The black keys double as the value keys, 1 to 9 then 0 from the left. */
-constexpr int BLACK_KEYS[5] = {1, 3, 6, 8, 10};
+/** The black keys, in semitones above F, double as the value keys: 1 to 9 then 0 from the left. */
+constexpr int BLACK_KEYS[5] = {1, 3, 5, 8, 10};
 inline int keyValue(int key) {
 	const int* k = std::find(std::begin(BLACK_KEYS), std::end(BLACK_KEYS), key % 12);
 	return k == std::end(BLACK_KEYS) ? -1 : 5 * (key / 12) + int(k - BLACK_KEYS);
@@ -26,6 +28,11 @@ inline std::string noteName(int pitch) {
 	return string::f("%s%d", names[pitch % 12], pitch / 12 - 1);
 }
 
+/** The keys' LED colours, besides the notes' orange. */
+namespace led {
+const NVGcolor WHITE = nvgRGBf(1.f, 1.f, 1.f), RED = nvgRGBf(1.f, 0.1f, 0.06f), GREEN = nvgRGBf(0.15f, 1.f, 0.3f), BLUE = nvgRGBf(0.2f, 0.4f, 1.f);
+}
+
 /** The note length dial's settings, in ticks of a ×1 step: 1/64 to a bar, dotted between, then drone. */
 constexpr int NOTE_LENGTHS[] = {6, 9, 12, 18, 24, 36, 48, 72, 96, 144, 192, 288, 384, DRONE};
 constexpr int LONGEST = STEPS * TICKS; // the longest note a step's menu sets, short of a drone
@@ -34,20 +41,27 @@ constexpr int LONGEST = STEPS * TICKS; // the longest note a step's menu sets, s
 struct Sequencer : Module {
 	enum ParamId {
 		TEMPO_PARAM, SWING_PARAM, LENGTH_PARAM, QUANTIZE_PARAM, STEP_COUNT_PARAM, STEP_LENGTH_PARAM,
-		TRACK_PARAM, REC_PARAM, PLAY_PARAM, STOP_PARAM, OCTAVE_DOWN_PARAM, OCTAVE_UP_PARAM,
+		// The keys, each with an RGB light: three light ids from TRACK_LIGHT, in the same order.
+		TRACK_PARAM, REC_PARAM, PLAY_PARAM, STOP_PARAM, OCTAVE_DOWN_PARAM, OCTAVE_UP_PARAM, SHIFT_PARAM,
 		ENUMS(STEP_PARAM, STEPS), ENUMS(KEY_PARAM, KEYS),
 		PARAMS_LEN
 	};
 	enum InputId { CLOCK_INPUT, RESET_INPUT, ADVANCE_INPUT, VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, INPUTS_LEN };
 	enum OutputId { CLOCK_OUTPUT, RESET_OUTPUT, VOCT_OUTPUT, GATE_OUTPUT, VELOCITY_OUTPUT, OUTPUTS_LEN };
 	enum LightId {
-		ENUMS(STEP_LIGHT, 3 * STEPS), ENUMS(KEY_LIGHT, KEYS), ENUMS(CHANNEL_LIGHT, CHANNELS),
-		TRACK_LIGHT, REC_LIGHT, PLAY_LIGHT, OCTAVE_DOWN_LIGHT, OCTAVE_UP_LIGHT, INTERNAL_LIGHT, EXTERNAL_LIGHT,
+		ENUMS(TRACK_LIGHT, 3), ENUMS(REC_LIGHT, 3), ENUMS(PLAY_LIGHT, 3), ENUMS(STOP_LIGHT, 3), ENUMS(OCTAVE_DOWN_LIGHT, 3),
+		ENUMS(OCTAVE_UP_LIGHT, 3), ENUMS(SHIFT_LIGHT, 3), ENUMS(STEP_LIGHT, 3 * STEPS), ENUMS(KEY_LIGHT, 3 * KEYS),
+		TEMPO_LIGHT, SWING_LIGHT, LENGTH_LIGHT, QUANTIZE_LIGHT, ENUMS(CHANNEL_LIGHT, CHANNELS), INTERNAL_LIGHT, EXTERNAL_LIGHT,
 		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * OUTPUTS_LEN),
 		LIGHTS_LEN
 	};
 	static constexpr float LONG_PRESS = 0.4f, CLEAR_HOLD = 1.f; // seconds
 	static constexpr int SOURCES = KEYS + CHANNELS;             // live notes: the keys, then the GATE input's channels
+	static constexpr int ALL_KEYS = PARAMS_LEN - TRACK_PARAM;
+
+	static int keyLight(int param) {
+		return TRACK_LIGHT + 3 * (param - TRACK_PARAM);
+	}
 
 	/** A note played live, from a key or a GATE channel. */
 	struct Live {
@@ -91,18 +105,14 @@ struct Sequencer : Module {
 	Live live[SOURCES];
 	bool playing = false;        // the transport, as PLAY shows it
 	bool armed = false;          // playing, but waiting for the clock's first pulse to start
-	bool recording = false, trackMode = false;
+	bool recording = false, trackMode = false, shifted = false;
 	bool erasing = false;        // removing the held notes from the steps they pass, while recording
 	bool chord = false;          // notes are down for the step being step-recorded
 	int held = -1, cursor = 0, octave = 0, ppqn = 4;
 	bool longPressHolds = true, ctrlClickHolds = true;
-	std::atomic<int> ctrlClicked{-1};
 	std::atomic<float> shownTempo{120.f}; // -1 while an external clock is still being measured
 
-	dsp::BooleanTrigger trackButton, recButton, playButton, stopButton, octaveDown, octaveUp;
-	bool stepDown[STEPS] = {}, stepUsed[STEPS] = {};
-	float stepTime[STEPS] = {};
-	bool keysDown[KEYS] = {};
+	KeyGesture gestures[ALL_KEYS]; // the keys', from TRACK_PARAM on
 	float clearing = -1.f;       // how long STOP has been held in track mode, or -1
 	dsp::SchmittTrigger gates[CHANNELS], clockIn, resetIn, advanceIn;
 	dsp::PulseGenerator clockOut, resetOut;
@@ -128,16 +138,17 @@ struct Sequencer : Module {
 		configSwitch(STEP_LENGTH_PARAM, 0.f, 9.f, 0.f, "Step length", {"×1", "×2", "×3", "×4", "×5", "×6", "×7", "×8", "×16", "Per ADV trigger"});
 		getParamQuantity(STEP_COUNT_PARAM)->randomizeEnabled = false;
 		getParamQuantity(STEP_LENGTH_PARAM)->randomizeEnabled = false;
-		configButton(TRACK_PARAM, "Track mode")->description = "On and off: the steps set the step count, the black keys the step length, − and + shift the pattern, and holding STOP clears it";
-		configButton(REC_PARAM, "Record")->description = "On and off: records the keys and inputs live while playing, or a step at a time while stopped";
-		configButton(PLAY_PARAM, "Play")->description = "Starts from the first step, or the clock's next pulse";
-		configButton(STOP_PARAM, "Stop")->description = "Stopped already: lets go of every note";
-		configButton(OCTAVE_DOWN_PARAM, "Octave down")->description = "Nudges a held step a tick earlier; with notes held while recording, erases them";
-		configButton(OCTAVE_UP_PARAM, "Octave up")->description = "Nudges a held step a tick later";
+		configKey(this, TRACK_PARAM, "Track mode")->description = "On and off: the steps set the step count, the black keys the step length, − and + shift the pattern, and holding STOP clears it";
+		configKey(this, REC_PARAM, "Record")->description = "On and off: records the keys and inputs live while playing, or a step at a time while stopped";
+		configKey(this, PLAY_PARAM, "Play")->description = "Starts from the first step, or the clock's next pulse";
+		configKey(this, STOP_PARAM, "Stop")->description = "Stopped already: lets go of every note";
+		configKey(this, OCTAVE_DOWN_PARAM, "Octave down")->description = "Nudges a held step a tick earlier; with notes held while recording, erases them";
+		configKey(this, OCTAVE_UP_PARAM, "Octave up")->description = "Nudges a held step a tick later";
+		configKey(this, SHIFT_PARAM, "Shift")->description = "On and off. Shifted keys will place step components";
 		for (int i = 0; i < STEPS; i++)
-			configButton<StepQuantity>(STEP_PARAM + i)->description = "Click: paste the last notes played, or clear. Long-press or " RACK_MOD_CTRL_NAME "+click: hold";
+			configKey<StepQuantity>(this, STEP_PARAM + i)->description = "Click: paste the last notes played, or clear. Long-press or " RACK_MOD_CTRL_NAME "+click: hold";
 		for (int i = 0; i < KEYS; i++)
-			configButton<KeyQuantity>(KEY_PARAM + i);
+			configKey<KeyQuantity>(this, KEY_PARAM + i);
 		for (int i = 0; i < CHANNELS; i++)
 			configLight(CHANNEL_LIGHT + i, string::f("Channel %d", i + 1));
 
@@ -157,8 +168,9 @@ struct Sequencer : Module {
 		lightDivider.setDivision(64);
 	}
 
+	/** The keys run from F3 to E5, an octave either side of middle C, before − and + move them. */
 	int keyPitch(int key) const {
-		return clamp(48 + 12 * octave + key, 0, 127);
+		return clamp(53 + 12 * octave + key, 0, 127);
 	}
 
 	bool anyHeld() const {
@@ -309,7 +321,7 @@ struct Sequencer : Module {
 
 	void keyDown(int key) {
 		if (!trackMode)
-			noteDown(key, keyPitch(key), octave - 1.f + key / 12.f, 100);
+			noteDown(key, keyPitch(key), (keyPitch(key) - 60) / 12.f, 100);
 		else if (keyValue(key) >= 0)
 			params[STEP_LENGTH_PARAM].setValue(keyValue(key));
 	}
@@ -321,62 +333,19 @@ struct Sequencer : Module {
 		settings.quantize = params[QUANTIZE_PARAM].getValue();
 		settings.swing = params[SWING_PARAM].getValue();
 
-		if (trackButton.process(params[TRACK_PARAM].getValue() > 0.f))
-			trackMode = !trackMode;
-		if (recButton.process(params[REC_PARAM].getValue() > 0.f)) {
-			recording = !recording;
-			cursor = 0;
-		}
-		if (playButton.process(params[PLAY_PARAM].getValue() > 0.f))
-			play();
-		bool stopDown = params[STOP_PARAM].getValue() > 0.f;
-		if (stopButton.process(stopDown)) {
-			stop();
-			clearing = trackMode ? 0.f : -1.f;
+		for (int p = TRACK_PARAM; p < PARAMS_LEN; p++) {
+			KeyGesture& g = gestures[p - TRACK_PARAM];
+			if (KeyGesture::Event e = g.process(params[p].getValue(), dt, LONG_PRESS))
+				onKey(p, e, g);
 		}
 		if (clearing >= 0.f) {
-			if (!stopDown || !trackMode)
+			const KeyGesture& stop = gestures[STOP_PARAM - TRACK_PARAM];
+			if (!stop.down() || !trackMode)
 				clearing = -1.f;
-			else if ((clearing += dt) >= CLEAR_HOLD) {
+			else if ((clearing = stop.held) >= CLEAR_HOLD) {
 				pattern.clear();
 				clearing = -1.f;
 			}
-		}
-		if (octaveDown.process(params[OCTAVE_DOWN_PARAM].getValue() > 0.f))
-			shift(-1);
-		if (octaveUp.process(params[OCTAVE_UP_PARAM].getValue() > 0.f))
-			shift(1);
-
-		// A quick click acts on release; a long press picks the step up as soon as it's long enough.
-		for (int i = 0; i < STEPS; i++) {
-			bool down = params[STEP_PARAM + i].getValue() > 0.f;
-			if (down && !stepDown[i]) {
-				stepTime[i] = 0.f;
-				stepUsed[i] = false;
-			}
-			else if (down && !stepUsed[i] && (stepTime[i] += dt) >= LONG_PRESS && longPressHolds && !trackMode) {
-				toggleHold(i);
-				stepUsed[i] = true;
-			}
-			else if (!down && stepDown[i] && !stepUsed[i])
-				clickStep(i);
-			stepDown[i] = down;
-		}
-		int clicked = ctrlClicked.exchange(-1);
-		if (clicked >= 0) {
-			if (trackMode)
-				clickStep(clicked);
-			else
-				toggleHold(clicked);
-		}
-
-		for (int k = 0; k < KEYS; k++) {
-			bool down = params[KEY_PARAM + k].getValue() > 0.f;
-			if (down && !keysDown[k])
-				keyDown(k);
-			else if (!down && keysDown[k])
-				noteUp(k);
-			keysDown[k] = down;
 		}
 
 		if (erasing) {
@@ -387,6 +356,38 @@ struct Sequencer : Module {
 				for (const Live& n : live)
 					if (n.on)
 						pattern.steps[step].remove(n.pitch);
+		}
+	}
+
+	/** A step acts when it's let go, so the module can tell a click from a long press, which picks it up as soon as it's
+	long enough; a Ctrl+click picks it up straight away. The other keys act as they go down. */
+	void onKey(int p, KeyGesture::Event e, KeyGesture& g) {
+		if (p >= KEY_PARAM) {
+			if (e == KeyGesture::PRESS)
+				keyDown(p - KEY_PARAM);
+			else if (e == KeyGesture::CLICK || e == KeyGesture::RELEASE)
+				noteUp(p - KEY_PARAM);
+		}
+		else if (p >= STEP_PARAM) {
+			int i = p - STEP_PARAM;
+			bool hold = !trackMode && !g.handled && (e == KeyGesture::PRESS ? g.press == KEY_CTRL && ctrlClickHolds : e == KeyGesture::LONG_PRESS && longPressHolds);
+			if (hold) {
+				toggleHold(i);
+				g.handled = true;
+			}
+			else if (e == KeyGesture::CLICK)
+				clickStep(i);
+		}
+		else if (e == KeyGesture::PRESS) {
+			switch (p) {
+				case TRACK_PARAM: trackMode = !trackMode; break;
+				case REC_PARAM: recording = !recording; cursor = 0; break;
+				case PLAY_PARAM: play(); break;
+				case STOP_PARAM: stop(); clearing = trackMode ? 0.f : -1.f; break;
+				case OCTAVE_DOWN_PARAM: shift(-1); break;
+				case OCTAVE_UP_PARAM: shift(1); break;
+				case SHIFT_PARAM: shifted = !shifted; break;
+			}
 		}
 	}
 
@@ -496,10 +497,11 @@ struct Sequencer : Module {
 		return std::min(span, loop);
 	}
 
-	void setStepLight(int i, float r, float g, float b) {
-		lights[STEP_LIGHT + 3 * i].setBrightness(r);
-		lights[STEP_LIGHT + 3 * i + 1].setBrightness(g);
-		lights[STEP_LIGHT + 3 * i + 2].setBrightness(b);
+	void setKeyLight(int param, NVGcolor c, float brightness) {
+		int l = keyLight(param);
+		lights[l].setBrightness(c.r * brightness);
+		lights[l + 1].setBrightness(c.g * brightness);
+		lights[l + 2].setBrightness(c.b * brightness);
 	}
 
 	void updateLights(float dt) {
@@ -508,48 +510,55 @@ struct Sequencer : Module {
 		int count = stepCount(), head = player.running ? player.playing() : -1;
 		int loop = held < count ? count : STEPS, span = held >= 0 ? heldSpan(loop) : 0;
 
-		// Steps: red for notes, white for the playhead (red while recording), blue for how long the held step's notes
-		// last. In track mode, white up to the step count; holding STOP there fills them red until the pattern clears.
+		// Steps: orange for notes, white for the playhead (red while recording), blue for how long the held step's
+		// notes last. In track mode, white up to the step count; holding STOP there fills them red until the pattern
+		// clears.
 		for (int i = 0; i < STEPS; i++) {
-			float r = 0.f, g = 0.f, b = 0.f;
-			if (clearing >= 0.f)
-				r = i < clearing / CLEAR_HOLD * STEPS ? 1.f : 0.f;
+			NVGcolor c = led::WHITE;
+			float b = 0.f;
+			if (clearing >= 0.f) {
+				c = led::RED;
+				b = i < clearing / CLEAR_HOLD * STEPS;
+			}
 			else if (trackMode)
-				r = g = b = i == count - 1 ? 1.f : i < count ? 0.15f : 0.f;
+				b = i == count - 1 ? 1.f : i < count ? 0.15f : 0.f;
 			else {
-				if (!pattern.steps[i].empty())
-					r = i < count ? 0.6f : 0.2f;
+				if (!pattern.steps[i].empty()) {
+					c = NOTE_COLOR;
+					b = i < count ? 0.6f : 0.2f;
+				}
 				int d = i - held;
 				if (d < 0)
 					d += loop;
-				if (held >= 0 && i < loop && d > 0 && d < span)
+				if (held >= 0 && i < loop && d > 0 && d < span) {
+					c = led::BLUE;
 					b = 0.8f;
-				if (i == held) {
-					if (r == 0.f)
-						r = g = b = 0.4f;
-					if (!on)
-						r = g = b = 0.f;
 				}
-				if (recording && !playing && i == cursor)
-					r = on ? 1.f : 0.f;
+				if (i == held)
+					b = on ? std::max(b, 0.4f) : 0.f;
+				if (recording && !playing && i == cursor) {
+					c = led::RED;
+					b = on;
+				}
 				if (i == head) {
-					r = 1.f;
-					g = b = recording ? 0.f : 1.f;
+					c = recording ? led::RED : led::WHITE;
+					b = 1.f;
 				}
 			}
-			setStepLight(i, r, g, b);
+			setKeyLight(STEP_PARAM + i, c, b);
 		}
 
-		// Keys: the notes sounding, brighter for the ones held or on the held step. In track mode, the step length.
-		float keys[KEYS] = {};
+		// Keys: the notes sounding, brighter for the ones held or on the held step. In track mode, the step length, in
+		// blue like the held step's length on the steps.
+		float level[KEYS] = {};
 		auto light = [&](int pitch, float b) {
 			int k = pitch - keyPitch(0);
 			if (k >= 0 && k < KEYS)
-				keys[k] = std::max(keys[k], b);
+				level[k] = std::max(level[k], b);
 		};
 		if (trackMode) {
 			for (int v = 0; v < 10; v++)
-				keys[valueKey(v)] = v == (int) params[STEP_LENGTH_PARAM].getValue() ? 1.f : 0.15f;
+				level[valueKey(v)] = v == (int) params[STEP_LENGTH_PARAM].getValue() ? 1.f : 0.15f;
 		}
 		else {
 			for (const Player::Channel& c : player.channels)
@@ -563,17 +572,25 @@ struct Sequencer : Module {
 					light(pattern.steps[held].notes[n].pitch, 1.f);
 		}
 		for (int k = 0; k < KEYS; k++)
-			lights[KEY_LIGHT + k].setBrightness(keys[k]);
+			setKeyLight(KEY_PARAM + k, trackMode ? led::BLUE : NOTE_COLOR, level[k]);
 		for (int c = 0; c < CHANNELS; c++) {
 			const Player::Channel& channel = player.channels[c];
 			lights[CHANNEL_LIGHT + c].setBrightness(channel.gate && c < settings.channels ? 0.2f + 0.8f * channel.velocity : 0.f);
 		}
 
-		lights[OCTAVE_DOWN_LIGHT].setBrightness(erasing ? on : octave < 0 ? 0.2f - 0.2f * octave : 0.f);
-		lights[OCTAVE_UP_LIGHT].setBrightness(octave > 0 ? 0.2f + 0.2f * octave : 0.f);
-		lights[TRACK_LIGHT].setBrightness(trackMode);
-		lights[REC_LIGHT].setBrightness(recording);
-		lights[PLAY_LIGHT].setBrightness(playing && (!armed || on));
+		setKeyLight(TRACK_PARAM, led::WHITE, trackMode);
+		setKeyLight(REC_PARAM, led::RED, recording);
+		setKeyLight(PLAY_PARAM, led::GREEN, playing && (!armed || on));
+		setKeyLight(STOP_PARAM, led::RED, clearing >= 0.f);
+		setKeyLight(OCTAVE_DOWN_PARAM, erasing ? led::RED : led::WHITE, erasing ? on : octave < 0 ? 0.2f - 0.2f * octave : 0.f);
+		setKeyLight(OCTAVE_UP_PARAM, led::WHITE, octave > 0 ? 0.2f + 0.2f * octave : 0.f);
+		setKeyLight(SHIFT_PARAM, led::WHITE, shifted);
+
+		// The dials' LEDs: TEMPO flashes on the beat, the others glow as far as they're turned.
+		lights[TEMPO_LIGHT].setBrightness(player.running && std::fmod(player.now, 4.0) < 1.0 ? 1.f : 0.15f);
+		lights[SWING_LIGHT].setBrightness(0.15f + 0.85f * (settings.swing - 0.5f) / 0.25f);
+		lights[LENGTH_LIGHT].setBrightness(0.15f + 0.85f * params[LENGTH_PARAM].getValue() / (std::size(NOTE_LENGTHS) - 1));
+		lights[QUANTIZE_LIGHT].setBrightness(0.15f + 0.85f * settings.quantize);
 		lights[INTERNAL_LIGHT].setBrightness(!external);
 		lights[EXTERNAL_LIGHT].setBrightness(external);
 		shownTempo = !external ? params[TEMPO_PARAM].getValue() : pulsePeriod > 0.f ? 60.f / (pulsePeriod * ppqn) : -1.f;
@@ -599,7 +616,7 @@ struct Sequencer : Module {
 		memory.clear();
 		memory.add(Note());
 		player.panic();
-		playing = armed = recording = trackMode = erasing = chord = false;
+		playing = armed = recording = trackMode = shifted = erasing = chord = false;
 		held = -1;
 		cursor = octave = 0;
 		ppqn = 4;
@@ -740,38 +757,10 @@ struct NoteSlider : ui::Slider {
 	}
 };
 
-/** A step key: a click acts on release, so the module can tell it from a long press. A Ctrl+click is passed to the
-module directly and never moves the key, so it can't count as a click too. */
-struct StepKey : LitKey {
-	bool ctrlClicked = false;
-
-	StepKey() {
-		setGraphics("StepKey", {nvgRGB(0xff, 0x30, 0x30), nvgRGB(0x30, 0xff, 0x30), nvgRGB(0x30, 0x30, 0xff)});
-	}
-
+/** A step key, whose context menu edits its notes. */
+struct StepKey : RoundKey {
 	Sequencer* sequencer() {
 		return module ? static_cast<Sequencer*>(module) : nullptr;
-	}
-
-	void onButton(const ButtonEvent& e) override {
-		Sequencer* m = sequencer();
-		if (m && m->ctrlClickHolds && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT && (e.mods & RACK_MOD_MASK) == RACK_MOD_CTRL) {
-			m->ctrlClicked = paramId - Sequencer::STEP_PARAM;
-			ctrlClicked = true;
-			e.consume(this);
-			return;
-		}
-		LitKey::onButton(e);
-	}
-	void onDragStart(const DragStartEvent& e) override {
-		if (!ctrlClicked)
-			LitKey::onDragStart(e);
-	}
-	void onDragEnd(const DragEndEvent& e) override {
-		if (ctrlClicked)
-			ctrlClicked = false;
-		else
-			LitKey::onDragEnd(e);
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -866,31 +855,43 @@ struct SequencerWidget : ModuleWidget {
 		addChild(display);
 		addChild(createLightCentered<SmallSimpleLight<NoteLight>>(AT(INTERNAL_LIGHT)));
 		addChild(createLightCentered<SmallSimpleLight<NoteLight>>(AT(EXTERNAL_LIGHT)));
-		addParam(createParamCentered<SoftKnob>(AT(TEMPO_PARAM)));
-		addParam(createParamCentered<SoftKnob>(AT(SWING_PARAM)));
-		addParam(createParamCentered<SoftKnob>(AT(LENGTH_PARAM)));
-		addParam(createParamCentered<SoftKnob>(AT(QUANTIZE_PARAM)));
-
-		addParam(createParamCentered<FunctionKey>(AT(TRACK_PARAM)));
-		addParam(createParamCentered<RecKey>(AT(REC_PARAM)));
-		addParam(createParamCentered<PlayKey>(AT(PLAY_PARAM)));
-		addParam(createParamCentered<StopKey>(AT(STOP_PARAM)));
-		addChild(createLightCentered<SmallSimpleLight<ColorLight<4>>>(AT(TRACK_LIGHT)));
-		addChild(createLightCentered<SmallSimpleLight<ColorLight<3>>>(AT(REC_LIGHT)));
-		addChild(createLightCentered<SmallSimpleLight<ColorLight<0>>>(AT(PLAY_LIGHT)));
-
-		for (int i = 0; i < STEPS; i++)
-			addParam(createLightParamCentered<StepKey>(layout.center(string::f("STEP%d_PARAM", i)), module, Sequencer::STEP_PARAM + i, Sequencer::STEP_LIGHT + 3 * i));
-		addParam(createLightParamCentered<OctaveDownKey>(AT(OCTAVE_DOWN_PARAM), Sequencer::OCTAVE_DOWN_LIGHT));
-		addParam(createLightParamCentered<OctaveUpKey>(AT(OCTAVE_UP_PARAM), Sequencer::OCTAVE_UP_LIGHT));
 		for (int i = 0; i < CHANNELS; i++)
 			addChild(createLightCentered<DotLight<NoteLight>>(layout.center(string::f("CHANNEL%d_LIGHT", i)), module, Sequencer::CHANNEL_LIGHT + i));
-		for (int k = 0; k < KEYS; k++) {
-			math::Vec pos = layout.center(string::f("KEY%d_PARAM", k));
-			if (keySlot(k) >= 0)
-				addParam(createLightParamCentered<WhiteKey>(pos, module, Sequencer::KEY_PARAM + k, Sequencer::KEY_LIGHT + k));
-			else
-				addParam(createLightParamCentered<BlackKey>(pos, module, Sequencer::KEY_PARAM + k, Sequencer::KEY_LIGHT + k));
+
+		addParam(createParamCentered<SmallDial>(AT(TEMPO_PARAM))->color(0));
+		addParam(createParamCentered<SmallDial>(AT(SWING_PARAM))->color(1));
+		addParam(createParamCentered<SmallDial>(AT(LENGTH_PARAM))->color(2));
+		addParam(createParamCentered<SmallDial>(AT(QUANTIZE_PARAM))->color(3));
+		addChild(createLightCentered<DotLight<ColorLight<0>>>(AT(TEMPO_LIGHT)));
+		addChild(createLightCentered<DotLight<ColorLight<1>>>(AT(SWING_LIGHT)));
+		addChild(createLightCentered<DotLight<ColorLight<2>>>(AT(LENGTH_LIGHT)));
+		addChild(createLightCentered<DotLight<ColorLight<3>>>(AT(QUANTIZE_LIGHT)));
+
+		// Every key, with the symbol its LED lights: an icon for the function keys, a number for the black keys.
+		static const char* const functions[][2] = {{"TRACK", "track"}, {"REC", "rec"}, {"PLAY", "play"}, {"STOP", "stop"},
+			{"OCTAVE_DOWN", "minus"}, {"OCTAVE_UP", "plus"}, {"SHIFT", "shift"}};
+		for (int p = Sequencer::TRACK_PARAM; p < Sequencer::PARAMS_LEN; p++) {
+			int light = Sequencer::keyLight(p);
+			std::string name, symbol = "dot";
+			RoundKey* key;
+			if (p >= Sequencer::KEY_PARAM) {
+				int k = p - Sequencer::KEY_PARAM;
+				name = string::f("KEY%d", k);
+				if (keyValue(k) >= 0)
+					symbol = std::to_string((keyValue(k) + 1) % 10);
+				key = createLightParam<RoundKey>(math::Vec(), module, p, light);
+			}
+			else if (p >= Sequencer::STEP_PARAM) {
+				name = string::f("STEP%d", p - Sequencer::STEP_PARAM);
+				key = createLightParam<StepKey>(math::Vec(), module, p, light);
+			}
+			else {
+				name = functions[p - Sequencer::TRACK_PARAM][0];
+				symbol = functions[p - Sequencer::TRACK_PARAM][1];
+				key = createLightParam<RoundKey>(math::Vec(), module, p, light);
+			}
+			key->setRing(layout.box(name + "_PARAM"), symbol);
+			addParam(key);
 		}
 
 		static const char* const inputs[] = {"CLOCK", "RESET", "ADVANCE", "VOCT", "GATE", "VELOCITY"};

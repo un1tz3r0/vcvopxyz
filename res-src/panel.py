@@ -9,7 +9,8 @@ Needs fontTools:  python3 -m pip install fonttools
 """
 import importlib
 
-from panelkit import (BLACK_KEY, BUTTON_R, DIAL_R, DIALS, FUNCTION_KEY, KNOB_R, PAGE_KEY, PASTELS, ROOT, SOFT_R, STEP_KEY,
+from opz import SYMBOLS, symbol_svg
+from panelkit import (BLACK_KEY, BUTTON_R, DIAL_R, DIALS, FUNCTION_KEY, KNOB_R, PAGE_KEY, PASTELS, ROOT, SMALL_DIAL_R, SOFT_R,
                       THEMES, WHITE_KEY, button, dial_bg, dial_pointer, key, knob_bg, knob_pointer, write)
 
 if __name__ == '__main__':
@@ -25,15 +26,15 @@ if __name__ == '__main__':
     write(components / 'SoftKnob.svg', knob_pointer(SOFT_R, (0.25, 0.72), 0.6))
     write(components / 'PushButton_0.svg', button(BUTTON_R, '#FAFAF7'))
     write(components / 'PushButton_1.svg', button(BUTTON_R, '#CFCEC9'))
-    for name, color in DIALS.items():
-        write(components / f'Dial_bg-{name}.svg', dial_bg(DIAL_R, color))
-    write(components / 'Dial.svg', dial_pointer(DIAL_R))
-    white = '#EDECE8'
-    keys = dict(WhiteKey=(WHITE_KEY, white, None, None), BlackKey=(BLACK_KEY, '#4A4B4F', None, None),
-                PageKey=(PAGE_KEY, white, None, None), OctaveDown=(FUNCTION_KEY, white, '\u2212', None),
-                OctaveUp=(FUNCTION_KEY, white, '+', None), StepKey=(STEP_KEY, white, None, None),
-                FunctionKey=(FUNCTION_KEY, white, None, None), RecKey=(FUNCTION_KEY, white, None, 'rec'),
-                PlayKey=(FUNCTION_KEY, white, None, 'play'), StopKey=(FUNCTION_KEY, white, None, 'stop'))
-    for name, (size, face, glyph, icon) in keys.items():
+    for kind, r in dict(Dial=DIAL_R, SmallDial=SMALL_DIAL_R).items():
+        for name, color in DIALS.items():
+            write(components / f'{kind}_bg-{name}.svg', dial_bg(r, color))
+        write(components / f'{kind}.svg', dial_pointer(r))
+    for name in [*SYMBOLS, *'0123456789']:
+        write(components / f'symbols/{name}.svg', symbol_svg(name))
+    keys = dict(WhiteKey=(WHITE_KEY, '#EDECE8', None), BlackKey=(BLACK_KEY, '#4A4B4F', None),
+                PageKey=(PAGE_KEY, '#EDECE8', None), OctaveDown=(FUNCTION_KEY, '#EDECE8', '\u2212'),
+                OctaveUp=(FUNCTION_KEY, '#EDECE8', '+'))
+    for name, (size, face, glyph) in keys.items():
         for pressed in range(2):
-            write(components / f'{name}_{pressed}.svg', key(size, face, pressed, glyph, icon))
+            write(components / f'{name}_{pressed}.svg', key(size, face, pressed, glyph))

@@ -170,21 +170,28 @@ struct PageBar : SolidLight {
 	}
 };
 
-inline std::shared_ptr<window::Svg> dialCap(int color) {
+inline std::shared_ptr<window::Svg> dialCap(int color, const std::string& kind = "Dial") {
 	static const char* const colors[] = {"green", "blue", "yellow", "red"};
-	return Svg::load(asset::plugin(pluginInstance, std::string("res/components/Dial_bg-") + colors[color] + ".svg"));
+	return Svg::load(asset::plugin(pluginInstance, "res/components/" + kind + "_bg-" + colors[color] + ".svg"));
 }
 
 /** OP-Z style dial: a big flat cap in one of the four dial colours (0 to 3: green, blue, yellow, red), with a dimple
 that shows where it points. */
 struct Dial : RoundKnob {
-	Dial() {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/Dial.svg")));
+	std::string kind;
+
+	explicit Dial(std::string kind = "Dial") : kind(kind) {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/" + kind + ".svg")));
 	}
 	Dial* color(int c) {
-		bg->setSvg(dialCap(c));
+		bg->setSvg(dialCap(c, kind));
 		return this;
 	}
+};
+
+/** A dial that fills two of the Sequencer's key columns. */
+struct SmallDial : Dial {
+	SmallDial() : Dial("SmallDial") {}
 };
 
 /** A dial with nothing to do on this page: it looks like the others, but doesn't turn. */
@@ -210,15 +217,13 @@ struct Key : app::SvgSwitch {
 	}
 };
 
-/** A key that lights up from inside, like the OP-Z's, for createLightParamCentered. Several colours make a
-multicoloured light, one light id each. */
+/** A key that lights up from inside, like the OP-Z's, for createLightParamCentered. */
 struct LitKey : Key {
 	SolidLight* light = new SolidLight;
 
-	void setGraphics(const std::string& name, std::initializer_list<NVGcolor> colors = {NOTE_COLOR}) {
+	void setGraphics(const std::string& name) {
 		Key::setGraphics(name);
-		for (NVGcolor c : colors)
-			light->addBaseColor(c);
+		light->addBaseColor(NOTE_COLOR);
 		light->radius = mm2px(0.5f);
 		light->box = box.zeroPos().shrink(mm2px(math::Vec(0.5f, 0.6f)));
 		addChild(light);
@@ -258,27 +263,175 @@ struct OctaveUpKey : LitKey {
 	}
 };
 
-struct FunctionKey : Key {
-	FunctionKey() {
-		setGraphics("FunctionKey");
+/** How a key was pressed, as its param's value while it's down. A param set up with configKey() can tell a plain
+click from a Shift+click and a Ctrl+click (⌘+click on a Mac); one set up with configButton() reads every press as
+KEY_DOWN. */
+enum KeyPress { KEY_UP, KEY_DOWN, KEY_SHIFT, KEY_CTRL };
+
+template <class TQuantity = SwitchQuantity>
+TQuantity* configKey(Module* m, int paramId, std::string name = "") {
+	TQuantity* q = m->configButton<TQuantity>(paramId, name);
+	q->maxValue = KEY_CTRL;
+	return q;
+}
+
+/** Follows a key at control rate and says what it did: PRESS as it goes down, LONG_PRESS once it has been down
+`longPress` seconds, and as it's let go, CLICK, or RELEASE if the module has already handled the press. */
+struct KeyGesture {
+	enum Event { NONE, PRESS, LONG_PRESS, CLICK, RELEASE };
+	int press = KEY_UP;     // how it was last pressed
+	float held = -1.f;      // seconds down, or -1 while up
+	bool handled = false;   // the press did its job already, so letting go isn't a click
+
+	Event process(float value, float dt, float longPress = 0.4f) {
+		bool down = value > 0.f;
+		if (down && held < 0.f) {
+			press = (int) value;
+			held = 0.f;
+			handled = false;
+			return PRESS;
+		}
+		if (!down && held >= 0.f) {
+			held = -1.f;
+			return handled ? RELEASE : CLICK;
+		}
+		if (down) {
+			float before = held;
+			held += dt;
+			if (before < longPress && held >= longPress)
+				return LONG_PRESS;
+		}
+		return NONE;
+	}
+
+	bool down() const {
+		return held >= 0.f;
 	}
 };
 
-struct RecKey : Key {
-	RecKey() {
-		setGraphics("RecKey");
+/** An OP-Z key's RGB LED: the key's symbol (a dot, a number or an icon) lit up in the colour of its three lights, red,
+green and blue, with a soft glow. The unlit symbol is printed on the panel, so it follows the panel's theme; the lit
+one is res/components/symbols/<name>.svg, drawn white and tinted. It lights up in a dark window, as Rack's LEDs sit in
+dark bezels, so it shows over the printed symbol whatever its colour and the panel's. */
+struct SymbolLight : app::ModuleLightWidget {
+	std::shared_ptr<window::Svg> symbol;
+
+	/** The colour straight from the three lights, so mixes keep their hue rather than being blended by brightness. */
+	void step() override {
+		color = nvgRGBAf(0.f, 0.f, 0.f, 0.f);
+		if (module && !module->isBypassed() && firstLightId >= 0 && firstLightId + 3 <= (int) module->lights.size()) {
+			float c[3];
+			for (int i = 0; i < 3; i++) {
+				float b = module->lights[firstLightId + i].getBrightness();
+				c[i] = std::isfinite(b) ? clamp(b, 0.f, 1.f) : 0.f;
+			}
+			float m = std::max({c[0], c[1], c[2]});
+			if (m > 0.f)
+				color = nvgRGBAf(c[0] / m, c[1] / m, c[2] / m, std::sqrt(m));
+		}
+		widget::Widget::step();
+	}
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		if (layer == 1 && color.a > 0.f && symbol && symbol->handle) {
+			math::Vec size = symbol->getSize(), c = box.size.div(2);
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, c.x, c.y, mm2px(1.35f));
+			nvgFillColor(args.vg, nvgTransRGBAf(settings::preferDarkPanels ? nvgRGB(0x14, 0x15, 0x16) : nvgRGB(0x3a, 0x3a, 0x3c), color.a));
+			nvgFill(args.vg);
+			if (settings::haloBrightness > 0.f) {
+				float r = 0.7f * size.x;
+				nvgBeginPath(args.vg);
+				nvgCircle(args.vg, c.x, c.y, r);
+				NVGcolor glow = nvgTransRGBAf(color, 0.35f * color.a * settings::haloBrightness);
+				nvgFillPaint(args.vg, nvgRadialGradient(args.vg, c.x, c.y, 0.f, r, glow, nvgTransRGBAf(color, 0.f)));
+				nvgFill(args.vg);
+			}
+			nvgSave(args.vg);
+			nvgTranslate(args.vg, c.x - size.x / 2, c.y - size.y / 2);
+			nvgTint(args.vg, color);
+			window::svgDraw(args.vg, symbol->handle);
+			nvgRestore(args.vg);
+		}
+		Widget::drawLayer(args, layer);
 	}
 };
 
-struct PlayKey : Key {
-	PlayKey() {
-		setGraphics("PlayKey");
-	}
-};
+/** An OP-Z key: round and momentary, with an RGB LED in its middle that lights up its symbol. Its ring and symbol
+are printed on the panel, so it draws only how far it's pushed in. A press sets the param to how it was pressed (see
+KeyPress), and it springs back on release, but not before the module has had a frame to see it. Pass
+createLightParam the first of its three light ids, then place it with setRing. */
+struct RoundKey : app::ParamWidget {
+	SymbolLight* light = new SymbolLight;
+	float radius = 0.f;     // the printed ring's
+	int frames = -1;        // frames since the press, or -1 while up
+	bool released = false;
 
-struct StopKey : Key {
-	StopKey() {
-		setGraphics("StopKey");
+	RoundKey() {
+		addChild(light);
+	}
+
+	/** Puts the key over its printed ring, taking clicks a little way outside it too. */
+	void setRing(math::Rect ring, const std::string& symbol) {
+		box = ring.grow(mm2px(math::Vec(1.1f, 1.1f)));
+		radius = ring.size.x / 2;
+		light->box.size = box.size;
+		light->symbol = window::Svg::load(asset::plugin(pluginInstance, "res/components/symbols/" + symbol + ".svg"));
+	}
+	app::ModuleLightWidget* getLight() {
+		return light;
+	}
+
+	void initParamQuantity() override {
+		ParamWidget::initParamQuantity();
+		if (engine::ParamQuantity* pq = getParamQuantity()) {
+			pq->snapEnabled = true;
+			pq->smoothEnabled = false;
+			pq->resetEnabled = false;
+			pq->randomizeEnabled = false;
+		}
+	}
+
+	void onButton(const ButtonEvent& e) override {
+		ParamWidget::onButton(e);
+		// Rack's params take only plain clicks; take Shift and Ctrl clicks too, rather than selecting the module.
+		if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT)
+			e.consume(this);
+	}
+	void onDoubleClick(const DoubleClickEvent& e) override {}
+
+	void onDragStart(const DragStartEvent& e) override {
+		engine::ParamQuantity* pq = getParamQuantity();
+		if (e.button != GLFW_MOUSE_BUTTON_LEFT || !pq)
+			return;
+		int mods = APP->window->getMods() & RACK_MOD_MASK;
+		pq->setValue(mods == GLFW_MOD_SHIFT ? KEY_SHIFT : mods == RACK_MOD_CTRL ? KEY_CTRL : KEY_DOWN);
+		frames = 0;
+		released = false;
+	}
+	void onDragEnd(const DragEndEvent& e) override {
+		if (e.button == GLFW_MOUSE_BUTTON_LEFT)
+			released = true;
+	}
+
+	void step() override {
+		if (frames >= 0 && ++frames > 1 && released) {
+			if (engine::ParamQuantity* pq = getParamQuantity())
+				pq->setMin();
+			frames = -1;
+		}
+		ParamWidget::step();
+	}
+
+	void draw(const DrawArgs& args) override {
+		engine::ParamQuantity* pq = getParamQuantity();
+		if (pq && pq->getValue() > 0.f) {
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, box.size.x / 2, box.size.y / 2, radius);
+			nvgFillColor(args.vg, settings::preferDarkPanels ? nvgRGBAf(1.f, 1.f, 1.f, 0.2f) : nvgRGBAf(0.f, 0.f, 0.f, 0.18f));
+			nvgFill(args.vg);
+		}
+		ParamWidget::draw(args);
 	}
 };
 
