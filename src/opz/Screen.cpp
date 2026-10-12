@@ -8,10 +8,15 @@ anywhere on it to change the selected dial, like the app's touch pad.
 
 namespace opz {
 
-/** The module does nothing itself: its widget reads the track to its left. */
-struct Screen : Module {
+/** The module only passes the bus on; its widget reads the track to its left. */
+struct Screen : Module, BusNode {
 	Screen() {
 		config(0, 0, 0, 0);
+		attach(this);
+	}
+
+	void process(const ProcessArgs& args) override {
+		relay(this);
 	}
 
 	Track* track() {

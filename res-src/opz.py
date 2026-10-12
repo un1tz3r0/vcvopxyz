@@ -75,6 +75,7 @@ ICONS = {
     'stop': [line('M-0.55 -0.55H0.55V0.55H-0.55Z')],
     'shift': [line('M0 0.7V-0.7M-0.5 -0.2L0 -0.7L0.5 -0.2')],
     'dot': [dot(0, 0, 0.4)],
+    'metronome': [line('M-0.55 0.9L-0.22 -0.9H0.22L0.55 0.9Z'), line('M-0.4 0.45H0.4'), line('M0 0.45L0.65 -0.55')],
 }
 TRACKS = ['kick', 'snare', 'perc', 'sample', 'bass', 'lead', 'arp', 'chord',
           'fx1', 'fx2', 'tape', 'master', 'perform', 'module', 'lights', 'motion']
@@ -90,11 +91,13 @@ def icon(name, x, y, size, color, background='{panel}'):
             f'stroke-width="{num(STROKE / scale)}" stroke-linecap="round" stroke-linejoin="round">{body}</g>')
 
 
-KEY = 4.2       # a key's diameter (mm)
+SCALE = 1.68    # how much bigger than the OP-Z's own face the Sequencer draws it, keys and lit symbols included
+KEY = 4.2       # a key's diameter (mm), before scaling
 RING = 0.3      # its ring's line weight (mm)
 NUMERAL = 2.7   # the black keys' numbers (mm)
 # The symbols that are also LEDs, and how big each is drawn (mm).
-SYMBOLS = dict(dot=2.0, rec=2.4, track=2.2, minus=2.2, plus=2.2, play=2.0, stop=1.9, shift=2.2)
+SYMBOLS = dict(dot=2.0, rec=2.4, track=2.2, minus=2.2, plus=2.2, play=2.0, stop=1.9, shift=2.2, metronome=2.3,
+               kick=2.3, snare=2.3, perc=2.3, sample=2.3, bass=2.3, lead=2.3, arp=2.3, chord=2.3)
 
 
 def symbol(name, x, y, color):
@@ -105,10 +108,10 @@ def symbol(name, x, y, color):
 
 
 def symbol_svg(name):
-    """The lit symbol, white on a key-sized canvas, for the module to tint with its LED's colour. A lit dot glows
-    bigger than the printed one."""
+    """The lit symbol, white on a key-sized canvas at the Sequencer's scale, for the module to tint with its LED's
+    colour. A lit dot glows bigger than the printed one."""
     body = icon('dot', KEY / 2, KEY / 2, 3.6, '#FFFFFF') if name == 'dot' else symbol(name, KEY / 2, KEY / 2, '#FFFFFF')
-    return document(KEY, KEY, '  ' + body)
+    return document(KEY * SCALE, KEY * SCALE, f'  <g transform="scale({num(SCALE)})">{body}</g>')
 
 
 def round_key(p, name, x, y, sym='dot'):

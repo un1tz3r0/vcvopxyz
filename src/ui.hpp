@@ -196,9 +196,9 @@ struct SmallDial : Dial {
 
 /** A dial with nothing to do on this page: it looks like the others, but doesn't turn. */
 struct IdleDial : widget::Widget {
-	explicit IdleDial(int color) {
+	explicit IdleDial(int color, const std::string& kind = "Dial") {
 		widget::SvgWidget* cap = new widget::SvgWidget;
-		cap->setSvg(dialCap(color));
+		cap->setSvg(dialCap(color, kind));
 		app::CircularShadow* shadow = new app::CircularShadow;
 		shadow->box = math::Rect(math::Vec(0, cap->box.size.y * 0.1f), cap->box.size);
 		box.size = cap->box.size;
@@ -275,6 +275,7 @@ one is res/components/symbols/<name>.svg, drawn white and tinted. It lights up i
 dark bezels, so it shows over the printed symbol whatever its colour and the panel's. */
 struct SymbolLight : app::ModuleLightWidget {
 	std::shared_ptr<window::Svg> symbol;
+	float window = mm2px(1.35f); // the dark window's radius
 
 	/** The colour straight from the three lights, so mixes keep their hue rather than being blended by brightness. */
 	void step() override {
@@ -296,7 +297,7 @@ struct SymbolLight : app::ModuleLightWidget {
 		if (layer == 1 && color.a > 0.f && symbol && symbol->handle) {
 			math::Vec size = symbol->getSize(), c = box.size.div(2);
 			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, c.x, c.y, mm2px(1.35f));
+			nvgCircle(args.vg, c.x, c.y, window);
 			nvgFillColor(args.vg, nvgTransRGBAf(settings::preferDarkPanels ? nvgRGB(0x14, 0x15, 0x16) : nvgRGB(0x3a, 0x3a, 0x3c), color.a));
 			nvgFill(args.vg);
 			if (settings::haloBrightness > 0.f) {
@@ -336,6 +337,7 @@ struct RoundKey : app::ParamWidget {
 		box = ring.grow(mm2px(math::Vec(1.1f, 1.1f)));
 		radius = ring.size.x / 2;
 		light->box.size = box.size;
+		light->window = 0.64f * radius;
 		light->symbol = window::Svg::load(asset::plugin(pluginInstance, "res/components/symbols/" + symbol + ".svg"));
 	}
 	app::ModuleLightWidget* getLight() {

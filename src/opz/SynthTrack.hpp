@@ -6,11 +6,13 @@
 #include "Lfo.hpp"
 #include "NoteStack.hpp"
 #include "../TripleBuffer.hpp"
+#include "Bus.hpp"
 #include <atomic>
 
 /*
 An OP-Z synth track, whatever its engine: four dials that step through four pages (sound, envelope, LFO, mix) plus
-the track settings, note styles, portamento, polyphony. The notes come from the inputs, usually from a Sequencer. The engine supplies only the sound, through two dials of its own. It is a struct with:
+the track settings, note styles, portamento, polyphony. Its notes come from the inputs, or with GATE unpatched from its
+track's lane of a Sequencer to its left, over the bus (see Bus.hpp). The engine supplies only the sound, through two dials of its own. It is a struct with:
 
 	static constexpr const char* SLUG;                     // module slug, and the name of its panel in res/
 	static void configSound(Module* m, int p1, int p2);    // configures its two sound dials
@@ -107,7 +109,7 @@ struct Meter {
 
 
 /** What every synth track has in common, whatever its engine, and all a Screen beside it needs to know. */
-struct Track : Module {
+struct Track : Module, BusNode {
 	enum ParamId {
 		P1_PARAM, P2_PARAM, FILTER_PARAM, RESONANCE_PARAM,
 		ATTACK_PARAM, DECAY_PARAM, SUSTAIN_PARAM, RELEASE_PARAM,
@@ -210,6 +212,13 @@ struct SynthTrack : Track {
 	dsp::SchmittTrigger gates[PORT_MAX_CHANNELS];
 	NoteStack held;
 	int style = POLY;
+	// The bus, while this engine is on one: its track, the lane it plays (null while GATE is patched), and the
+	// master's requests last seen.
+	int busTrack = -1;
+	const Downstream::Lane* lane = nullptr;
+	bool selected = false, masterTrackMode = false;
+	uint32_t pageRequests = 0;
+	float dialValues[4] = {-1.f, -1.f, -1.f, -1.f};
 	Lfo lfo;
 	float lfoValue = 0.f;
 	xyz::Svf lowpass, highpass;
@@ -226,6 +235,7 @@ struct SynthTrack : Track {
 
 	SynthTrack() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
+		attach(this);
 		Engine::configSound(this, P1_PARAM, P2_PARAM);
 		configParam<FilterQuantity>(FILTER_PARAM, 0.f, 1.f, 0.5f, "Filter")->description = "Low-pass to the left, high-pass to the right";
 		configParam(RESONANCE_PARAM, 0.f, 1.f, 0.f, "Resonance", "%", 0.f, 100.f);
@@ -273,11 +283,13 @@ struct SynthTrack : Track {
 
 
 	float velocity(int channel) {
+		if (lane)
+			return lane->velocity[channel];
 		return inputs[VELOCITY_INPUT].isConnected() ? clamp(inputs[VELOCITY_INPUT].getPolyVoltage(channel) / 10.f, 0.f, 1.f) : 1.f;
 	}
 
 	float notePitch(int note) {
-		return inputs[VOCT_INPUT].getPolyVoltage(note);
+		return lane ? lane->pitch[note] : inputs[VOCT_INPUT].getPolyVoltage(note);
 	}
 
 	void trigger(Voice& v, float velocity) {
@@ -328,16 +340,18 @@ struct SynthTrack : Track {
 		}
 	}
 
-	void handleNotes() {
+	void handleNotes(const Downstream::Lane* from) {
 		int newStyle = (int) params[STYLE_PARAM].getValue();
-		if (newStyle != style) {
+		if (newStyle != style || bool(from) != bool(lane)) {
 			style = newStyle;
 			releaseAll();
 		}
-		// Channels beyond the gate input's count read as low, so dropping channels releases their notes.
-		int channels = inputs[GATE_INPUT].getChannels();
+		lane = from;
+		// Channels beyond the gate's count read as low, so dropping channels releases their notes.
+		int channels = lane ? lane->channels : inputs[GATE_INPUT].getChannels();
 		for (int c = 0; c < PORT_MAX_CHANNELS; c++) {
-			switch (gates[c].processEvent(c < channels ? inputs[GATE_INPUT].getVoltage(c) : 0.f, 0.1f, 1.f)) {
+			float gate = c >= channels ? 0.f : lane ? 10.f * lane->gate[c] : inputs[GATE_INPUT].getVoltage(c);
+			switch (gates[c].processEvent(gate, 0.1f, 1.f)) {
 				case dsp::SchmittTrigger::TRIGGERED: noteOn(c); break;
 				case dsp::SchmittTrigger::UNTRIGGERED: noteOff(c); break;
 				default: break;
@@ -360,7 +374,61 @@ struct SynthTrack : Track {
 		flash = std::fmax(flash - dt, 0.f);
 	}
 
-	void trackTempo(float sampleTime) {
+	/** The selected track's engine follows the master's track mode and page keys. */
+	void handleMaster(const Downstream* bus) {
+		bool was = selected;
+		selected = bus && busTrack == bus->selected;
+		if (!bus)
+			return;
+		if (selected && (!was || bus->trackMode != masterTrackMode))
+			setTrackMode(bus->trackMode);
+		else if (was && !selected && trackMode)
+			setTrackMode(false);
+		if (selected && bus->pageRequests != pageRequests)
+			showPage(bus->page == NEXT_PAGE ? (page + 1) % PAGE_TRACK : bus->page);
+		masterTrackMode = bus->trackMode;
+		pageRequests = bus->pageRequests;
+	}
+
+	/** Takes this engine's track from the bus and passes the bus on, with one more synth engine counted. */
+	const Downstream* joinBus() {
+		const Downstream* bus = fromLeft(this);
+		busTrack = -1;
+		if (bus) {
+			if (bus->synths < SYNTH_TRACKS)
+				busTrack = DRUM_TRACKS + bus->synths;
+			if (Downstream* out = toRight(this)) {
+				*out = *bus;
+				out->synths++;
+			}
+		}
+		return bus;
+	}
+
+	/** Sends the mix of the engines to the right on to the left, with this one's sound added while its outputs are
+	unpatched, and its page and dials. */
+	void sendUpstream(float y) {
+		Upstream* out = toLeft(this);
+		if (!out)
+			return;
+		const Upstream* u = fromRight(this);
+		*out = u ? *u : Upstream();
+		if (busTrack < 0)
+			return;
+		out->page[busTrack] = trackMode ? -1 : page;
+		if (!outputs[LEFT_OUTPUT].isConnected() && !outputs[RIGHT_OUTPUT].isConnected()) {
+			out->left += y * controls.left;
+			out->right += y * controls.right;
+		}
+		if (selected)
+			std::copy(std::begin(dialValues), std::end(dialValues), out->dials);
+	}
+
+	void trackTempo(float sampleTime, const Downstream* bus) {
+		if (bus && !inputs[CLOCK_INPUT].isConnected()) {
+			secondsPerBeat = bus->secondsPerBeat;
+			return;
+		}
 		sinceClock += sampleTime;
 		if (clock.process(inputs[CLOCK_INPUT].getVoltage(), 0.1f, 1.f)) {
 			// The first pulse after a long gap only starts the count again.
@@ -411,13 +479,17 @@ struct SynthTrack : Track {
 	}
 
 	void process(const ProcessArgs& args) override {
-		trackTempo(args.sampleTime);
+		const Downstream* bus = joinBus();
+		trackTempo(args.sampleTime, bus);
 		if (reset.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f))
 			lfo.restart();
 		bool control = controlDivider.process();
-		if (control)
+		if (control) {
 			handleButtons(args.sampleTime * controlDivider.getDivision());
-		handleNotes();
+			handleMaster(bus);
+		}
+		bool fromBus = busTrack >= 0 && !inputs[GATE_INPUT].isConnected() && bus->lanes[busTrack].channels > 0;
+		handleNotes(fromBus ? &bus->lanes[busTrack] : nullptr);
 		lfoValue = lfo.process((int) params[LFO_SHAPE_PARAM].getValue(), controls.lfoCycles, inputs[EXT_INPUT].getVoltage() / 5.f);
 		if (control)
 			updateControls(args.sampleTime);
@@ -434,7 +506,7 @@ struct SynthTrack : Track {
 			if (!v.envelope.active())
 				continue;
 			if (style == POLY)
-				v.pitch = inputs[VOCT_INPUT].getPolyVoltage(i);
+				v.pitch = notePitch(i);
 			float frequency = dsp::FREQ_C4 * dsp::exp2_taylor5(v.pitch + controls.pitch);
 			float level = v.envelope.process(controls.envelope) * v.velocity;
 			mix += v.sound.process(frequency, args.sampleTime, controls.p1, controls.p2) * level;
@@ -454,6 +526,7 @@ struct SynthTrack : Track {
 		limiting |= std::fabs(x) > 5.f;
 		scope[scopeEnd] = y;
 		scopeEnd = (scopeEnd + 1) % Snapshot::SCOPE;
+		sendUpstream(y);
 
 		if (lightDivider.process())
 			updateLights(args.sampleTime * lightDivider.getDivision());
@@ -464,6 +537,7 @@ struct SynthTrack : Track {
 		int shown = shownPage();
 		for (int d = 0; d < 4; d++) {
 			int param = DIALS[shown][d];
+			dialValues[d] = param < 0 ? -1.f : paramQuantities[param]->getScaledValue();
 			float b = param < 0 ? 0.f : flash > 0.f ? 1.f : 0.15f + 0.85f * paramQuantities[param]->getScaledValue();
 			for (int p = 0; p < PAGES_LEN; p++)
 				lights[DIAL_LIGHT + PAGES_LEN * d + p].setBrightness(p == shown ? b : 0.f);

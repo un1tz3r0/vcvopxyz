@@ -68,7 +68,7 @@ COMPONENT_COLORS = dict(PARAM='#FF0000', INPUT='#00FF00', OUTPUT='#0000FF', LIGH
 
 HP = 5.08
 KNOB_R, SOFT_R, BUTTON_R, DIAL_R = 5.5, 3.75, 3.6, 7.0  # radii (mm) of the components generated below
-SMALL_DIAL_R = 5.45  # the Sequencer's dials, which fill two of its key columns as the OP-Z's do
+SMALL_DIAL_R = 5.45  # the Sequencer's dials, before its face is scaled up: two of its key columns, as the OP-Z's
 PAGE_KEY = (6.4, 6.0)  # PAGE's size (mm)
 LABEL = 2.6  # label font size (mm)
 

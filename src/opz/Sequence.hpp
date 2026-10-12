@@ -7,7 +7,8 @@
 /*
 An OP-Z track's sequence and the player that runs it, knowing nothing of Rack.
 
-Time is counted in sixteenth notes, the length of a step at step length ×1. A step is split into 24 ticks for micro
+Time is counted in sixteenth notes, the length of a step at step length ×1. The player's clock runs all the time,
+for notes played live; the sequence's own time, song time, stands still while it's stopped, so it can carry on. A step is split into 24 ticks for micro
 timing and note lengths, so those stretch with the step length. The player schedules each step one step ahead,
 which covers micro timing from -23 to +24 ticks and still starts every note exactly on time.
 */
@@ -135,18 +136,24 @@ struct Player {
 
 	bool running = false;
 	double now = 0.0;
-	double scheduled = -1.0;   // start of the last slot scheduled, -1 before the first
+	double offset = 0.0;       // when song time 0 was, by now's clock
+	double paused = 0.0;       // the song time it stopped at
+	double scheduled = -1.0;   // start of the last slot scheduled, in song time, -1 before the first
 	double next = 0.0;         // start of the slot to schedule after it
 	Slot slots[2];             // the slot playing and the one after it
 	int position = -1;         // the step the playhead is on
 	long slotsPlayed = 0;
 	bool timed = true;         // false while steps wait for triggers
 
+	double song() const {
+		return now - offset;
+	}
+
 	/** Starts from the first step, letting go of the notes the sequence was playing. */
 	void start() {
 		stop();
 		running = true;
-		now = 0.0;
+		offset = now;
 		scheduled = -1.0;
 		next = 0.0;
 		slots[0] = slots[1] = Slot();
@@ -156,8 +163,18 @@ struct Player {
 	}
 
 	void stop() {
+		if (running)
+			paused = song();
 		running = false;
 		silence();
+	}
+
+	/** Carries on from where it stopped, or starts if it never has. */
+	void resume() {
+		if (position < 0)
+			return start();
+		running = true;
+		offset = now - paused;
 	}
 
 	/** Lets go of the notes the sequence is playing or has queued, and keeps going. */
@@ -181,10 +198,10 @@ struct Player {
 		if (running && s.stepLength > 0) {
 			if (!timed) {
 				// Back from waiting for triggers: pick the grid up at its next step.
-				next = std::ceil(now / s.stepLength) * s.stepLength;
+				next = std::ceil(song() / s.stepLength) * s.stepLength;
 				timed = true;
 			}
-			while (now >= scheduled) {
+			while (song() >= scheduled) {
 				schedule(pattern, s, next, s.stepLength);
 				scheduled = next;
 				next += s.stepLength;
@@ -206,23 +223,23 @@ struct Player {
 		if (!running)
 			return;
 		timed = false;
-		schedule(pattern, s, now, 1.0);
+		schedule(pattern, s, song(), 1.0);
 	}
 
 	/** The step under the playhead now, or -1. */
 	int playing() const {
-		return slots[1].step >= 0 && now >= slots[1].start ? slots[1].step : slots[0].step;
+		return slots[1].step >= 0 && song() >= slots[1].start ? slots[1].step : slots[0].step;
 	}
 
 	/** Where a note played now belongs: the nearest step, and its micro timing in ticks. */
 	bool locate(int* step, int* ticks) const {
 		const Slot& a = slots[0];
 		const Slot& b = slots[1];
-		const Slot& slot = b.step >= 0 && (a.step < 0 || now - a.start > a.length / 2) ? b : a;
+		const Slot& slot = b.step >= 0 && (a.step < 0 || song() - a.start > a.length / 2) ? b : a;
 		if (slot.step < 0)
 			return false;
 		*step = slot.step;
-		*ticks = std::clamp((int) std::lround((now - slot.start) / slot.length * TICKS), MIN_OFFSET, MAX_OFFSET);
+		*ticks = std::clamp((int) std::lround((song() - slot.start) / slot.length * TICKS), MIN_OFFSET, MAX_OFFSET);
 		return true;
 	}
 
@@ -242,7 +259,7 @@ struct Player {
 		return pair + (u < 1.0 ? u * mid : mid + (u - 1.0) * (2.0 - mid));
 	}
 
-	/** Works out where the playhead goes next and queues that step's notes. */
+	/** Works out where the playhead goes next and queues that step's notes. `start` is in song time. */
 	void schedule(const Pattern& pattern, const Settings& s, double start, double length) {
 		position = (position + 1) % std::clamp(s.stepCount, 1, STEPS);
 		slots[0] = slots[1];
@@ -252,7 +269,7 @@ struct Player {
 		for (int i = 0; i < step.count; i++) {
 			const Note& note = step.notes[i];
 			int ticks = note.length ? note.length : s.noteLength;
-			double time = (s.stepLength > 0 ? swung(start, s.swing) : start) + Player::ticks(note.offset, length) * (1.f - s.quantize);
+			double time = offset + (s.stepLength > 0 ? swung(start, s.swing) : start) + Player::ticks(note.offset, length) * (1.f - s.quantize);
 			queueNote({std::max(time, now), (note.pitch - 60) / 12.f, note.velocity / 127.f, ticks == DRONE ? INFINITY : Player::ticks(ticks, length)});
 		}
 	}
