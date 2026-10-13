@@ -45,6 +45,10 @@ struct PanelLayout {
 		return math::Rect::fromMinMax(math::Vec(shape->bounds[0], shape->bounds[1]), math::Vec(shape->bounds[2], shape->bounds[3]));
 	}
 
+	bool has(const std::string& id) const {
+		return findShape(svg, id.c_str());
+	}
+
 	math::Vec center(const char* id) const {
 		return box(id).getCenter();
 	}

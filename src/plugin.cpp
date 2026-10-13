@@ -7,6 +7,10 @@ Plugin* pluginInstance;
 void init(Plugin* p) {
 	pluginInstance = p;
 	p->addModel(modelDigital);
+	p->addModel(modelAnalog);
+	p->addModel(modelCluster);
+	p->addModel(modelOrgan);
+	p->addModel(modelBreakout);
 	p->addModel(modelScreen);
 	p->addModel(modelSequencer);
 }

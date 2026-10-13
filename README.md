@@ -49,8 +49,25 @@ pages, and a key per track over its jacks.
 - **Tempo mode:** click **TEMPO** to switch it on. The dials set the **tempo** (40 to 200 BPM) and **swing** (50%,
   straight, to 75%, which delays every second sixteenth). Type a tempo on the black keys, three digits as on the
   OP-Z, or tap one on the white keys. Its LED flashes on the beat.
-- **SHIFT:** a click turns the page. A long press or a Ctrl+click latches it, for track mode's step count now and
-  the step components later.
+- **SHIFT:** a click turns the page. A long press or a Ctrl+click latches it, for track mode's step count and the
+  step components.
+- **Step components:** with SHIFT latched, click steps to pick them (they blink green; steps with components glow
+  green). A white key puts the component above it on them, at a value that does something, and pressing it again
+  takes it off. The black keys set its value, lit green; pressing a spark's value again cycles which passes it
+  fires on. **STOP** clears every component on the track, and clicking SHIFT ends the editing. Tooltips name each
+  key's component or value, and a step's tooltip lists its components.
+
+  | Component | Keys 1 to 9, 0 |
+  | --- | --- |
+  | Pulse, pulse hold | The step plays, or holds its note, for 1 to 9 slots before the playhead moves on, or a random number. |
+  | Multiply | ×1 to ×8 ratchets within the step, a broken chord, or quantize (no micro timing). |
+  | Velocity | −4 to +3 (in sixteenths of the range, 5 is unchanged), mute, random. |
+  | Ramp up, ramp down, random | Walk C major from the note, one degree per trigger: 2 to 6 notes over 1 octave (1 to 5) or 3 octaves (6 to 0). |
+  | Portamento | Glide 1 to 8 into the note (up to a beat), direct, random. |
+  | Sweep | An out-and-back of the engine's filter (up, down), sound (up, down) or pan over a bar; the first four over two bars; random. |
+  | Jump | To the start, 2/4, 3/4 or 4/4; skip forward or back a step; random; stay; align with where the track would be; gate step (advances the tracks waiting for triggers). |
+  | Component spark, trigger spark | Fire the step's components, or its notes, on pass N of every N (1 to 8), random, or reset the count. Again: the first of N, all but the Nth, all but the first. |
+  | Tonality, parameter spark | Saved, but waiting for a tonality master and parameter locks. |
 - **Recording:** click **REC** to switch it on. While playing, notes from the keys and inputs go into the nearest
   step with their micro timing and length. Hold notes on the inputs and click **−** to erase them from the steps
   they pass instead, until they're released. While stopped, REC records a step at a time: each note or chord goes
@@ -108,6 +125,31 @@ the dials says what each one does on each page, and clicking a page's name there
 - **Jack LEDs:** green follows each jack's level. Red means clipping: above 10V on an input, or into the soft
   limiter that keeps the outputs within ±10V.
 
+### Analog, Cluster, Organ
+
+Three more OP-Z engines on the same synth track as Digital: the same pages, legend, jacks, note styles and bus. Only
+the two sound dials differ.
+
+| Engine | Sound | First dial | Second dial |
+| --- | --- | --- | --- |
+| Analog | A saw, a square an octave below and noise, through a low-pass the amp envelope opens | **Mix**: saw, then saw and sub, then sub and noise | **Envelope**: how far the filter closes between notes, for the envelope to sweep it up to eight octaves |
+| Cluster | Seven detuned saws per note | **Tone**: a low-pass that follows the note, from a near sine to fully bright | **Gravity**: pulls the saws together, from almost two semitones each way to one saw |
+| Organ | Up to four sine carriers and one modulator, in eight algorithms | **Algorithm**: flute, jazz, full and gospel drawbars, reed, pipe, combo, bell | **Tweak**: FM depth, from pure drawbars to grit |
+
+### Breakout
+
+A synth track whose voice is made of other modules. It is 20 HP and has everything an engine has, plus a dark box of
+outputs that send the track out, and **RET L** and **RET R** to take the sound back in.
+
+- **Out:** **V/OCT**, **GATE** and **ENV** are polyphonic, a channel per voice (one in mono and legato), with the
+  glide and the LFO's pitch in V/OCT. **LFO** is the LFO after its amount, ±5V. **CV 1** and **CV 2** are the sound
+  page's dials, and **FILTER**, **RESO**, **FX 1** and **FX 2** the dials of those names, all 0 to 10V, with the LFO.
+- **Return:** whatever goes out, the track stops doing itself. With **ENV** patched the return isn't enveloped; with
+  **FILTER** or **RESO** patched it isn't filtered; with an **FX** amount patched, that **FX** output carries the
+  full signal for an outside VCA; with **LFO** patched, the LFO moves nothing inside. Level and pan always apply.
+- **Envelope:** a polyphonic return is enveloped channel by channel, one voice each; a mono one by the loudest
+  voice. **RET R** is normalled to **RET L**.
+
 ### Screen
 
 The OP-Z's phone app, as an expander: the OP-Z famously has no screen, since you already carry one. Place it
@@ -128,7 +170,7 @@ Below that, every dial of every page is an arc in its colour, with the page the 
 select it and jump to its page (the track row switches track mode on), then drag up or down anywhere on the screen to
 turn it, finely with Ctrl, like the app's touch pad. Each drag is one undo step.
 
-Coming next: the sequencer's step components, then parameter locks over the bus, and drum engines.
+Coming next: parameter locks over the bus, and drum engines.
 
 ## Building
 
@@ -178,8 +220,9 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | `src/opz/Sequence.hpp` | The sequencer's steps and the player that schedules them, knowing nothing of Rack. |
 | `src/opz/Sequencer.cpp` | The Sequencer module. |
 | `src/opz/Bus.hpp` | The bus between the Sequencer and the engines and Screens to its right. |
-| `src/dsp/` | Building blocks that know nothing of Rack: filter, envelope. |
-| `src/Digital.cpp` | The Digital engine. |
+| `src/dsp/` | Building blocks that know nothing of Rack: filter, envelope, band-limited saw. |
+| `src/Digital.cpp`, `Analog.cpp`, `Cluster.cpp`, `Organ.cpp` | The engines. |
+| `src/Breakout.cpp` | Breakout, the synth track for a voice made of other modules. |
 | `src/opz/Screen.cpp` | The Screen expander. |
 | `src/Screen.*` | A reusable display widget whose readouts line up with the controls around it. |
 | `src/ui.hpp` | Panel layout lookup, plus the custom dials, keys, buttons and lights. |

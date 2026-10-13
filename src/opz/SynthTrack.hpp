@@ -17,7 +17,8 @@ track's lane of a Sequencer to its left, over the bus (see Bus.hpp). The engine 
 	static constexpr const char* SLUG;                     // module slug, and the name of its panel in res/
 	static void configSound(Module* m, int p1, int p2);    // configures its two sound dials
 	struct Voice {
-		float process(float frequency, float sampleTime, float p1, float p2);  // one sample, about ±1
+		// One sample, about ±1. `envelope` is the voice's amp envelope, 0 to 1, for an engine with a filter envelope.
+		float process(float frequency, float sampleTime, float p1, float p2, float envelope);
 	};
 
 Voices are summed before the filter: the filter has one cutoff for the whole track and is linear, so filtering
@@ -119,8 +120,16 @@ struct Track : Module, BusNode {
 		PAGE_PARAM, ENUMS(SELECT_PARAM, PAGES_LEN),
 		PARAMS_LEN
 	};
-	enum InputId { VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, CLOCK_INPUT, RESET_INPUT, EXT_INPUT, INPUTS_LEN };
-	enum OutputId { LEFT_OUTPUT, RIGHT_OUTPUT, FX1_OUTPUT, FX2_OUTPUT, OUTPUTS_LEN };
+	// The return and the CV outputs belong to Breakout, which hands the voice to other modules; the other engines'
+	// panels leave them out.
+	enum InputId { VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, CLOCK_INPUT, RESET_INPUT, EXT_INPUT, RETURN_L_INPUT, RETURN_R_INPUT, INPUTS_LEN };
+	enum OutputId {
+		LEFT_OUTPUT, RIGHT_OUTPUT, FX1_OUTPUT, FX2_OUTPUT,
+		CV_VOCT_OUTPUT, CV_GATE_OUTPUT, CV_ENV_OUTPUT, CV_LFO_OUTPUT, CV_P1_OUTPUT, CV_P2_OUTPUT,
+		CV_FILTER_OUTPUT, CV_RESONANCE_OUTPUT, CV_FX1_OUTPUT, CV_FX2_OUTPUT,
+		OUTPUTS_LEN
+	};
+	static constexpr int AUDIO_OUTPUTS = CV_VOCT_OUTPUT;
 	enum LightId {
 		ENUMS(DIAL_LIGHT, 4 * PAGES_LEN), ENUMS(PAGE_LIGHT, PAGES_LEN), ENUMS(SELECT_LIGHT, PAGES_LEN),
 		ENUMS(VOICE_LIGHT, PORT_MAX_CHANNELS),
@@ -147,7 +156,7 @@ struct Track : Module, BusNode {
 		float levels[PORT_MAX_CHANNELS];     // each voice's envelope
 		int stages[PORT_MAX_CHANNELS];
 		float lfoPhase, lfoValue;
-		float outputs[4];                    // peak levels since the last snapshot
+		float outputs[AUDIO_OUTPUTS];        // peak levels since the last snapshot
 	};
 	TripleBuffer<Snapshot> snapshots;
 
@@ -199,7 +208,8 @@ struct SynthTrack : Track {
 
 	/** The dials after the LFO, worked out at control rate. */
 	struct Controls {
-		float p1 = 0.f, p2 = 0.f;
+		float p1 = 0.f, p2 = 0.f, filter = 0.5f, resonance = 0.f;
+		float lfo = 0.f;      // the LFO's offset, after its amount
 		float pitch = 0.f;    // LFO offset, V/oct
 		float glide = 1.f;    // portamento smoothing per sample; 1 jumps straight to the note
 		float lfoCycles = 0.f;
@@ -212,6 +222,9 @@ struct SynthTrack : Track {
 	dsp::SchmittTrigger gates[PORT_MAX_CHANNELS];
 	NoteStack held;
 	int style = POLY;
+	int channels = 0;           // the note source's channels
+	bool lfoInside = true;      // false while the LFO goes out to other modules instead
+	float sweep[SWEEP_TARGETS] = {}; // the sequencer's sweep component, from the lane
 	// The bus, while this engine is on one: its track, the lane it plays (null while GATE is patched), and the
 	// master's requests last seen.
 	int busTrack = -1;
@@ -227,7 +240,7 @@ struct SynthTrack : Track {
 	dsp::SchmittTrigger clock, reset;
 	float sinceClock = 0.f;
 	Meter inputMeters[INPUTS_LEN], outputMeters[OUTPUTS_LEN];
-	float outputPeaks[OUTPUTS_LEN] = {};
+	float outputPeaks[AUDIO_OUTPUTS] = {};
 	bool limiting = false;
 	float scope[Snapshot::SCOPE] = {};
 	int scopeEnd = 0;
@@ -276,6 +289,14 @@ struct SynthTrack : Track {
 		configOutput(RIGHT_OUTPUT, "Right");
 		configOutput(FX1_OUTPUT, "FX 1 send");
 		configOutput(FX2_OUTPUT, "FX 2 send");
+		configInput(RETURN_L_INPUT, "Return left, or mono");
+		configInput(RETURN_R_INPUT, "Return right");
+		const char* const cvs[] = {"1V/octave pitch", "Gate", "Envelope (0-10V)", "LFO (±5V)", "", "",
+			"Filter (0-10V)", "Resonance (0-10V)", "FX 1 send (0-10V)", "FX 2 send (0-10V)"};
+		for (int i = CV_VOCT_OUTPUT; i < OUTPUTS_LEN; i++)
+			configOutput(i, cvs[i - CV_VOCT_OUTPUT]);
+		configOutput(CV_P1_OUTPUT, getParamQuantity(P1_PARAM)->name + " (0-10V)");
+		configOutput(CV_P2_OUTPUT, getParamQuantity(P2_PARAM)->name + " (0-10V)");
 
 		controlDivider.setDivision(16);
 		lightDivider.setDivision(64);
@@ -348,7 +369,7 @@ struct SynthTrack : Track {
 		}
 		lane = from;
 		// Channels beyond the gate's count read as low, so dropping channels releases their notes.
-		int channels = lane ? lane->channels : inputs[GATE_INPUT].getChannels();
+		channels = lane ? lane->channels : inputs[GATE_INPUT].getChannels();
 		for (int c = 0; c < PORT_MAX_CHANNELS; c++) {
 			float gate = c >= channels ? 0.f : lane ? 10.f * lane->gate[c] : inputs[GATE_INPUT].getVoltage(c);
 			switch (gates[c].processEvent(gate, 0.1f, 1.f)) {
@@ -407,7 +428,7 @@ struct SynthTrack : Track {
 
 	/** Sends the mix of the engines to the right on to the left, with this one's sound added while its outputs are
 	unpatched, and its page and dials. */
-	void sendUpstream(float y) {
+	void sendUpstream(float left, float right) {
 		Upstream* out = toLeft(this);
 		if (!out)
 			return;
@@ -417,8 +438,8 @@ struct SynthTrack : Track {
 			return;
 		out->page[busTrack] = trackMode ? -1 : page;
 		if (!outputs[LEFT_OUTPUT].isConnected() && !outputs[RIGHT_OUTPUT].isConnected()) {
-			out->left += y * controls.left;
-			out->right += y * controls.right;
+			out->left += left;
+			out->right += right;
 		}
 		if (selected)
 			std::copy(std::begin(dialValues), std::end(dialValues), out->dials);
@@ -438,30 +459,33 @@ struct SynthTrack : Track {
 		}
 	}
 
-	/** A dial's value, moved by the LFO when the LFO targets it. Its range is the LFO's full swing. */
-	float modulated(int param, int target, float lfoOffset) {
+	/** A dial's value, moved by the LFO when the LFO targets it, and by a sweep. Both are shares of its travel. */
+	float modulated(int param, int target, float lfoOffset, float sweep = 0.f) {
 		float v = params[param].getValue();
-		if ((int) params[LFO_TARGET_PARAM].getValue() != target)
+		float offset = sweep + ((int) params[LFO_TARGET_PARAM].getValue() == target ? lfoOffset : 0.f);
+		if (offset == 0.f)
 			return v;
 		ParamQuantity* q = paramQuantities[param];
-		v = clamp(v + lfoOffset * (q->maxValue - q->minValue), q->minValue, q->maxValue);
+		v = clamp(v + offset * (q->maxValue - q->minValue), q->minValue, q->maxValue);
 		return q->snapEnabled ? std::round(v) : v;
 	}
 
 	void updateControls(float sampleTime) {
 		float amount = params[LFO_AMOUNT_PARAM].getValue();
 		// Squaring the amount leaves room for subtle settings, like vibrato, near the middle.
-		float offset = amount * std::fabs(amount) * lfoValue;
 		Controls& c = controls;
-		c.p1 = modulated(P1_PARAM, TARGET_P1, offset);
+		c.lfo = amount * std::fabs(amount) * lfoValue;
+		float offset = lfoInside ? c.lfo : 0.f;
+		c.p1 = modulated(P1_PARAM, TARGET_P1, offset, sweep[SWEEP_SYNTH]);
 		c.p2 = modulated(P2_PARAM, TARGET_P2, offset);
 		c.pitch = (int) params[LFO_TARGET_PARAM].getValue() == TARGET_PITCH ? 2.f * offset : 0.f;
 
 		// The resonance belongs to whichever filter the dial is moving; the other one stays flat.
-		float filter = modulated(FILTER_PARAM, TARGET_FILTER, offset);
-		float damping = 2.f - 1.9f * modulated(RESONANCE_PARAM, TARGET_RESONANCE, offset); // Q from 0.5 to 10
-		lowpass.tune(lowpassHz(filter) * sampleTime, filter < 0.5f ? damping : float(M_SQRT2));
-		highpass.tune(highpassHz(filter) * sampleTime, filter > 0.5f ? damping : float(M_SQRT2));
+		c.filter = modulated(FILTER_PARAM, TARGET_FILTER, offset, sweep[SWEEP_FILTER]);
+		c.resonance = modulated(RESONANCE_PARAM, TARGET_RESONANCE, offset);
+		float damping = 2.f - 1.9f * c.resonance; // Q from 0.5 to 10
+		lowpass.tune(lowpassHz(c.filter) * sampleTime, c.filter < 0.5f ? damping : float(M_SQRT2));
+		highpass.tune(highpassHz(c.filter) * sampleTime, c.filter > 0.5f ? damping : float(M_SQRT2));
 
 		c.envelope.set(envelopeTime(modulated(ATTACK_PARAM, TARGET_ATTACK, offset)), envelopeTime(params[DECAY_PARAM].getValue()),
 			params[SUSTAIN_PARAM].getValue(), envelopeTime(params[RELEASE_PARAM].getValue()), sampleTime);
@@ -469,7 +493,7 @@ struct SynthTrack : Track {
 		c.glide = glide > 0.f ? xyz::Adsr::Shape::coefficient(glide * glide, sampleTime) : 1.f;
 		c.lfoCycles = sampleTime / Lfo::period(params[LFO_SPEED_PARAM].getValue(), secondsPerBeat);
 
-		float pan = modulated(PAN_PARAM, TARGET_PAN, offset);
+		float pan = modulated(PAN_PARAM, TARGET_PAN, offset, sweep[SWEEP_PAN]);
 		float level = modulated(LEVEL_PARAM, TARGET_VOLUME, offset);
 		c.left = std::cos((pan + 1.f) * float(M_PI) / 4.f);
 		c.right = std::sin((pan + 1.f) * float(M_PI) / 4.f);
@@ -478,7 +502,8 @@ struct SynthTrack : Track {
 		c.fx2 = params[FX2_PARAM].getValue() * params[FX2_PARAM].getValue();
 	}
 
-	void process(const ProcessArgs& args) override {
+	/** Everything up to the voices, once a sample: the bus, the tempo, the keys, the notes, the LFO and the dials. */
+	void prepare(const ProcessArgs& args) {
 		const Downstream* bus = joinBus();
 		trackTempo(args.sampleTime, bus);
 		if (reset.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f))
@@ -490,6 +515,8 @@ struct SynthTrack : Track {
 		}
 		bool fromBus = busTrack >= 0 && !inputs[GATE_INPUT].isConnected() && bus->lanes[busTrack].channels > 0;
 		handleNotes(fromBus ? &bus->lanes[busTrack] : nullptr);
+		for (int i = 0; i < SWEEP_TARGETS; i++)
+			sweep[i] = lane ? lane->sweep[i] : 0.f;
 		lfoValue = lfo.process((int) params[LFO_SHAPE_PARAM].getValue(), controls.lfoCycles, inputs[EXT_INPUT].getVoltage() / 5.f);
 		if (control)
 			updateControls(args.sampleTime);
@@ -499,6 +526,39 @@ struct SynthTrack : Track {
 			if (!held.empty())
 				v.pitch += (notePitch(held.top()) - v.pitch) * controls.glide;
 		}
+	}
+
+	/** Steps a voice's envelope; its level, times its velocity. */
+	float advance(Voice& v) {
+		return v.envelope.process(controls.envelope) * v.velocity;
+	}
+
+	/** The track's sound after the level, before the soft limit and the pan, to the outputs, the bus and the meters. */
+	void emit(float left, float right, float fx1, float fx2, float sampleTime) {
+		limiting |= std::fmax(std::fabs(left), std::fabs(right)) > 5.f;
+		left = softLimit(left);
+		right = softLimit(right);
+		float mono = 0.5f * (left + right);
+		float panned[2] = {left * controls.left, right * controls.right};
+		float out[AUDIO_OUTPUTS] = {mono, 0.f, mono * fx1, mono * fx2};
+		if (outputs[RIGHT_OUTPUT].isConnected()) {
+			out[LEFT_OUTPUT] = panned[0];
+			out[RIGHT_OUTPUT] = panned[1];
+		}
+		for (int i = 0; i < AUDIO_OUTPUTS; i++) {
+			outputs[i].setVoltage(out[i]);
+			outputPeaks[i] = std::fmax(outputPeaks[i], std::fabs(out[i]));
+		}
+		scope[scopeEnd] = mono;
+		scopeEnd = (scopeEnd + 1) % Snapshot::SCOPE;
+		sendUpstream(panned[0], panned[1]);
+
+		if (lightDivider.process())
+			updateLights(sampleTime * lightDivider.getDivision());
+	}
+
+	void process(const ProcessArgs& args) override {
+		prepare(args);
 		// Every voice runs, so voices left releasing by a change of note style fade out normally.
 		float mix = 0.f;
 		for (int i = 0; i < PORT_MAX_CHANNELS; i++) {
@@ -508,28 +568,18 @@ struct SynthTrack : Track {
 			if (style == POLY)
 				v.pitch = notePitch(i);
 			float frequency = dsp::FREQ_C4 * dsp::exp2_taylor5(v.pitch + controls.pitch);
-			float level = v.envelope.process(controls.envelope) * v.velocity;
-			mix += v.sound.process(frequency, args.sampleTime, controls.p1, controls.p2) * level;
+			float level = advance(v);
+			mix += v.sound.process(frequency, args.sampleTime, controls.p1, controls.p2, v.envelope.level) * level;
 		}
-
 		float x = highpass.process(lowpass.process(mix).lp).hp * controls.gain;
-		float y = softLimit(x);
-		float out[OUTPUTS_LEN] = {y, 0.f, y * controls.fx1, y * controls.fx2};
-		if (outputs[RIGHT_OUTPUT].isConnected()) {
-			out[LEFT_OUTPUT] = y * controls.left;
-			out[RIGHT_OUTPUT] = y * controls.right;
-		}
-		for (int i = 0; i < OUTPUTS_LEN; i++) {
-			outputs[i].setVoltage(out[i]);
-			outputPeaks[i] = std::fmax(outputPeaks[i], std::fabs(out[i]));
-		}
-		limiting |= std::fabs(x) > 5.f;
-		scope[scopeEnd] = y;
-		scopeEnd = (scopeEnd + 1) % Snapshot::SCOPE;
-		sendUpstream(y);
+		emit(x, x, controls.fx1, controls.fx2, args.sampleTime);
+	}
 
-		if (lightDivider.process())
-			updateLights(args.sampleTime * lightDivider.getDivision());
+	static float peak(Port& port) {
+		float level = 0.f;
+		for (int c = 0; c < port.getChannels(); c++)
+			level = std::fmax(level, std::fabs(port.getVoltage(c)));
+		return level;
 	}
 
 	void updateLights(float dt) {
@@ -550,15 +600,15 @@ struct SynthTrack : Track {
 			lights[VOICE_LIGHT + i].setBrightnessSmooth(voices[i].envelope.level * voices[i].velocity, dt);
 
 		for (int i = 0; i < INPUTS_LEN; i++) {
-			float level = 0.f;
-			for (int c = 0; c < inputs[i].getChannels(); c++)
-				level = std::fmax(level, std::fabs(inputs[i].getVoltage(c)));
+			float level = peak(inputs[i]);
 			inputMeters[i].process(level / 10.f, level > 10.f, dt);
 		}
-		for (int i = 0; i < OUTPUTS_LEN; i++) {
+		for (int i = 0; i < AUDIO_OUTPUTS; i++) {
 			outputMeters[i].process(outputPeaks[i] / 5.f, limiting && outputPeaks[i] > 0.f, dt);
 			outputPeaks[i] = 0.f;
 		}
+		for (int i = AUDIO_OUTPUTS; i < OUTPUTS_LEN; i++)
+			outputMeters[i].process(peak(outputs[i]) / 10.f, false, dt);
 		limiting = false;
 		for (int i = 0; i < INPUTS_LEN; i++) {
 			lights[INPUT_LIGHT + 2 * i].setBrightness(inputMeters[i].peak);
@@ -586,7 +636,7 @@ struct SynthTrack : Track {
 		}
 		s.lfoPhase = lfo.phase;
 		s.lfoValue = lfoValue;
-		for (int i = 0; i < OUTPUTS_LEN; i++)
+		for (int i = 0; i < AUDIO_OUTPUTS; i++)
 			s.outputs[i] = outputMeters[i].peak;
 		snapshots.publish();
 	}

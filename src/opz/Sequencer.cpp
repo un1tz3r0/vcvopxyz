@@ -11,6 +11,9 @@ Its keys are laid out as on the OP-Z: TRACK, REC and −, PLAY and +, STOP and S
 the numbered black keys and the white keys from F to E. Rack can't hold one button down while clicking another, so
 a long press or a Ctrl+click picks a step up, and it stays held (blinking) until it's clicked again; SHIFT latches
 the same way, and a click on it turns the page. TRACK and TEMPO latch.
+
+With SHIFT latched, the steps are picked for step components (blinking green), the white keys put a component on
+them, as the icons above the keys say, and the black keys set its value.
 */
 #include "SynthTrack.hpp"
 #include "Sequence.hpp"
@@ -27,6 +30,65 @@ inline int keyValue(int key) {
 }
 inline int valueKey(int value) {
 	return 12 * (value / 5) + BLACK_KEYS[value % 5];
+}
+
+/** The white keys, in semitones above F, pick the step components: pulse on the left to trigger spark on the right. */
+constexpr int WHITE_KEYS[7] = {0, 2, 4, 6, 7, 9, 11};
+inline int keyComponent(int key) {
+	const int* k = std::find(std::begin(WHITE_KEYS), std::end(WHITE_KEYS), key % 12);
+	return k == std::end(WHITE_KEYS) ? -1 : 7 * (key / 12) + int(k - WHITE_KEYS);
+}
+inline int componentKey(int c) {
+	return 12 * (c / 7) + WHITE_KEYS[c % 7];
+}
+
+static const char* const COMPONENT_NAMES[COMPONENTS_LEN] = {"Pulse", "Pulse hold", "Multiply", "Velocity", "Ramp up",
+	"Ramp down", "Random", "Portamento", "Sweep", "Tonality", "Jump", "Parameter spark", "Component spark", "Trigger spark"};
+/** The value key a component starts on: one that does something. */
+static const int COMPONENT_DEFAULTS[COMPONENTS_LEN] = {1, 1, 1, 4, 2, 2, 2, 3, 0, 0, 0, 1, 1, 1};
+
+inline bool isSpark(int c) {
+	return c >= PARAMETER_SPARK;
+}
+
+/** What a component does at a value, its value key 0 to 9 plus, for the sparks, its mode times 16. */
+inline std::string componentValue(int c, int value) {
+	int key = value & 15, mode = value >> 4;
+	auto notes = [](int k) { return string::f("%d notes over %s", k % 5 + 2, k < 5 ? "1 octave" : "3 octaves"); };
+	switch (c) {
+		case PULSE:
+		case PULSE_HOLD: return key == 9 ? "random" : string::f("%d", key + 1);
+		case MULTIPLY: return key == 8 ? "broken chord" : key == 9 ? "quantize" : string::f("×%d", key + 1);
+		case VELOCITY: return key == 8 ? "mute" : key == 9 ? "random" : key == 4 ? "default" : string::f("%+d", key - 4);
+		case RAMP_UP:
+		case RAMP_DOWN:
+		case RANDOM: return notes(key);
+		case PORTAMENTO: return key == 8 ? "direct" : key == 9 ? "random" : string::f("glide %d", key + 1);
+		case SWEEP: {
+			static const char* const v[] = {"filter up", "filter down", "synth up", "synth down", "pan", "filter up, long",
+				"filter down, long", "synth up, long", "synth down, long", "random"};
+			return v[key];
+		}
+		case TONALITY: {
+			static const char* const v[] = {"ignore chords", "transpose only", "+octave", "+fifth", "+third", "chromatic up",
+				"chromatic down", "quantize 1", "quantize 2", "quantize 3"};
+			return v[key];
+		}
+		case JUMP: {
+			static const char* const v[] = {"to start", "to 2/4", "to 3/4", "to 4/4", "forward", "back", "random", "stay",
+				"align", "gate step"};
+			return v[key];
+		}
+		default: {
+			if (key == 8)
+				return "random";
+			if (key == 9)
+				return "reset counter";
+			int n = key + 1;
+			static const char* const modes[] = {"pass %d of %d", "pass 1 of %d", "all but pass %d of %d", "all but pass 1 of %d"};
+			return mode == 0 || mode == 2 ? string::f(modes[mode], n, n) : string::f(modes[mode], n);
+		}
+	}
 }
 
 inline std::string noteName(int pitch) {
@@ -107,6 +169,11 @@ struct Sequencer : Module, BusNode {
 			const Step& s = m->lane().pattern.steps[i];
 			for (int n = 0; n < s.count; n++)
 				label += (n ? " " : ": ") + noteName(s.notes[n].pitch);
+			for (int c = 0, n = 0; c < COMPONENTS_LEN; c++)
+				if (s.has(c))
+					label += std::string(n++ ? ", " : "; ") + COMPONENT_NAMES[c] + " " + componentValue(c, s.values[c]);
+			if (m->editingComponents())
+				label += m->selection >> i & 1 ? " (picked)" : " (click to pick)";
 			return label;
 		}
 	};
@@ -120,6 +187,12 @@ struct Sequencer : Module, BusNode {
 				return string::f("Step length %s", values[value]);
 			if (m->tempoMode)
 				return value >= 0 ? string::f("Tempo digit %d", (value + 1) % 10) : "Tap tempo";
+			if (m->editingComponents()) {
+				if (value < 0)
+					return COMPONENT_NAMES[keyComponent(key)];
+				return m->component >= 0 ? string::f("%s %s", COMPONENT_NAMES[m->component], componentValue(m->component, value).c_str())
+					: string::f("Value %d", (value + 1) % 10);
+			}
 			return noteName(m->keyPitch(key));
 		}
 	};
@@ -135,6 +208,8 @@ struct Sequencer : Module, BusNode {
 	bool erasing = false;        // removing the held notes from the steps they pass, while recording
 	bool chord = false;          // notes are down for the step being step-recorded
 	int held = -1, cursor = 0, octave = 0, ppqn = 4;
+	uint16_t selection = 0;      // the steps picked for step components, with SHIFT latched
+	int component = -1;          // the component the white keys picked last for them
 	int page = NEXT_PAGE;        // the page last asked of the selected track's engine, and how many times one was
 	uint32_t pageRequests = 0;
 	int typed = 0, digits = 0;   // a tempo being typed on the value keys
@@ -185,7 +260,9 @@ struct Sequencer : Module, BusNode {
 		configKey(this, STOP_PARAM, "Stop")->description = "Stopped already: lets go of every note";
 		configKey(this, OCTAVE_DOWN_PARAM, "Octave down")->description = "Nudges a held step a tick earlier; with notes held while recording, erases them";
 		configKey(this, OCTAVE_UP_PARAM, "Octave up")->description = "Nudges a held step a tick later";
-		configKey(this, SHIFT_PARAM, "Shift")->description = "Click: the next page of dials. Long-press or " RACK_MOD_CTRL_NAME "+click: latch it";
+		configKey(this, SHIFT_PARAM, "Shift")->description = "Click: the next page of dials. Long-press or " RACK_MOD_CTRL_NAME "+click: latch it, "
+			"to pick steps for step components; then a white key puts one on them, again takes it off, and the black keys set its value. "
+			"STOP clears every component on the track";
 		configKey(this, METRONOME_PARAM, "Tempo")->description = "On and off: the dials set the tempo and swing, the black keys type a tempo, "
 			"and the white keys tap one";
 		for (int i = 0; i < STEPS; i++)
@@ -224,6 +301,10 @@ struct Sequencer : Module, BusNode {
 	/** The keys run from F3 to E5, an octave either side of middle C, before − and + move them. */
 	int keyPitch(int key) const {
 		return clamp(53 + 12 * octave + key, 0, 127);
+	}
+
+	bool editingComponents() const {
+		return shifted && !trackMode && !tempoMode;
 	}
 
 	bool anyHeld() const {
@@ -312,6 +393,8 @@ struct Sequencer : Module, BusNode {
 		track = t;
 		held = -1;
 		cursor = 0;
+		selection = 0;
+		component = -1;
 		chord = erasing = false;
 	}
 
@@ -350,7 +433,7 @@ struct Sequencer : Module, BusNode {
 		else if (recording && !playing)
 			cursor = i;
 		else if (s.empty())
-			s = memory;
+			s.paste(memory);
 		else
 			s.clear();
 	}
@@ -390,7 +473,7 @@ struct Sequencer : Module, BusNode {
 			return;
 		}
 		if (first)
-			memory.clear();
+			memory = Step();
 		memory.add(note);
 		if (!recording || erasing)
 			return;
@@ -452,8 +535,44 @@ struct Sequencer : Module, BusNode {
 		sinceTap = 0.f;
 	}
 
+	/** With SHIFT latched, a white key puts its component on the picked steps, at a value that does something, or
+	pressed again once they all have it, takes it off. A black key sets the value of the component picked last;
+	pressing a spark's value again cycles which of its passes fire. */
+	void componentKeyDown(int key) {
+		Pattern& pattern = lane().pattern;
+		auto picked = [&](auto f) {
+			for (int i = 0; i < STEPS; i++)
+				if (selection >> i & 1)
+					f(pattern.steps[i]);
+		};
+		int c = keyComponent(key), value = keyValue(key);
+		if (c >= 0) {
+			bool all = selection != 0;
+			picked([&](Step& s) { all = all && s.has(c); });
+			if (all && component == c) {
+				picked([&](Step& s) { s.unset(c); });
+				component = -1;
+			}
+			else {
+				picked([&](Step& s) {
+					if (!s.has(c))
+						s.set(c, COMPONENT_DEFAULTS[c]);
+				});
+				component = c;
+			}
+		}
+		else if (component >= 0) {
+			picked([&](Step& s) {
+				bool again = isSpark(component) && s.has(component) && s.key(component) == value && value < 8;
+				s.set(component, again ? (s.values[component] + 16) % 64 : value);
+			});
+		}
+	}
+
 	void keyDown(int key) {
-		if (tempoMode)
+		if (editingComponents())
+			componentKeyDown(key);
+		else if (tempoMode)
 			tempoKey(key);
 		else if (!trackMode)
 			noteDown(key, keyPitch(key), (keyPitch(key) - 60) / 12.f, 100);
@@ -531,6 +650,12 @@ struct Sequencer : Module, BusNode {
 				else if (i < TRACKS)
 					select(i);
 			}
+			else if (editingComponents()) {
+				if (e == KeyGesture::PRESS) {
+					selection ^= 1 << i;
+					component = -1;
+				}
+			}
 			else if (picksUp(e, g)) {
 				toggleHold(i);
 				g.handled = true;
@@ -549,6 +674,10 @@ struct Sequencer : Module, BusNode {
 				else
 					requestPage(NEXT_PAGE);
 			}
+			if (!shifted) {
+				selection = 0;
+				component = -1;
+			}
 		}
 		else if (e == KeyGesture::PRESS) {
 			switch (p) {
@@ -556,7 +685,15 @@ struct Sequencer : Module, BusNode {
 				case METRONOME_PARAM: tempoMode = !tempoMode; trackMode = false; typed = digits = 0; break;
 				case REC_PARAM: recording = !recording; cursor = 0; break;
 				case PLAY_PARAM: play(); break;
-				case STOP_PARAM: stop(); clearing = trackMode ? 0.f : -1.f; break;
+				case STOP_PARAM:
+					if (editingComponents()) {
+						for (Step& s : lane().pattern.steps)
+							s.clearComponents();
+						break;
+					}
+					stop();
+					clearing = trackMode ? 0.f : -1.f;
+					break;
 				case OCTAVE_DOWN_PARAM: shift(-1); break;
 				case OCTAVE_UP_PARAM: shift(1); break;
 			}
@@ -598,9 +735,14 @@ struct Sequencer : Module, BusNode {
 		if (resetIn.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f) && playing)
 			play();
 		if (advanceIn.process(inputs[ADVANCE_INPUT].getVoltage(), 0.1f, 1.f))
-			for (Lane& l : lanes)
-				if (l.settings.stepLength == 0)
-					l.player.trigger(l.pattern, l.settings);
+			advanceWaiting();
+	}
+
+	/** Steps on every track that waits for triggers. */
+	void advanceWaiting() {
+		for (Lane& l : lanes)
+			if (l.settings.stepLength == 0)
+				l.player.trigger(l.pattern, l.settings);
 	}
 
 	/** Runs the players at the tempo, or follows the clock: between pulses at the rate they last came, but never past
@@ -637,8 +779,15 @@ struct Sequencer : Module, BusNode {
 				d = std::max(d, 0.0);
 			}
 		}
-		for (Lane& l : lanes)
+		bool gateStep = false;
+		for (Lane& l : lanes) {
 			l.player.advance(d, l.pattern, l.settings);
+			gateStep |= l.player.gateStep;
+			l.player.gateStep = false;
+		}
+		// A jump's gate step advances the tracks that wait for triggers, as ADV does.
+		if (gateStep)
+			advanceWaiting();
 		if (time.running) {
 			long tick = (long) std::floor(time.song() / perPulse + 1e-9);
 			if (tick != lastTick) {
@@ -672,6 +821,9 @@ struct Sequencer : Module, BusNode {
 			}
 			outputs[VOCT_OUTPUT + t].setChannels(n);
 			outputs[GATE_OUTPUT + t].setChannels(n);
+			if (out)
+				for (int k = 0; k < SWEEP_TARGETS; k++)
+					out->sweep[k] = l.player.sweep(k);
 		}
 		if (bus) {
 			bus->secondsPerBeat = 60.f / bpm();
@@ -764,6 +916,16 @@ struct Sequencer : Module, BusNode {
 					b = 0.6f;
 				}
 			}
+			else if (editingComponents()) {
+				// Green for steps with components, blinking for the ones picked.
+				const Step& s = l.pattern.steps[i];
+				c = s.components || selection >> i & 1 ? led::GREEN : NOTE_COLOR;
+				b = selection >> i & 1 ? (on ? 1.f : 0.3f) : s.components ? 0.4f : s.empty() ? 0.f : 0.2f;
+				if (i == head) {
+					c = led::WHITE;
+					b = 1.f;
+				}
+			}
 			else {
 				if (!l.pattern.steps[i].empty()) {
 					c = NOTE_COLOR;
@@ -808,6 +970,25 @@ struct Sequencer : Module, BusNode {
 			keyColor = led::WHITE;
 			for (int v = 0; v < 10; v++)
 				level[valueKey(v)] = 0.2f;
+		}
+		else if (editingComponents()) {
+			// The white keys light the components on the picked steps, or on any step while none is picked, and the
+			// one picked brightest; the black keys, its value.
+			keyColor = led::GREEN;
+			uint16_t present = 0;
+			int value = -1;
+			for (int i = 0; i < STEPS; i++) {
+				const Step& s = l.pattern.steps[i];
+				if (!selection || selection >> i & 1)
+					present |= s.components;
+				if (selection >> i & 1 && component >= 0 && s.has(component) && value < 0)
+					value = s.key(component);
+			}
+			for (int c = 0; c < COMPONENTS_LEN; c++)
+				level[componentKey(c)] = c == component ? 1.f : present >> c & 1 ? (selection ? 0.5f : 0.25f) : 0.f;
+			if (component >= 0)
+				for (int v = 0; v < 10; v++)
+					level[valueKey(v)] = v == value ? 1.f : 0.12f;
 		}
 		else {
 			for (const Player::Channel& c : l.player.channels)
@@ -877,8 +1058,10 @@ struct Sequencer : Module, BusNode {
 			l.settings.channels = TRACK_CHANNELS[t];
 			l.recorded = l.pattern;
 		}
-		memory.clear();
+		memory = Step();
 		memory.add(Note());
+		selection = 0;
+		component = -1;
 		playing = armed = resuming = recording = trackMode = tempoMode = shifted = erasing = chord = false;
 		held = -1;
 		cursor = octave = 0;
@@ -923,12 +1106,40 @@ struct Sequencer : Module, BusNode {
 		}
 	}
 
+	/** Each step's components, a list of [component, value]. */
+	static json_t* componentsToJson(const Pattern& pattern) {
+		json_t* steps = json_array();
+		for (const Step& s : pattern.steps) {
+			json_t* components = json_array();
+			for (int c = 0; c < COMPONENTS_LEN; c++)
+				if (s.has(c))
+					json_array_append_new(components, json_pack("[ii]", c, s.values[c]));
+			json_array_append_new(steps, components);
+		}
+		return steps;
+	}
+
+	static void componentsFromJson(json_t* steps, Pattern& pattern) {
+		size_t i, j;
+		json_t *components, *c;
+		json_array_foreach(steps, i, components) {
+			if (i >= STEPS)
+				break;
+			json_array_foreach(components, j, c) {
+				int component, value;
+				if (json_unpack(c, "[ii]", &component, &value) == 0 && component >= 0 && component < COMPONENTS_LEN)
+					pattern.steps[i].set(component, clamp(value, 0, 63));
+			}
+		}
+	}
+
 	json_t* dataToJson() override {
 		json_t* root = json_object();
 		json_t* tracks = json_array();
 		for (const Lane& l : lanes) {
 			json_t* t = json_object();
 			json_object_set_new(t, "pattern", patternToJson(l.pattern));
+			json_object_set_new(t, "components", componentsToJson(l.pattern));
 			json_object_set_new(t, "channels", json_integer(l.settings.channels));
 			json_array_append_new(tracks, t);
 		}
@@ -951,6 +1162,8 @@ struct Sequencer : Module, BusNode {
 					break;
 				if (json_t* p = json_object_get(t, "pattern"))
 					patternFromJson(p, lanes[i].pattern);
+				if (json_t* c = json_object_get(t, "components"))
+					componentsFromJson(c, lanes[i].pattern);
 				if (json_t* c = json_object_get(t, "channels"))
 					lanes[i].settings.channels = clamp((int) json_integer_value(c), 1, CHANNELS);
 			}
@@ -1060,13 +1273,15 @@ struct StepKey : RoundKey {
 			return;
 		Step* step = &m->lane().pattern.steps[paramId - Sequencer::STEP_PARAM];
 		menu->addChild(new MenuSeparator);
-		if (step->empty()) {
-			menu->addChild(createMenuLabel("Empty step"));
-			return;
+		if (step->empty())
+			menu->addChild(createMenuLabel("No notes"));
+		else {
+			for (NoteField::Field f : {NoteField::VELOCITY, NoteField::OFFSET, NoteField::LENGTH})
+				menu->addChild(new NoteSlider(new NoteField(step, f)));
+			menu->addChild(createMenuItem("Clear", "", [=]() { step->clear(); }));
 		}
-		for (NoteField::Field f : {NoteField::VELOCITY, NoteField::OFFSET, NoteField::LENGTH})
-			menu->addChild(new NoteSlider(new NoteField(step, f)));
-		menu->addChild(createMenuItem("Clear", "", [=]() { step->clear(); }));
+		if (step->components)
+			menu->addChild(createMenuItem("Clear step components", "", [=]() { step->clearComponents(); }));
 	}
 };
 

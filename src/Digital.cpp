@@ -31,7 +31,7 @@ struct Digital {
 	struct Voice {
 		uint32_t carrier = 0, modulator = 0;
 
-		float process(float frequency, float sampleTime, float octave, float feedback) {
+		float process(float frequency, float sampleTime, float octave, float feedback, float) {
 			uint32_t increment = uint32_t(std::fmin(frequency * sampleTime, 0.5f) * 4294967296.f);
 			int shift = (int) octave;
 			carrier += increment;
