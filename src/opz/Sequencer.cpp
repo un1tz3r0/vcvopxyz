@@ -1,7 +1,8 @@
 /*
 Sequencer: the OP-Z's front panel, and the master of the OP-Z modules to its right. It keeps the tempo and the
-transport, and sequences the first eight tracks: four drum tracks, then bass, lead, arp and chord. Each track has a
-lane of sixteen steps of up to four notes, filled from the keys or from poly V/OCT, GATE and VEL inputs.
+transport, and sequences the first eight tracks: four drum tracks (kick, snare, perc and sample), then bass, lead,
+arp and chord. Each track has a lane of sixteen steps of up to four notes, filled from the keys or from poly V/OCT,
+GATE and VEL inputs.
 
 Every lane has poly V/OCT and GATE outputs. Unpatched, they play the track's engine over the bus instead (Bus.hpp),
 and the engines' sound comes back to the L and R outputs. The four dials are the selected track's: whichever engine
@@ -15,9 +16,10 @@ keys over the display: PROJECT (ten project slots on the value keys), MIXER (gro
 on the steps) and TEMPO (tempo, swing and the metronome). The fourth, SCREEN, shows the battery while it's held.
 
 With SHIFT latched, the steps are picked for step components (blinking green), the white keys put a component on
-them, as the icons above the keys say, and the black keys set its value.
+them, as the icons above the keys say, and the black keys set its value. While a step is held, the dials lock the
+engine's parameters on it.
 */
-#include "SynthTrack.hpp"
+#include "Track.hpp"
 #include "Sequence.hpp"
 #include "Project.hpp"
 #include <mutex>
@@ -107,9 +109,9 @@ const NVGcolor WHITE = nvgRGBf(1.f, 1.f, 1.f), RED = nvgRGBf(1.f, 0.1f, 0.06f), 
 }
 
 static const char* const TRACK_NAMES[TRACKS] = {"Kick", "Snare", "Perc", "Sample", "Bass", "Lead", "Arp", "Chord"};
-/** Each track's polyphony to begin with, as the OP-Z's: one voice for the drums, bass and arp, three for the lead,
-four for the chords. */
-static const int TRACK_CHANNELS[TRACKS] = {1, 1, 1, 1, 1, 3, 1, 4};
+/** Each track's polyphony to begin with, as the OP-Z's: two notes a step for the drums, one for the bass and arp,
+three for the lead, four for the chords. */
+static const int TRACK_CHANNELS[TRACKS] = {2, 2, 2, 2, 1, 3, 1, 4};
 
 constexpr int LONGEST = STEPS * TICKS; // the longest note a step's menu sets, short of a drone
 
@@ -177,6 +179,8 @@ struct Sequencer : Module, BusNode {
 		TRACK_PARAM, REC_PARAM, PLAY_PARAM, STOP_PARAM, OCTAVE_DOWN_PARAM, OCTAVE_UP_PARAM, SHIFT_PARAM,
 		PROJECT_PARAM, MIXER_PARAM, METRONOME_PARAM, SCREEN_PARAM,
 		ENUMS(STEP_PARAM, STEPS), ENUMS(KEY_PARAM, KEYS), ENUMS(SELECT_PARAM, TRACKS), ENUMS(PAGE_PARAM, PAGES),
+		// What the dials turn while a step is held: its locks. Last, so older patches keep their params.
+		ENUMS(LOCK_PARAM, 4),
 		PARAMS_LEN
 	};
 	enum InputId { CLOCK_INPUT, RUN_INPUT, RESET_INPUT, CONT_INPUT, ADVANCE_INPUT, VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, INPUTS_LEN };
@@ -187,14 +191,14 @@ struct Sequencer : Module, BusNode {
 	};
 	static constexpr int METERED_OUTPUTS = VOCT_OUTPUT; // the lanes' outputs show on the track keys instead
 	enum LightId {
-		ENUMS(KEY_LIGHT, 3 * (PARAMS_LEN - TRACK_PARAM)), ENUMS(DIAL_LIGHT, 3 * 4),
+		ENUMS(KEY_LIGHT, 3 * (LOCK_PARAM - TRACK_PARAM)), ENUMS(DIAL_LIGHT, 3 * 4),
 		ENUMS(CHANNEL_LIGHT, CHANNELS), INTERNAL_LIGHT, EXTERNAL_LIGHT,
 		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * METERED_OUTPUTS),
 		LIGHTS_LEN
 	};
 	static constexpr float LONG_PRESS = 0.4f, CLEAR_HOLD = 1.f; // seconds
 	static constexpr int SOURCES = KEYS + CHANNELS;             // live notes: the keys, then the GATE input's channels
-	static constexpr int ALL_KEYS = PARAMS_LEN - TRACK_PARAM;
+	static constexpr int ALL_KEYS = LOCK_PARAM - TRACK_PARAM;
 
 	static int keyLight(int param) {
 		return KEY_LIGHT + 3 * (param - TRACK_PARAM);
@@ -235,6 +239,8 @@ struct Sequencer : Module, BusNode {
 			for (int c = 0, n = 0; c < COMPONENTS_LEN; c++)
 				if (s.has(c))
 					label += std::string(n++ ? ", " : "; ") + COMPONENT_NAMES[c] + " " + componentValue(c, s.values[c]);
+			if (int n = __builtin_popcount(s.locks))
+				label += string::f("; %d lock%s", n, n > 1 ? "s" : "");
 			if (m->editingComponents())
 				label += m->selection >> i & 1 ? " (picked)" : " (click to pick)";
 			return label;
@@ -260,7 +266,72 @@ struct Sequencer : Module, BusNode {
 				return m->component >= 0 ? string::f("%s %s", COMPONENT_NAMES[m->component], componentValue(m->component, value).c_str())
 					: string::f("Value %d", (value + 1) % 10);
 			}
-			return noteName(m->keyPitch(key));
+			Track* e = m->engine(m->track);
+			std::string sound = e ? e->soundName(m->keyPitch(key)) : "";
+			return noteName(m->keyPitch(key)) + (sound.empty() ? "" : ": " + sound);
+		}
+	};
+
+	/** A dial while a step is held: the step's lock on the engine's dial under it, or the dial itself where the step
+	has none. Turning it locks the dial on the step. It runs on the UI thread, as the step menu's edits do, and the
+	pattern's own undo covers it. */
+	struct LockQuantity : ParamQuantity {
+		Sequencer* sequencer() {
+			return static_cast<Sequencer*>(module);
+		}
+
+		ParamQuantity* target() {
+			std::pair<Track*, int> t = sequencer()->lockTarget(paramId - LOCK_PARAM);
+			return t.first ? t.first->paramQuantities[t.second] : nullptr;
+		}
+
+		Step& step() {
+			return sequencer()->lane().pattern.steps[std::max(sequencer()->held, 0)];
+		}
+
+		bool locked() {
+			ParamQuantity* q = target();
+			return q && step().locked(q->paramId);
+		}
+
+		float getValue() override {
+			ParamQuantity* q = target();
+			return !q ? 0.f : step().locked(q->paramId) ? step().lockValues[q->paramId] : q->getScaledValue();
+		}
+
+		void setValue(float value) override {
+			if (ParamQuantity* q = target())
+				step().lock(q->paramId, value);
+		}
+
+		void unlock() {
+			if (ParamQuantity* q = target())
+				step().unlock(q->paramId);
+		}
+
+		std::string getLabel() override {
+			ParamQuantity* q = target();
+			return q ? string::f("Step %d, %s%s", sequencer()->held + 1, q->getLabel().c_str(), locked() ? " (locked)" : "") : "Lock";
+		}
+
+		std::string getDescription() override {
+			return locked() ? "Double-click to let go of the lock" : "Turn to lock it on the held step";
+		}
+
+		/** A lock is a share of the dial's travel; one with steps shows the step it lands on. */
+		std::string getDisplayValueString() override {
+			ParamQuantity* q = target();
+			if (!q || !q->snapEnabled)
+				return ParamQuantity::getDisplayValueString();
+			int i = (int) std::round(math::rescale(getValue(), 0.f, 1.f, q->getMinValue(), q->getMaxValue()));
+			if (SwitchQuantity* labels = dynamic_cast<SwitchQuantity*>(q))
+				return labels->labels[clamp(i - (int) q->getMinValue(), 0, (int) labels->labels.size() - 1)];
+			return std::to_string(i);
+		}
+
+		std::string getUnit() override {
+			ParamQuantity* q = target();
+			return q && q->snapEnabled ? "" : unit;
 		}
 	};
 
@@ -282,6 +353,7 @@ struct Sequencer : Module, BusNode {
 	int typed = 0, digits = 0;   // a tempo being typed on the value keys
 	float sinceTap = -1.f, tapPeriod = 0.f; // tap tempo, in seconds
 	bool longPressHolds = true, ctrlClickHolds = true;
+	bool turningLock = false;    // a dial is being dragged on a lock, so the undo history waits to take the whole turn
 	std::atomic<float> shownTempo{120.f}; // -1 while an external clock is still being measured
 
 	Project projects[PROJECTS];
@@ -355,7 +427,8 @@ struct Sequencer : Module, BusNode {
 			"the black keys type a tempo, the white keys tap one, and − and + nudge it";
 		configKey(this, SCREEN_PARAM, "Screen")->description = "Hold: the battery level, on the steps and the display";
 		for (int i = 0; i < STEPS; i++)
-			configKey<StepQuantity>(this, STEP_PARAM + i)->description = "Click: paste the last notes played, or clear. Long-press or " RACK_MOD_CTRL_NAME "+click: hold";
+			configKey<StepQuantity>(this, STEP_PARAM + i)->description = "Click: paste the last notes played, or clear. Long-press or " RACK_MOD_CTRL_NAME "+click: hold, "
+				"to edit its notes and lock the dials on it";
 		for (int i = 0; i < KEYS; i++)
 			configKey<KeyQuantity>(this, KEY_PARAM + i);
 		static const char* const pages[PAGES] = {"Sound page", "Envelope page", "LFO page", "Mix page"};
@@ -363,6 +436,10 @@ struct Sequencer : Module, BusNode {
 			configKey(this, PAGE_PARAM + i, pages[i])->description = "Of the selected track's engine";
 		for (int i = 0; i < CHANNELS; i++)
 			configLight(CHANNEL_LIGHT + i, string::f("Channel %d", i + 1));
+		for (int d = 0; d < 4; d++) {
+			ParamQuantity* q = configParam<LockQuantity>(LOCK_PARAM + d, 0.f, 1.f, 0.f, "Lock", "%", 0.f, 100.f);
+			q->resetEnabled = q->randomizeEnabled = false;
+		}
 
 		configInput(CLOCK_INPUT, "Clock; overrides the tempo");
 		configInput(RUN_INPUT, "Run: plays from the start while high, stops when low");
@@ -430,15 +507,23 @@ struct Sequencer : Module, BusNode {
 
 	/** The engine playing a track, found as the bus finds it; for the UI thread. */
 	Track* engine(int t) {
-		int synth = DRUM_TRACKS;
+		int drum = 0, synth = DRUM_TRACKS;
 		for (Module* m = rightExpander.module; onBus(m); m = m->rightExpander.module)
 			if (Track* e = dynamic_cast<Track*>(m))
-				if (synth++ == t)
+				if ((e->drum ? drum++ : synth++) == t)
 					return e;
 		return nullptr;
 	}
 
-	/** The module and param a dial turns: the selected track's engine's, or in track and tempo mode, its settings. */
+	/** The engine dial `d` locks on the held step: the selected track's, on its page. */
+	std::pair<Track*, int> lockTarget(int d) {
+		Track* e = held >= 0 && !modal() ? engine(track) : nullptr;
+		int p = e ? e->dial(e->shownPage(), d) : -1;
+		return {p >= 0 ? e : nullptr, p};
+	}
+
+	/** The module and param a dial turns: the selected track's engine's, or its lock on the held step, or in track and
+	tempo mode, its settings. */
 	std::pair<Module*, int> dialTarget(int d) {
 		static const int tempoDials[4] = {TEMPO_PARAM, SWING_PARAM, METRONOME_SOUND_PARAM, METRONOME_LEVEL_PARAM};
 		if (tempoMode)
@@ -449,8 +534,10 @@ struct Sequencer : Module, BusNode {
 			return {nullptr, -1};
 		if (trackMode && d % 2 == 0)
 			return {this, (d == 0 ? LENGTH_PARAM : QUANTIZE_PARAM) + track};
+		if (lockTarget(d).first)
+			return {this, LOCK_PARAM + d};
 		Track* e = engine(track);
-		int p = e ? Track::DIALS[trackMode ? PAGE_TRACK : e->shownPage()][d] : -1;
+		int p = e ? e->dial(trackMode ? PAGE_TRACK : e->shownPage(), d) : -1;
 		return p < 0 ? std::make_pair<Module*, int>(nullptr, -1) : std::make_pair<Module*, int>(e, int(p));
 	}
 
@@ -804,7 +891,7 @@ struct Sequencer : Module, BusNode {
 			recallProject(projects[r].used ? projects[r] : blankProject());
 		}
 
-		for (int p = TRACK_PARAM; p < PARAMS_LEN; p++) {
+		for (int p = TRACK_PARAM; p < LOCK_PARAM; p++) {
 			KeyGesture& g = gestures[p - TRACK_PARAM];
 			if (KeyGesture::Event e = g.process(params[p].getValue(), dt, LONG_PRESS))
 				onKey(p, e, g);
@@ -1050,6 +1137,12 @@ struct Sequencer : Module, BusNode {
 				out->channels = patched ? 0 : n;
 				float group = params[LEVEL_PARAM + (t < DRUM_TRACKS ? DRUM_LEVEL : SYNTH_LEVEL)].getValue();
 				out->level = audioMuted(t) ? 0.f : group * group;
+				// The playhead's step locks the engine's dials; while stopped, a held step does, to hear it.
+				int s = l.player.running ? l.player.locking() : t == track && !modal() ? held : -1;
+				const Step* step = s >= 0 ? &l.pattern.steps[s] : nullptr;
+				out->locks = step ? step->locks : 0;
+				if (step)
+					std::copy(std::begin(step->lockValues), std::end(step->lockValues), out->lockValues);
 			}
 			for (int c = 0; c < n; c++) {
 				Player::Channel& channel = l.player.channels[c];
@@ -1075,7 +1168,7 @@ struct Sequencer : Module, BusNode {
 			bus->trackMode = trackMode;
 			bus->page = page;
 			bus->pageRequests = pageRequests;
-			bus->synths = 0;
+			bus->drums = bus->synths = 0;
 		}
 		const Upstream* up = fromRight(this);
 		engines = up ? *up : Upstream();
@@ -1294,7 +1387,8 @@ struct Sequencer : Module, BusNode {
 			setKeyLight(PAGE_PARAM + p, PAGE_COLORS[p], shown < 0 ? 0.f : p == shown ? 1.f : 0.12f);
 		for (int d = 0; d < 4; d++) {
 			float v = dialValue(d);
-			setRgb(DIAL_LIGHT + 3 * d, shown >= 0 ? PAGE_COLORS[shown] : led::WHITE, v < 0.f ? 0.f : 0.15f + 0.85f * v);
+			bool locked = static_cast<LockQuantity*>(paramQuantities[LOCK_PARAM + d])->locked();
+			setRgb(DIAL_LIGHT + 3 * d, shown >= 0 && !locked ? PAGE_COLORS[shown] : led::WHITE, v < 0.f ? 0.f : 0.15f + 0.85f * v);
 		}
 
 		setKeyLight(TRACK_PARAM, led::WHITE, trackMode);
@@ -1373,7 +1467,7 @@ struct Sequencer : Module, BusNode {
 	/** Buttons are saved like any param, so one held down while saving would come back stuck. */
 	void paramsFromJson(json_t* root) override {
 		Module::paramsFromJson(root);
-		for (int i = TRACK_PARAM; i < PARAMS_LEN; i++)
+		for (int i = TRACK_PARAM; i < LOCK_PARAM; i++)
 			params[i].setValue(0.f);
 	}
 
@@ -1434,6 +1528,34 @@ struct Sequencer : Module, BusNode {
 		}
 	}
 
+	/** Each step's parameter locks, a list of [param, value]. */
+	static json_t* locksToJson(const Pattern& pattern) {
+		json_t* steps = json_array();
+		for (const Step& s : pattern.steps) {
+			json_t* locks = json_array();
+			for (int p = 0; p < SOUND_PARAMS; p++)
+				if (s.locked(p))
+					json_array_append_new(locks, json_pack("[if]", p, s.lockValues[p]));
+			json_array_append_new(steps, locks);
+		}
+		return steps;
+	}
+
+	static void locksFromJson(json_t* steps, Pattern& pattern) {
+		size_t i, j;
+		json_t *locks, *l;
+		json_array_foreach(steps, i, locks) {
+			if (i >= STEPS)
+				break;
+			json_array_foreach(locks, j, l) {
+				int param;
+				double value;
+				if (json_unpack(l, "[iF]", &param, &value) == 0 && param >= 0 && param < SOUND_PARAMS)
+					pattern.steps[i].lock(param, (float) value);
+			}
+		}
+	}
+
 	static json_t* masksToJson(const uint16_t* masks) {
 		json_t* a = json_array();
 		for (int i = 0; i < MUTE_GROUPS; i++)
@@ -1459,6 +1581,7 @@ struct Sequencer : Module, BusNode {
 			json_t* t = json_object();
 			json_object_set_new(t, "pattern", patternToJson(part.pattern));
 			json_object_set_new(t, "components", componentsToJson(part.pattern));
+			json_object_set_new(t, "locks", locksToJson(part.pattern));
 			json_object_set_new(t, "settings", json_pack("[iiifi]", part.stepCount, part.stepLength, part.noteLength, part.quantize, part.channels));
 			if (part.hasSound) {
 				json_t* sound = json_array();
@@ -1493,6 +1616,8 @@ struct Sequencer : Module, BusNode {
 				patternFromJson(j, part.pattern);
 			if (json_t* j = json_object_get(t, "components"))
 				componentsFromJson(j, part.pattern);
+			if (json_t* j = json_object_get(t, "locks"))
+				locksFromJson(j, part.pattern);
 			double quantize = 0.0;
 			if (json_unpack(json_object_get(t, "settings"), "[iiiFi]", &part.stepCount, &part.stepLength, &part.noteLength, &quantize, &part.channels) == 0)
 				part.quantize = (float) quantize;
@@ -1538,6 +1663,7 @@ struct Sequencer : Module, BusNode {
 			json_t* t = json_object();
 			json_object_set_new(t, "pattern", patternToJson(l.pattern));
 			json_object_set_new(t, "components", componentsToJson(l.pattern));
+			json_object_set_new(t, "locks", locksToJson(l.pattern));
 			json_object_set_new(t, "channels", json_integer(l.settings.channels));
 			json_array_append_new(tracks, t);
 		}
@@ -1568,6 +1694,8 @@ struct Sequencer : Module, BusNode {
 					patternFromJson(p, lanes[i].pattern);
 				if (json_t* c = json_object_get(t, "components"))
 					componentsFromJson(c, lanes[i].pattern);
+				if (json_t* c = json_object_get(t, "locks"))
+					locksFromJson(c, lanes[i].pattern);
 				if (json_t* c = json_object_get(t, "channels"))
 					lanes[i].settings.channels = clamp((int) json_integer_value(c), 1, CHANNELS);
 			}
@@ -1725,6 +1853,8 @@ struct StepKey : RoundKey {
 		}
 		if (step->components)
 			menu->addChild(createMenuItem("Clear step components", "", [=]() { step->clearComponents(); }));
+		if (step->locks)
+			menu->addChild(createMenuItem("Clear parameter locks", "", [=]() { step->clearLocks(); }));
 	}
 };
 
@@ -1767,6 +1897,35 @@ struct MasterDial : SmallDial {
 		module = target.first;
 		paramId = target.second;
 		SmallDial::step();
+	}
+
+	bool locking() {
+		return module && module == master && paramId >= Sequencer::LOCK_PARAM;
+	}
+
+	void onDragStart(const DragStartEvent& e) override {
+		if (master)
+			master->turningLock = locking();
+		SmallDial::onDragStart(e);
+	}
+
+	/** A lock is part of the pattern, whose undo takes the whole turn as one edit, so the turn pushes no param change
+	of its own. */
+	void onDragEnd(const DragEndEvent& e) override {
+		if (master)
+			master->turningLock = false;
+		if (!locking() || e.button != GLFW_MOUSE_BUTTON_LEFT)
+			return SmallDial::onDragEnd(e);
+		if (settings::knobMode == settings::KNOB_MODE_LINEAR || settings::knobMode == settings::KNOB_MODE_SCALED_LINEAR)
+			APP->window->cursorUnlock();
+		ParamWidget::onDragEnd(e);
+	}
+
+	void onDoubleClick(const DoubleClickEvent& e) override {
+		if (locking())
+			static_cast<Sequencer::LockQuantity*>(getParamQuantity())->unlock();
+		else
+			SmallDial::onDoubleClick(e);
 	}
 };
 
@@ -1918,7 +2077,7 @@ struct SequencerWidget : ModuleWidget {
 			{"OCTAVE_DOWN", "minus"}, {"OCTAVE_UP", "plus"}, {"SHIFT", "shift"},
 			{"PROJECT", "project"}, {"MIXER", "mixer"}, {"METRONOME", "metronome"}, {"SCREEN", "screen"}};
 		static const char* const tracks[TRACKS] = {"kick", "snare", "perc", "sample", "bass", "lead", "arp", "chord"};
-		for (int p = Sequencer::TRACK_PARAM; p < Sequencer::PARAMS_LEN; p++) {
+		for (int p = Sequencer::TRACK_PARAM; p < Sequencer::LOCK_PARAM; p++) {
 			int light = Sequencer::keyLight(p);
 			std::string name, symbol = "dot";
 			RoundKey* key;
@@ -1967,7 +2126,7 @@ struct SequencerWidget : ModuleWidget {
 
 	void step() override {
 		Sequencer* m = getModule<Sequencer>();
-		for (int t = 0; m && t < TRACKS; t++) {
+		for (int t = 0; m && !m->turningLock && t < TRACKS; t++) {
 			Sequencer::Lane& l = m->lanes[t];
 			if (l.pattern == l.recorded)
 				continue;

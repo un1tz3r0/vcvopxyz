@@ -1,4 +1,4 @@
-"""The panel every OP-Z synth track shares, whatever its engine.
+"""The panel every OP-Z track shares, drum or synth, whatever its engine.
 
 The engines have no dials of their own: the Sequencer's four turn them, and a Screen beside one shows every page.
 So a track is a slim strip: a status screen (the Sequencer track it plays, its icon, a scope, its voices and level),

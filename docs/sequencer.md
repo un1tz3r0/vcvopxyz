@@ -13,7 +13,8 @@ that save it all.
 ## The chain
 
 Place engines to its right, Screens beside them if you like, and they need no cables. The first synth engine plays
-track 5 (bass), the next track 6, and so on; drum engines will take tracks 1 to 4 the same way. Each track has poly
+track 5 (bass), the next track 6, and so on, and the first [Drum](drum-tracks.md) track 1 (kick), the next track 2,
+and so on to track 4, wherever they sit in the row. Each track has poly
 **V/OCT** and **GATE** outputs. While a track's GATE is unpatched, its notes, velocity and the tempo go to its engine
 over the bus instead. Engines with their own outputs unpatched are mixed into **L** and **R**. A module from another
 plugin ends the chain. The engines have no dials of their own: the Sequencer's four turn them, and a Screen beside
@@ -48,6 +49,11 @@ over its jacks.
   a step is held, the keys add and remove its notes, clicking another step makes its notes last to the end of that
   one (blue LEDs show how far; the same click again restores the default length), and **−** and **+** nudge it a
   tick, 1/24 of a step. Picking a step up while stopped plays it, and copies it for pasting.
+- **Parameter locks:** while a step is held, the dials are that step's. Turn one to lock its parameter on the step,
+  and its LED turns white; double-click it to let go of the lock. A lock holds the engine's dial where you set it
+  for as long as the step is under the playhead, then lets it go back to where the dial is, so the knob itself
+  never moves. Any dial on any of the four pages can be locked, and a held step plays with its locks while stopped,
+  so you can hear them. A step's tooltip counts its locks, and its context menu clears them.
 - **Step components:** with **SHIFT** latched, steps take components that bend how they play. See
   [Step components](step-components.md).
 
@@ -85,9 +91,9 @@ off. Switching one on switches the others, and track mode, off.
 
 ## Projects
 
-A slot keeps everything that makes a song: each track's pattern, step components, step count and length, note length,
-quantize and polyphony, every dial of the engine playing it (the note style and portamento too), the tempo, swing
-and metronome, and the mixer's levels and ten mute groups. Loading one sets the engines' dials too, so each
+A slot keeps everything that makes a song: each track's pattern, step components, parameter locks, step count and
+length, note length, quantize and polyphony, every dial of the engine playing it (the note style and portamento too),
+the tempo, swing and metronome, and the mixer's levels and ten mute groups. Loading one sets the engines' dials too, so each
 engine plays the sound it had. The slots save with the patch.
 
 The context menu's **Projects** moves them in and out of files:
@@ -129,6 +135,7 @@ which moves on when they're released. Click a step to move it there.
 - **Keys and inputs:** the keys, F3 to E5 as on the OP-Z, play the selected track while they're down, and so do notes
   on the poly **V/OCT**, **GATE** and **VEL** inputs (from MIDI-CV, say), which follow their V/OCT while held. **−**
   and **+** move the keyboard an octave.
-- **Polyphony:** as the OP-Z's, one channel for every track but the lead (3) and chords (4). Change the selected
+- **Polyphony:** as the OP-Z's, two channels for each drum track, so a step can hold two sounds, three for the
+  lead, four for the chords, and one for bass and arp. Change the selected
   track's in the context menu. A new note takes the channel silent longest, or failing that the one playing longest,
   and its gate drops for a sample so the engine retriggers.

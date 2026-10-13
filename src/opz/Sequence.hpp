@@ -12,7 +12,8 @@ Time is counted in sixteenth notes, the length of a step at step length ×1. The
 for notes played live; the sequence's own time, song time, stands still while it's stopped, so it can carry on. A
 step is split into 24 ticks for micro timing and note lengths, so those stretch with the step length. The player
 schedules each step slot one slot ahead, which covers micro timing from -23 to +24 ticks and still starts every note
-exactly on time. A slot is one step's turn under the playhead: pulse and pulse hold give a step several.
+exactly on time. A slot is one step's turn under the playhead: pulse and pulse hold give a step several. A step's
+parameter locks hold its engine's dials for as long as its slots are under the playhead.
 */
 namespace opz {
 
@@ -20,6 +21,7 @@ constexpr int STEPS = 16, STEP_NOTES = 4, TICKS = 24, CHANNELS = 16;
 constexpr int TRACKS = 8, DRUM_TRACKS = 4, SYNTH_TRACKS = TRACKS - DRUM_TRACKS; // kick, snare, perc, sample, then bass, lead, arp, chord
 constexpr int MIN_OFFSET = 1 - TICKS, MAX_OFFSET = TICKS;
 constexpr int DRONE = std::numeric_limits<int16_t>::max();
+constexpr int SOUND_PARAMS = 18; // a synth track's dials, every page's and the track settings', which a step can lock
 
 /** The step components, in the order of the white keys that pick them. */
 enum Component {
@@ -47,6 +49,8 @@ struct Step {
 	int count = 0;
 	uint16_t components = 0;
 	uint8_t values[COMPONENTS_LEN] = {};
+	uint32_t locks = 0;                  // the dials it locks, by the synth track's param
+	float lockValues[SOUND_PARAMS] = {}; // and where, 0 to 1 over each dial's travel
 
 	bool empty() const {
 		return count == 0;
@@ -75,6 +79,25 @@ struct Step {
 		std::fill(std::begin(values), std::end(values), 0);
 	}
 
+	bool locked(int p) const {
+		return locks >> p & 1;
+	}
+
+	void lock(int p, float value) {
+		locks |= 1u << p;
+		lockValues[p] = std::clamp(value, 0.f, 1.f);
+	}
+
+	void unlock(int p) {
+		locks &= ~(1u << p);
+		lockValues[p] = 0.f;
+	}
+
+	void clearLocks() {
+		locks = 0;
+		std::fill(std::begin(lockValues), std::end(lockValues), 0.f);
+	}
+
 	int indexOf(int pitch) const {
 		for (int i = 0; i < count; i++)
 			if (notes[i].pitch == pitch)
@@ -94,18 +117,22 @@ struct Step {
 		count = int(std::remove_if(notes, notes + count, [=](const Note& n) { return n.pitch == pitch; }) - notes);
 	}
 
-	/** Lets go of the notes; the components stay. */
+	/** Lets go of the notes; the components and locks stay. */
 	void clear() {
 		count = 0;
 	}
 
-	/** Takes another step's notes, and its components if it has any. */
+	/** Takes another step's notes, and its components and locks if it has any. */
 	void paste(const Step& s) {
 		std::copy(s.notes, s.notes + s.count, notes);
 		count = s.count;
 		if (s.components) {
 			components = s.components;
 			std::copy(std::begin(s.values), std::end(s.values), values);
+		}
+		if (s.locks) {
+			locks = s.locks;
+			std::copy(std::begin(s.lockValues), std::end(s.lockValues), lockValues);
 		}
 	}
 
@@ -136,7 +163,8 @@ inline bool operator==(const Note& a, const Note& b) {
 }
 inline bool operator==(const Step& a, const Step& b) {
 	return a.count == b.count && std::equal(a.notes, a.notes + a.count, b.notes) && a.components == b.components
-		&& std::equal(std::begin(a.values), std::end(a.values), b.values);
+		&& std::equal(std::begin(a.values), std::end(a.values), b.values)
+		&& a.locks == b.locks && std::equal(std::begin(a.lockValues), std::end(a.lockValues), b.lockValues);
 }
 inline bool operator==(const Pattern& a, const Pattern& b) {
 	return std::equal(a.steps, a.steps + STEPS, b.steps);
@@ -205,6 +233,7 @@ struct Player {
 	struct Slot {
 		double start = 0.0, length = 1.0;
 		int step = -1;
+		bool locks = true;     // false while the step's parameter spark holds its locks back
 	};
 
 	/** An out-and-back of one of the engine's dials, in song time. */
@@ -235,7 +264,7 @@ struct Player {
 	int slotsLeft = 0;         // slots it still holds
 	int holdSlots = 0;         // its pulse hold, or 0
 	int jump = -1;             // where it sends the playhead next, or -1 to step on
-	bool componentsOn = true, notesOn = true;
+	bool componentsOn = true, notesOn = true, locksOn = true;
 	long passOrigin = 0;       // where the sparks' count of passes starts
 	int ramps[3][10] = {};     // how far each ramp setting has walked
 	bool gateStep = false;     // a gate step fired: the master advances the tracks that wait for triggers
@@ -341,9 +370,18 @@ struct Player {
 		schedule(pattern, s, song(), 1.0);
 	}
 
+	const Slot& current() const {
+		return slots[1].step >= 0 && song() >= slots[1].start ? slots[1] : slots[0];
+	}
+
 	/** The step under the playhead now, or -1. */
 	int playing() const {
-		return slots[1].step >= 0 && song() >= slots[1].start ? slots[1].step : slots[0].step;
+		return current().step;
+	}
+
+	/** The step whose parameter locks hold the engine's dials now, or -1. */
+	int locking() const {
+		return running && current().locks ? current().step : -1;
 	}
 
 	/** Where a note played now belongs: the nearest step, and its micro timing in ticks. */
@@ -426,6 +464,7 @@ struct Player {
 		const Step& step = pattern.steps[position];
 		componentsOn = !step.has(COMPONENT_SPARK) || sparked(step.values[COMPONENT_SPARK], s);
 		notesOn = !step.has(TRIGGER_SPARK) || sparked(step.values[TRIGGER_SPARK], s);
+		locksOn = !step.has(PARAMETER_SPARK) || sparked(step.values[PARAMETER_SPARK], s);
 		auto on = [&](int c) { return componentsOn && step.has(c); };
 		auto amount = [&](int c) { return step.key(c) == 9 ? 1 + randomInt(9) : step.key(c) + 1; };
 		holdSlots = on(PULSE_HOLD) ? amount(PULSE_HOLD) : 0;
@@ -451,7 +490,7 @@ struct Player {
 			enterStep(pattern, s, start);
 		slotsLeft--;
 		slots[0] = slots[1];
-		slots[1] = {start, length, position};
+		slots[1] = {start, length, position, locksOn};
 		slotsPlayed++;
 		if (!notesOn || (holdSlots && !first))
 			return;

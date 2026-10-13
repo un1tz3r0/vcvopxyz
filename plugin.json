@@ -1,7 +1,7 @@
 {
   "slug": "vcvopxyz",
   "name": "vcvopxyz",
-  "version": "2.0.6",
+  "version": "2.0.8",
   "license": "MIT",
   "brand": "un1tz3r0",
   "author": "Victor Condino",
@@ -24,6 +24,21 @@
         "Hardware clone",
         "Polyphonic",
         "Clock generator"
+      ]
+    },
+    {
+      "slug": "Drum",
+      "name": "Drum",
+      "description": "The OP-Z's drum tracks: a 24-sound kit per track, synthesized or loaded from OP-1 and OP-Z kits, AIFF and WAV files, with the drum note styles",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/drum-tracks.md",
+      "tags": [
+        "Drum",
+        "Sampler",
+        "Hardware clone",
+        "Polyphonic",
+        "Filter",
+        "Envelope generator",
+        "Low-frequency oscillator"
       ]
     },
     {

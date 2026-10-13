@@ -32,8 +32,8 @@ the patch and can be undone like any other edit.
 | Portamento | Glide 1 to 8 into the note (up to a beat), direct, random. |
 | Sweep | An out-and-back of the engine's filter (up, down), sound (up, down) or pan over a bar; the first four over two bars; random. |
 | Jump | To the start, 2/4, 3/4 or 4/4; skip forward or back a step; random; stay; align with where the track would be; gate step (advances the tracks waiting for triggers). |
-| Component spark, trigger spark | Fire the step's components, or its notes, on pass N of every N (1 to 8), random, or reset the count. Again: the first of N, all but the Nth, all but the first. |
-| Tonality, parameter spark | Saved, but waiting for a tonality master and parameter locks. |
+| Parameter spark, component spark, trigger spark | Fire the step's [parameter locks](sequencer.md#steps), its components, or its notes, on pass N of every N (1 to 8), random, or reset the count. Again: the first of N, all but the Nth, all but the first. |
+| Tonality | Saved, but waiting for a tonality master. |
 
 ## Notes
 

@@ -9,8 +9,8 @@ engines send their audio and state back leftward. Each module passes on what it 
 Rack's expander messages, so the bus is safe however Rack spreads modules over threads. A module from another
 plugin ends it.
 
-The engines take their tracks by kind and order: the first synth engine plays track 5 (bass), the next track 6, and
-so on, as drum engines will take tracks 1 to 4.
+The engines take their tracks by kind and order: the first drum engine plays track 1 (kick), the next track 2, and
+so on to track 4, and the first synth engine plays track 5 (bass), the next track 6, and so on to track 8.
 */
 namespace opz {
 
@@ -25,6 +25,8 @@ struct Downstream {
 		bool gate[CHANNELS] = {};
 		float sweep[SWEEP_TARGETS] = {}; // how far the track's sweep moves its engine's dials, as a share of their travel
 		float level = 1.f;            // the mixer's gain for the track: its group's level, or 0 with its sound muted
+		uint32_t locks = 0;           // the dials the step playing locks, by the synth track's param
+		float lockValues[SOUND_PARAMS] = {}; // where it holds them, 0 to 1 over each one's travel
 	};
 	Lane lanes[TRACKS];
 	float secondsPerBeat = 0.5f;
@@ -32,7 +34,7 @@ struct Downstream {
 	bool trackMode = false;
 	int page = NEXT_PAGE;             // the page last asked of the selected track's engine
 	uint32_t pageRequests = 0;        // counts the requests, so each one is seen once
-	int synths = 0;                   // synth engines passed so far
+	int drums = 0, synths = 0;        // drum and synth engines passed so far
 };
 
 /** What the engines send leftward. */

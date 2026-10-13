@@ -18,14 +18,14 @@ How vcvopxyz is put together, and why. For what the modules do, see the [manual]
 `src/opz/Bus.hpp`. The Sequencer sits at the left end of a row as the master. Every OP-Z module is a `BusNode`,
 which owns the double buffers Rack's expander messages flip between, and passes on what it gets, a sample later:
 
-- **Downstream** (rightward): each track's lane (poly pitch, velocity, gate, the sweep offsets, and its level from
-  the mixer, 0 while its sound is muted), the tempo, the selected track, track mode, page requests, and a count of
-  the synth engines passed so far.
+- **Downstream** (rightward): each track's lane (poly pitch, velocity, gate, the sweep offsets, the parameter
+  locks of the step playing, and its level from the mixer, 0 while its sound is muted), the tempo, the selected track, track mode, page requests, and counts of
+  the drum and synth engines passed so far.
 - **Upstream** (leftward): the L/R mix of every engine whose own outputs are unpatched, each engine's page, and the
   selected engine's four dial values for the master's dial LEDs.
 
-An engine takes its track from the count: the first synth engine plays track 5, the next track 6, and so on, and
-drum engines will count their own way from track 1. A track whose GATE output is patched sends an empty lane, which
+An engine takes its track from its kind's count: the first drum engine plays track 1, the next track 2, and so on
+to track 4, and the first synth engine track 5, and so on to track 8, so the two kinds can mix in any order. A track whose GATE output is patched sends an empty lane, which
 takes its engine off the bus without moving the others. A module from another plugin ends the bus, since
 `onBus` checks the plugin before casting. A Screen only relays.
 
@@ -34,12 +34,15 @@ the one-sample delay per module is inaudible for notes and dials. The master's d
 each frame, a `MasterDial` widget re-points itself at the param it turns now, mostly one of the selected engine's,
 so a turn is that param's own, with its tooltip, undo and MIDI mapping.
 
-## Synth tracks
+## Tracks
 
-`src/opz/SynthTrack.hpp`. `Track` holds what every synth track has and a Screen reads: the pages, the dial
-legend, the state published for the UI through a `TripleBuffer`. `SynthTrack<Engine>` adds the rest:
+`src/opz/Track.hpp`. `Track` is every track, drum or synth: the bus, the tempo, gate edges, the LFO, the filter,
+the mix, the meters and the state published for the UI through a `TripleBuffer`, which the status screen and a
+Screen read. A track supplies its voices through `noteOn`, `noteOff`, `releaseAll` and `envelope`, and may hide a
+dial (`dial`) or name a key's sound (`soundName`). `SynthTrack<Engine>` (`src/opz/SynthTrack.hpp`) adds poly, mono
+and legato voices with portamento around an engine; `Drum` (`src/Drum.cpp`) plays a kit.
 
-- **Per sample:** the bus, the tempo, the notes, and each voice's envelope and engine voice. Voices are summed
+- **Per sample:** the bus, the tempo, the notes, and each voice's envelope and sound. Voices are summed
   before the filter: the filter has one cutoff for the whole track and is linear, so filtering the mix sounds the
   same as filtering each voice, for a fraction of the work.
 - **At control rate:** the LFO and the dials after it (`Controls`). `modulated()` adds the LFO's offset when it
@@ -52,7 +55,7 @@ The panel has no dials, as the hardware's tracks have none of their own: the Seq
 and a Screen turns any. Its status screen (`TrackStatus`) reads the same published state as a Screen beside it,
 both on the UI thread, which is the `TripleBuffer`'s one consumer.
 
-### Engines
+### Synth engines
 
 An engine supplies only its sound:
 
@@ -72,6 +75,20 @@ Breakout is the exception that proves the split: it derives from `SynthTrack<Bre
 `process` to send each stage out as CV and skip the stages whose outputs are patched, with `lfoInside` turning the
 LFO's inside targets off.
 
+### Drum kits
+
+`src/opz/Kit.hpp` is a kit as the OP-1 and OP-Z keep one: one buffer of mono samples and 24 slices into it, each
+with its tuning, gain, direction and play mode. `Kit.cpp` reads OP-1 and OP-Z kit AIFFs (the slices are JSON in
+an "op-1" application chunk), plain AIFF, AIFC and WAV, and folders of sounds, all at 44.1 kHz mono. A loaded kit
+is saved in the patch's storage folder as a float WAV, with its slices in the module's JSON.
+
+The built-in kits (`BuiltinKits.cpp`) are synthesized from short recipes, a tone with a pitch sweep, FM and a
+partial, noise and 808-style metal through a filter, a click and drive, so the plugin ships no samples. All four
+are made once, on the UI thread, when the first Drum is created (about 200 ms, 10 MB).
+
+A kit from a file reaches the audio thread through a mutex the audio thread only `try_lock`s, and the kit it
+replaces goes back to the UI thread to be freed, so the audio thread never blocks or frees memory.
+
 ## The sequencer
 
 `src/opz/Sequence.hpp` holds the pattern, the track settings and the `Player`, with no Rack in it, so it can be
@@ -90,6 +107,12 @@ tested on its own. `src/opz/Sequencer.cpp` is the module: the face, the modes, r
   frame and pushes a `PatternChange` when they differ. Every edit, from any source, is one undo step.
 - **Components** are a bitmask and a value per step. Most act in the player when it schedules a slot; sweeps go out
   over the bus as offsets on the lane; the gate step jump advances the tracks that wait for triggers, as **ADV** does.
+- **Parameter locks** are a mask and a value per step over a track's 18 params, each a share of the
+  dial's travel, as the OP-Z's files keep them. The player marks each slot with whether the step's parameter spark
+  let its locks through, and the lane carries the locks of the slot under the playhead; the engine reads every dial
+  through `value()`, which takes a lock over the param, so the knob stays put. While a step is held, the dials
+  turn four `LockQuantity` params on the Sequencer that read and write the held step's locks on the UI thread, as
+  the step menu does, and the pattern's undo records the change.
 - **Modes:** TRACK and the three latching index keys (PROJECT, MIXER, TEMPO) are one mode at a time, each taking
   over the dials, steps and value keys. The dials re-point at the mode's own params, so the mixer's levels and the
   metronome are ordinary params with undo and MIDI mapping too.
@@ -107,8 +130,7 @@ load at its next control step.
 
 The .opz layout comes from the OP-Z community's reverse engineering (see the comment at the top of `Project.hpp`).
 Each imported file is kept, in the patch's storage folder, so an export writes the slot over the file it came from
-and keeps everything the Sequencer doesn't model: the other 15 patterns, chains, parameter locks, the drum and FX
-tracks.
+and keeps everything the Sequencer doesn't model: the other 15 patterns, chains, the drum and FX tracks.
 
 ## Panels
 
@@ -125,6 +147,13 @@ do, so the plugin can go to the VCV Library some day.
 
 - **Note styles** use the OP-Z's names: mono retriggers on every change, legato doesn't, and neither restarts the
   note-triggered LFO shapes on a slide. Portamento glides in mono and legato only.
+- **Drum note styles:** retrig rings each sound to its end, two or more at once (as many as the track's channels);
+  mono cuts the last sound with a 3 ms fade; gate releases the envelope with the note; loop loops the slice while
+  held, then plays it out. A kit slice set to gate or loop keeps its mode in any style. Unconfirmed against the
+  hardware.
+- **Drum keys:** F3 to E5 play the 24 sounds, and other octaves wrap around to them rather than going silent.
+- **OP-1 kit encodings:** markers at 4058 to a sample and the play mode and reverse values are well established;
+  pitch as 512ths of a semitone and volume with 8192 as unity are guesses.
 - **Digital's dials:** octave steps the modulator from −2 to +3 octaves from the note, and feedback is FM depth, up
   to two cycles of phase deviation. Unconfirmed against the hardware.
 - **LFO:** synced speeds run 1/64 at the far left to 2/1 just left of centre, in the order the guide lists them, so
@@ -135,13 +164,16 @@ do, so the plugin can go to the VCV Library some day.
 - **Step components:** values follow the guide's chart where its text survives; where it doesn't (multiply's broken
   chord and quantize, sweep's long versions, the sparks' modes), the closest reading of the hardware's behaviour.
   Ramps use C major until a tonality master exists.
-- **Untuned:** engine voicing, sweep depth (half a dial's travel) and glide times (up to a beat) are first guesses,
+- **Untuned:** engine voicing, the built-in kits and the drums' level against the synths, sweep depth (half a dial's travel) and glide times (up to a beat) are first guesses,
   waiting to be tuned by ear.
 - **Index keys:** the OP-Z's are held while turning dials or pressing keys, so here three latch, like TRACK, and
   SCREEN, which only shows the battery, works while held. The battery is pretend, running down while playing.
 - **Mixer:** levels are squared, as the engines' are, and only reach the engines over the bus; a mute stops a
   track's gates, outputs included, while a sound mute (SHIFT) only zeroes its level. Punch is a compressor with
   make-up gain, and the master level comes after it.
+- **Parameter locks** hold for the step's slots, from its slot's start until the next step's, rather than for its
+  notes' lengths, so a lock on an empty step changes the notes still sounding from earlier ones. A held step plays
+  its locks only while stopped; while playing, the playhead's step does.
 - **Metronome:** the OP-Z counts in a voice that can't be copied, so its sounds are six synthesized clicks.
 - **Project files:** what the track settings' bytes mean is unknown, so the step count, step length, note length,
   quantize, swing and the length of notes are written in the most likely reading and read back the same way.

@@ -13,12 +13,12 @@ op-z-sysex (1.2.45 on, tested on the device). Both agree on the offsets. It is l
 always 342844 bytes: a 4-byte header, a 568-byte block of project settings, then 16 patterns of 21392 bytes. Only
 the first pattern of the chain playing is read and written, since the Sequencer has one. Nobody has decoded the
 track settings' bytes, so those encodings are guesses, marked below. Everything else a file holds (the other
-patterns, parameter locks, mutes, the drum tracks' plugs) is kept from the file a project was imported from, so a
-round trip changes only what a project models.
+patterns, mutes, the drum tracks' plugs) is kept from the file a project was imported from, so a round trip changes
+only what a project models.
 */
 namespace opz {
 
-constexpr int PROJECTS = 10, MUTE_GROUPS = 10, SOUND_PARAMS = 18;
+constexpr int PROJECTS = 10, MUTE_GROUPS = 10;
 enum Level { DRUM_LEVEL, SYNTH_LEVEL, PUNCH, MASTER_LEVEL, LEVELS_LEN };
 
 struct Project {
@@ -132,7 +132,7 @@ inline bool read(const std::vector<uint8_t>& f, Project& p, std::string* error) 
 		part.stepLength = track[6] >= 1 && track[6] <= 10 ? track[6] - 1 : 0;
 		part.quantize = track[7] / 255.f;
 		part.noteLength = std::min<int>(track[9], std::size(NOTE_LENGTHS) - 1);
-		part.hasSound = t >= DRUM_TRACKS;
+		part.hasSound = true;
 		for (int i = 0; i < SOUND_PARAMS; i++)
 			part.sound[SOUND_ORDER[i]] = f[at + SOUNDS + 18 * t + i] / 255.f;
 
@@ -161,6 +161,9 @@ inline bool read(const std::vector<uint8_t>& f, Project& p, std::string* error) 
 				int key = std::clamp((raw & 15) - 1, 0, 9);
 				step.set(c, c >= PARAMETER_SPARK ? key | (raw >> 4 & 3) << 4 : key);
 			}
+			for (int i = 0; i < SOUND_PARAMS; i++)
+				if (chunk[36 + i])
+					step.lock(SOUND_ORDER[i], chunk[18 + i] / 255.f);
 		}
 	}
 	p.opz = f;
@@ -214,6 +217,13 @@ inline std::vector<uint8_t> write(const Project& p) {
 			}
 			chunk[0] = mask & 0xff;
 			chunk[1] = mask >> 8;
+			// A lock let go of keeps its old value, as the OP-Z leaves it.
+			for (int i = 0; i < SOUND_PARAMS; i++) {
+				int param = SOUND_ORDER[i];
+				if (step.locked(param))
+					chunk[18 + i] = byte(step.lockValues[param]);
+				chunk[36 + i] = step.locked(param) ? 0xff : 0;
+			}
 		}
 	}
 	return f;

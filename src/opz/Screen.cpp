@@ -4,7 +4,7 @@ dials are on (the filter over a scope, the envelope with a dot per voice, the LF
 value of the dial last touched, and every dial of every page. Click a dial on it to select it and its page, and drag
 anywhere on it to change the selected dial, like the app's touch pad.
 */
-#include "SynthTrack.hpp"
+#include "Track.hpp"
 
 namespace opz {
 
@@ -61,10 +61,10 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	/** Which page and dial a parameter belongs to. */
-	static bool locate(int param, int* page, int* dial) {
+	static bool locate(Track* track, int param, int* page, int* dial) {
 		for (int p = 0; p < PAGES_LEN; p++)
 			for (int d = 0; d < 4; d++)
-				if (Track::DIALS[p][d] == param) {
+				if (track->dial(p, d) == param) {
 					*page = p;
 					*dial = d;
 					return true;
@@ -72,10 +72,10 @@ struct Display : widget::OpaqueWidget {
 		return false;
 	}
 
-	static int firstDial(int page) {
+	static int firstDial(Track* track, int page) {
 		for (int d = 0; d < 4; d++)
-			if (Track::DIALS[page][d] >= 0)
-				return Track::DIALS[page][d];
+			if (track->dial(page, d) >= 0)
+				return track->dial(page, d);
 		return -1;
 	}
 
@@ -93,8 +93,8 @@ struct Display : widget::OpaqueWidget {
 			}
 			lastTrack = track;
 			int shown = track->shownPage(), page, dial;
-			if (shown != lastPage && !(locate(focus, &page, &dial) && page == shown))
-				focus = firstDial(shown);
+			if (shown != lastPage && !(locate(track, focus, &page, &dial) && page == shown))
+				focus = firstDial(track, shown);
 			lastPage = shown;
 		}
 		else {
@@ -177,7 +177,7 @@ struct Display : widget::OpaqueWidget {
 
 		// The selected dial's name in its colour, and its value
 		int page, dial;
-		if (focus >= 0 && locate(focus, &page, &dial)) {
+		if (focus >= 0 && locate(track, focus, &page, &dial)) {
 			ParamQuantity* q = track->paramQuantities[focus];
 			text(vg, PAD, 10.6f, 2.0f, DIAL_COLORS[dial], NVG_ALIGN_LEFT, track->dialName(focus));
 			text(vg, PAD, 15.0f, 3.8f, INK, NVG_ALIGN_LEFT, q->getDisplayValueString() + q->getUnit());
@@ -407,14 +407,15 @@ struct Display : widget::OpaqueWidget {
 		stroke(vg, DIAL_COLORS[3], 0.4f);
 	}
 
-	/** The note style, and the portamento as a slide between two notes. */
+	/** The note style, and the portamento, where the track has one, as a slide between two notes. */
 	void drawTrackSettings(NVGcontext* vg, Track* track, math::Rect v) {
 		int style = (int) track->params[Track::STYLE_PARAM].getValue();
-		static const char* const styles[] = {"POLY", "MONO", "LEGATO"};
-		float cw = (v.size.x - 4.f) / 3;
-		for (int i = 0; i < 3; i++) {
+		const std::vector<std::string>& styles = static_cast<SwitchQuantity*>(track->paramQuantities[Track::STYLE_PARAM])->labels;
+		int n = styles.size();
+		float cw = (v.size.x - 4.f) / n;
+		for (int i = 0; i < n; i++) {
 			float x = v.pos.x + 2.f + cw * (i + 0.5f);
-			text(vg, x, v.pos.y + 4.5f, 2.2f, i == style ? INK : DIM, NVG_ALIGN_CENTER, styles[i]);
+			text(vg, x, v.pos.y + 4.5f, 2.2f, i == style ? INK : DIM, NVG_ALIGN_CENTER, string::uppercase(styles[i]));
 			if (i == style) {
 				nvgBeginPath(vg);
 				nvgRoundedRect(vg, x - 4.f, v.pos.y + 6.6f, 8.f, 0.6f, 0.3f);
@@ -423,6 +424,8 @@ struct Display : widget::OpaqueWidget {
 			}
 		}
 
+		if (track->dial(PAGE_TRACK, 3) < 0)
+			return;
 		// A step up a fifth, smoothed by the portamento.
 		float glide = track->params[Track::GLIDE_PARAM].getValue();
 		float x0 = v.pos.x + 4.f, x1 = v.getRight() - 4.f, y0 = v.pos.y + 19.f, y1 = v.pos.y + 11.f;
@@ -457,7 +460,7 @@ struct Display : widget::OpaqueWidget {
 				nvgFill(vg);
 			}
 			for (int d = 0; d < 4; d++) {
-				int param = Track::DIALS[p][d];
+				int param = track->dial(p, d);
 				if (param < 0)
 					continue;
 				ParamQuantity* q = track->paramQuantities[param];
@@ -483,20 +486,20 @@ struct Display : widget::OpaqueWidget {
 	// Touch: click a dial in the overview to select it and its page, then drag anywhere to change it.
 
 	/** The dial under a point, in mm, or -1. */
-	int dialAt(math::Vec mm, int* page) {
+	int dialAt(Track* track, math::Vec mm, int* page) {
 		if (mm.y < OVERVIEW_TOP)
 			return -1;
 		int p = int((mm.y - OVERVIEW_TOP) / rowHeight()), d = int((mm.x - PAD) / cellWidth());
 		if (p < 0 || p >= PAGES_LEN || d < 0 || d >= 4)
 			return -1;
 		*page = p;
-		return Track::DIALS[p][d];
+		return track->dial(p, d);
 	}
 
 	void onButton(const ButtonEvent& e) override {
 		Track* track = module ? module->track() : nullptr;
 		if (track && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT) {
-			int page, param = dialAt(e.pos.div(mm2px(1.f)), &page);
+			int page, param = dialAt(track, e.pos.div(mm2px(1.f)), &page);
 			if (param >= 0) {
 				focus = param;
 				if (page == PAGE_TRACK)
