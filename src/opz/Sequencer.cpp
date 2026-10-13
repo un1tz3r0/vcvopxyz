@@ -1,7 +1,8 @@
 /*
 Sequencer: the OP-Z's front panel, and the master of the OP-Z modules to its right. It keeps the tempo and the
-transport, and sequences the first eight tracks: four drum tracks, then bass, lead, arp and chord. Each track has a
-lane of sixteen steps of up to four notes, filled from the keys or from poly V/OCT, GATE and VEL inputs.
+transport, and sequences the first eight tracks: four drum tracks (kick, snare, perc and sample), then bass, lead,
+arp and chord. Each track has a lane of sixteen steps of up to four notes, filled from the keys or from poly V/OCT,
+GATE and VEL inputs.
 
 Every lane has poly V/OCT and GATE outputs. Unpatched, they play the track's engine over the bus instead (Bus.hpp),
 and the engines' sound comes back to the L and R outputs. The four dials are the selected track's: whichever engine
@@ -18,7 +19,7 @@ With SHIFT latched, the steps are picked for step components (blinking green), t
 them, as the icons above the keys say, and the black keys set its value. While a step is held, the dials lock the
 engine's parameters on it.
 */
-#include "SynthTrack.hpp"
+#include "Track.hpp"
 #include "Sequence.hpp"
 #include "Project.hpp"
 #include <mutex>
@@ -108,9 +109,9 @@ const NVGcolor WHITE = nvgRGBf(1.f, 1.f, 1.f), RED = nvgRGBf(1.f, 0.1f, 0.06f), 
 }
 
 static const char* const TRACK_NAMES[TRACKS] = {"Kick", "Snare", "Perc", "Sample", "Bass", "Lead", "Arp", "Chord"};
-/** Each track's polyphony to begin with, as the OP-Z's: one voice for the drums, bass and arp, three for the lead,
-four for the chords. */
-static const int TRACK_CHANNELS[TRACKS] = {1, 1, 1, 1, 1, 3, 1, 4};
+/** Each track's polyphony to begin with, as the OP-Z's: two notes a step for the drums, one for the bass and arp,
+three for the lead, four for the chords. */
+static const int TRACK_CHANNELS[TRACKS] = {2, 2, 2, 2, 1, 3, 1, 4};
 
 constexpr int LONGEST = STEPS * TICKS; // the longest note a step's menu sets, short of a drone
 
@@ -265,7 +266,9 @@ struct Sequencer : Module, BusNode {
 				return m->component >= 0 ? string::f("%s %s", COMPONENT_NAMES[m->component], componentValue(m->component, value).c_str())
 					: string::f("Value %d", (value + 1) % 10);
 			}
-			return noteName(m->keyPitch(key));
+			Track* e = m->engine(m->track);
+			std::string sound = e ? e->soundName(m->keyPitch(key)) : "";
+			return noteName(m->keyPitch(key)) + (sound.empty() ? "" : ": " + sound);
 		}
 	};
 
@@ -504,10 +507,10 @@ struct Sequencer : Module, BusNode {
 
 	/** The engine playing a track, found as the bus finds it; for the UI thread. */
 	Track* engine(int t) {
-		int synth = DRUM_TRACKS;
+		int drum = 0, synth = DRUM_TRACKS;
 		for (Module* m = rightExpander.module; onBus(m); m = m->rightExpander.module)
 			if (Track* e = dynamic_cast<Track*>(m))
-				if (synth++ == t)
+				if ((e->drum ? drum++ : synth++) == t)
 					return e;
 		return nullptr;
 	}
@@ -515,7 +518,7 @@ struct Sequencer : Module, BusNode {
 	/** The engine dial `d` locks on the held step: the selected track's, on its page. */
 	std::pair<Track*, int> lockTarget(int d) {
 		Track* e = held >= 0 && !modal() ? engine(track) : nullptr;
-		int p = e ? Track::DIALS[e->shownPage()][d] : -1;
+		int p = e ? e->dial(e->shownPage(), d) : -1;
 		return {p >= 0 ? e : nullptr, p};
 	}
 
@@ -534,7 +537,7 @@ struct Sequencer : Module, BusNode {
 		if (lockTarget(d).first)
 			return {this, LOCK_PARAM + d};
 		Track* e = engine(track);
-		int p = e ? Track::DIALS[trackMode ? PAGE_TRACK : e->shownPage()][d] : -1;
+		int p = e ? e->dial(trackMode ? PAGE_TRACK : e->shownPage(), d) : -1;
 		return p < 0 ? std::make_pair<Module*, int>(nullptr, -1) : std::make_pair<Module*, int>(e, int(p));
 	}
 
@@ -1165,7 +1168,7 @@ struct Sequencer : Module, BusNode {
 			bus->trackMode = trackMode;
 			bus->page = page;
 			bus->pageRequests = pageRequests;
-			bus->synths = 0;
+			bus->drums = bus->synths = 0;
 		}
 		const Upstream* up = fromRight(this);
 		engines = up ? *up : Upstream();

@@ -132,7 +132,7 @@ inline bool read(const std::vector<uint8_t>& f, Project& p, std::string* error) 
 		part.stepLength = track[6] >= 1 && track[6] <= 10 ? track[6] - 1 : 0;
 		part.quantize = track[7] / 255.f;
 		part.noteLength = std::min<int>(track[9], std::size(NOTE_LENGTHS) - 1);
-		part.hasSound = t >= DRUM_TRACKS;
+		part.hasSound = true;
 		for (int i = 0; i < SOUND_PARAMS; i++)
 			part.sound[SOUND_ORDER[i]] = f[at + SOUNDS + 18 * t + i] / 255.f;
 

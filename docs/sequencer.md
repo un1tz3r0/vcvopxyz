@@ -13,7 +13,8 @@ that save it all.
 ## The chain
 
 Place engines to its right, Screens beside them if you like, and they need no cables. The first synth engine plays
-track 5 (bass), the next track 6, and so on; drum engines will take tracks 1 to 4 the same way. Each track has poly
+track 5 (bass), the next track 6, and so on, and the first [Drum](drum-tracks.md) track 1 (kick), the next track 2,
+and so on to track 4, wherever they sit in the row. Each track has poly
 **V/OCT** and **GATE** outputs. While a track's GATE is unpatched, its notes, velocity and the tempo go to its engine
 over the bus instead. Engines with their own outputs unpatched are mixed into **L** and **R**. A module from another
 plugin ends the chain. The engines have no dials of their own: the Sequencer's four turn them, and a Screen beside
@@ -134,6 +135,7 @@ which moves on when they're released. Click a step to move it there.
 - **Keys and inputs:** the keys, F3 to E5 as on the OP-Z, play the selected track while they're down, and so do notes
   on the poly **V/OCT**, **GATE** and **VEL** inputs (from MIDI-CV, say), which follow their V/OCT while held. **−**
   and **+** move the keyboard an octave.
-- **Polyphony:** as the OP-Z's, one channel for every track but the lead (3) and chords (4). Change the selected
+- **Polyphony:** as the OP-Z's, two channels for each drum track, so a step can hold two sounds, three for the
+  lead, four for the chords, and one for bass and arp. Change the selected
   track's in the context menu. A new note takes the channel silent longest, or failing that the one playing longest,
   and its gate drops for a sample so the engine retriggers.

@@ -6,6 +6,7 @@ Plugin* pluginInstance;
 // with a matching slug, or Rack refuses to load the plugin.
 void init(Plugin* p) {
 	pluginInstance = p;
+	p->addModel(modelDrum);
 	p->addModel(modelDigital);
 	p->addModel(modelAnalog);
 	p->addModel(modelCluster);

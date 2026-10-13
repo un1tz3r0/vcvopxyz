@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/rack-dark.png">
-  <img alt="A Sequencer playing Digital, Analog, Cluster and Organ, with a Screen beside Digital" src="assets/rack-light.png">
+  <img alt="A Sequencer playing four Drums, Digital, Analog, Cluster and Organ, with a Screen beside Digital" src="assets/rack-light.png">
 </picture>
 
 ## Modules
@@ -11,7 +11,8 @@
 | --- | --- |
 | [Sequencer](sequencer.md) | The OP-Z's front panel and the master of the modules to its right: tempo, transport, eight tracks of 16 steps, recording, the mixer and project slots. |
 | [Step components](step-components.md) | The Sequencer's 14 per-step modifiers: pulses, ratchets, ramps, glides, sweeps, jumps and sparks. |
-| [Synth tracks](synth-tracks.md) | What every synth engine shares (status screen, pages, note styles, LFO, jacks), then Digital, Analog, Cluster and Organ. |
+| [Synth tracks](synth-tracks.md) | What every track shares (status screen, pages, LFO, jacks), the synth note styles, then Digital, Analog, Cluster and Organ. |
+| [Drum tracks](drum-tracks.md) | Drum, the kick, snare, perc and sample tracks: 24-sound kits, built in or loaded from files, and the drum note styles. |
 | [Breakout](breakout.md) | A synth track whose voice is made of other modules. |
 | [Screen](screen.md) | The OP-Z's phone app, as an expander. |
 
@@ -35,4 +36,6 @@
 4. Click **PLAY**. Turn the Sequencer's dials to shape the sound, and click **SHIFT** for the next page.
 5. Add Analog, Cluster or Organ to the right of Digital for tracks 6, 7 and 8, and a Screen beside any engine to see
    its pages.
-6. Switch **PROJECT** on and long-press a black key to save the project to that slot.
+6. Add up to four **Drum**s anywhere in the row for tracks 1 to 4. Select the kick track and click steps 1, 5, 9
+   and 13 for four on the floor.
+7. Switch **PROJECT** on and long-press a black key to save the project to that slot.

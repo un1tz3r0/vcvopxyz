@@ -1,7 +1,8 @@
 # Synth tracks
 
 Digital, Analog, Cluster, Organ and [Breakout](breakout.md) are all the same OP-Z synth track around a different
-sound. Everything on this page but the last section applies to each of them; only their two sound dials differ.
+sound. Everything on this page but the last section applies to each of them; only their two sound dials differ. The
+[drum tracks](drum-tracks.md) share all of it but the note styles and portamento.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/digital-screen-dark.png">
