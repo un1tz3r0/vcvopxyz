@@ -1,17 +1,16 @@
 """The panel every OP-Z synth track shares, whatever its engine.
 
 Like the hardware, it has four dials whose meaning changes with the page: PAGE steps through the pages, and the
-legend below the dials says what each dial does on each one. Then a two-octave keyboard, whose white keys hold the
-quick-save slots in track mode, the voice LEDs, and the jacks. Only the names of the two sound dials change from
-engine to engine."""
-from panelkit import FUNCTION_KEY, HP, LABEL, Panel
+legend below the dials says what each dial does on each one. Then the voice LEDs and the jacks; the notes come from a
+Sequencer, which has the keys. Only the names of the two sound dials change from engine to engine."""
+from panelkit import HP, LABEL, Panel
 
 WIDTH, HEIGHT = 16 * HP, 128.5
 LEFT = 7.0                                                         # the column of page controls
 DIALS = [14.0 + (WIDTH - 17.0) * (i + 0.5) / 4 for i in range(4)]  # the four dials, right of it
 LED_ROW, DIAL_ROW = 14.0, 24.5
 LEGEND = [37.5 + 5.0 * i for i in range(5)]
-VOICE_ROW, BLACK_ROW, WHITE_ROW = 65.5, 72.6, 81.4
+VOICES = 75.0  # the middle of the voice LEDs' two rows
 JACK_ROWS = [97.5, 112.5]
 JACKS = [WIDTH / 2 + 15.5 * (i - 2) for i in range(5)]
 SMALL = 2.0  # legend font size (mm)
@@ -47,19 +46,11 @@ def synth_track_panel(slug, p1, p2):
                 p.text(name, x, y, size=SMALL)
     p.line(3.0, LEGEND[-1] + 3.5, WIDTH - 3.0, LEGEND[-1] + 3.5)
 
-    # Voice LEDs between the octave keys, then two octaves of keys: the black ones in a row above the white.
-    p.place('OCTAVE_DOWN_PARAM', 3.0 + FUNCTION_KEY[0] / 2, VOICE_ROW)
-    p.place('OCTAVE_UP_PARAM', WIDTH - 3.0 - FUNCTION_KEY[0] / 2, VOICE_ROW)
+    # The voice LEDs, two rows of eight, in a box like the Sequencer's channel LEDs.
+    p.rect(WIDTH / 2 - 21.0, VOICES - 7.5, 42.0, 15.0, 1.5, 'box')
+    p.text('VOICES', WIDTH / 2, VOICES - 3.6, size=SMALL, fill='box_ink')
     for i in range(16):
-        p.place(f'VOICE{i}_LIGHT', WIDTH / 2 + 3.4 * (i - 7.5), VOICE_ROW)
-    pitch = (WIDTH - 6.0) / 14
-    white = [0, 2, 4, 5, 7, 9, 11]
-    for octave in range(2):
-        for i, semitone in enumerate(white):
-            x = 3.0 + pitch * (7 * octave + i + 0.5)
-            p.place(f'KEY{12 * octave + semitone}_PARAM', x, WHITE_ROW)
-            if semitone not in (4, 11):  # a black key between this white key and the next
-                p.place(f'KEY{12 * octave + semitone + 1}_PARAM', x + pitch / 2, BLACK_ROW)
+        p.place(f'VOICE{i}_LIGHT', WIDTH / 2 + 4.4 * (i % 8 - 3.5), VOICES + 1.2 + 3.6 * (i // 8))
 
     # Inputs in the top row; EXT, then the outputs in their dark box, in the bottom one. Each jack has a level LED.
     top, bottom = JACK_ROWS

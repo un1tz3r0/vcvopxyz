@@ -51,11 +51,12 @@ class Font:
 
 NUNITO = Font(ROOT / 'res-src/fonts/Nunito-Bold.ttf')
 
-# Colour roles, filled into the artwork per theme. Rack picks the dark panel when the user prefers dark panels.
+# Colour roles, filled into the artwork per theme. Rack picks the dark panel when the user prefers dark panels. A
+# glyph is a symbol that's also an LED, printed dimmer on a dark panel so the LED outshines it when lit.
 THEMES = {
-    '': dict(panel='#ECEBE8', ink='#3A3A3C', title='#2B2B2D', line='#C4C2BE', footer='#A9A8A4',
+    '': dict(panel='#ECEBE8', ink='#3A3A3C', glyph='#3A3A3C', title='#2B2B2D', line='#C4C2BE', footer='#A9A8A4',
              bezel='#2F3032', glass='#030304', box='#2D2E31', box_ink='#E4E3E0'),
-    '-dark': dict(panel='#2B2C2E', ink='#C9C8C4', title='#ECEBE8', line='#4A4B50', footer='#707175',
+    '-dark': dict(panel='#2B2C2E', ink='#C9C8C4', glyph='#878785', title='#ECEBE8', line='#4A4B50', footer='#707175',
                   bezel='#141516', glass='#030304', box='#1C1D1F', box_ink='#C9C8C4'),
 }
 PASTELS = dict(yellow='#F4D394', green='#C4DDAB', teal='#A4D9D5', lavender='#B7C0F2',
@@ -67,8 +68,8 @@ COMPONENT_COLORS = dict(PARAM='#FF0000', INPUT='#00FF00', OUTPUT='#0000FF', LIGH
 
 HP = 5.08
 KNOB_R, SOFT_R, BUTTON_R, DIAL_R = 5.5, 3.75, 3.6, 7.0  # radii (mm) of the components generated below
-# Key sizes (mm): the keyboard's white and black keys, PAGE, the small function keys and the sequencer's steps.
-WHITE_KEY, BLACK_KEY, PAGE_KEY, FUNCTION_KEY, STEP_KEY = (4.9, 7.4), (3.9, 5.4), (6.4, 6.0), (5.6, 4.4), (4.0, 4.6)
+SMALL_DIAL_R = 5.45  # the Sequencer's dials, before its face is scaled up: two of its key columns, as the OP-Z's
+PAGE_KEY = (6.4, 6.0)  # PAGE's size (mm)
 LABEL = 2.6  # label font size (mm)
 
 
@@ -162,26 +163,15 @@ def dial_pointer(r):
     return document(2 * r, 2 * r, f'  <circle cx="{c}" cy="{num(r * 0.3)}" r="{num(r * 0.09)}" fill="#000000" fill-opacity="0.35"/>')
 
 
-# Transport icons, drawn around (0, 0) and about 1.6 mm across.
-ICONS = dict(play='M-0.65 -0.8L0.75 0L-0.65 0.8Z', stop='M-0.7 -0.7H0.7V0.7H-0.7Z',
-             rec='M-0.75 0A0.75 0.75 0 1 0 0.75 0A0.75 0.75 0 1 0 -0.75 0Z')
-
-
-def key(size, face, pressed, glyph=None, icon=None):
-    """A key with a little depth: its face sits on a darker edge, and sinks into it when pressed. It may carry a
-    glyph from the font, or one of the ICONS."""
+def key(size, face, pressed):
+    """A key with a little depth: its face sits on a darker edge, and sinks into it when pressed."""
     w, h = size
     edge = mix(face, '#000000', 0.25)
     if pressed:
         face = mix(face, '#000000', 0.06)
     lift = 0.15 if pressed else 0.45
-    ink = mix(face, '#000000', 0.55)
     body = (f'  <rect x="0" y="0" width="{num(w)}" height="{num(h)}" rx="0.9" fill="{edge}"/>\n'
             f'  <rect x="0" y="{num(0.45 - lift)}" width="{num(w)}" height="{num(h - 0.45)}" rx="0.9" fill="{face}"/>')
-    if glyph:
-        body += f'\n  <path d="{NUNITO.path(glyph, w / 2, (h - lift) / 2 + 0.1, 3.0)}" fill="{ink}"/>'
-    if icon:
-        body += f'\n  <path transform="translate({num(w / 2)} {num((h - lift) / 2 + 0.2)})" d="{ICONS[icon]}" fill="{ink}"/>'
     return document(w, h, body)
 
 

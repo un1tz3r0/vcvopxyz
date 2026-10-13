@@ -1,74 +1,145 @@
-"""The sequencer: an OP-Z synth track's 16 steps, the keyboard that fills them, the transport, and the tempo, which
-moves to a master module once there is one. Its keyboard and jacks sit exactly where an engine's do, so the two line
-up side by side."""
-from panelkit import FUNCTION_KEY, HP, LABEL, Panel
-from synth_track import BLACK_ROW, JACK_ROWS, VOICE_ROW, WHITE_ROW
+"""The sequencer: the OP-Z's face, and the master of the engines to its right. Under the face, the keys that select a
+track, a page and the tempo mode, then two rows of jacks: the transport in and out, the notes to record, each
+track's V/OCT and GATE, and the engines' mix.
 
-WIDTH, HEIGHT = 16 * HP, 128.5
-SMALL = 2.0
-KNOB_ROW, KNOBS = 17.5, [42.5, 52.5, 64.0, 74.0]
-LED_ROW, FUNCTION_ROW = 33.8, 38.4
-STEP_ROW = 53.0
-JACKS = [WIDTH / 2 + 12.6 * (i - 2.5) for i in range(6)]
+The face copies the OP-Z's: four dials over 17 columns of round keys. TRACK, REC and −, PLAY and +, STOP and SHIFT
+on the left; the steps along the top under the track icons; the numbered black keys on the column lines; the white
+keys along the bottom under the step component icons. The speaker becomes the tempo display and the channel LEDs.
+It is drawn at the size of the 24 HP panel it was first made for, then scaled up to fill the space above the jacks."""
+from opz import COMPONENTS, SCALE, TRACKS, icon, number_key, round_key
+from panelkit import HP, LABEL, NUNITO, Panel, num
+
+WIDTH, HEIGHT = 40 * HP, 128.5
+COLUMN = (24 * HP - 6.0) / 17                # the face's key columns
+CELL, ROW = 2 * COLUMN + 4.5, 7.2            # the height of the dials' row, and the keys' row pitch
+FACE_WIDTH, FACE_HEIGHT = 17 * COLUMN, CELL + 7.6 + 2 * ROW + 4.0
+TOP, MID, BOTTOM = CELL + 7.6, CELL + 7.6 + ROW, CELL + 7.6 + 2 * ROW
+ICON = 4.1                                   # how far an icon sits above its key
+BLACK = [1, 3, 5, 8, 10]                     # the black keys' semitones above F
+WHITE = [0, 2, 4, 6, 7, 9, 11]
+
+KEY_ROW, JACK_ROWS = 91.0, (104.5, 117.5)
+PITCH, GAP = 11.6, 4.0                       # between the jacks' columns, and between their groups
+
+
+class Scaled:
+    """Draws on a panel in the face's own millimetres, scaled up by SCALE from (x, y)."""
+
+    def __init__(self, panel, x, y):
+        self.panel, self.x, self.y, self.art = panel, x, y, []
+
+    def place(self, name, x, y, w=0, h=0):
+        self.panel.place(name, self.x + SCALE * x, self.y + SCALE * y, SCALE * w, SCALE * h)
+
+    def line(self, x1, y1, x2, y2):
+        self.art.append(f'<path d="M{num(x1)} {num(y1)}L{num(x2)} {num(y2)}" stroke="{{line}}" stroke-width="0.25"/>')
+
+    def __exit__(self, *_):
+        self.panel.art.append(f'<g transform="translate({num(self.x)} {num(self.y)}) scale({num(SCALE)})">'
+                              + ''.join(self.art) + '</g>')
+
+    def __enter__(self):
+        return self
+
+
+def x(column):
+    """The centre of a key column, 1 to 17."""
+    return COLUMN * (column - 0.5)
+
+
+def face(f):
+    # The outline, the line between the dials and the keys, and the lines between the columns.
+    f.art.append(f'<rect x="0" y="0" width="{num(FACE_WIDTH)}" height="{num(FACE_HEIGHT)}" rx="1.2" fill="none" '
+                 f'stroke="{{line}}" stroke-width="0.25"/>')
+    f.line(0, CELL, FACE_WIDTH, CELL)
+    for k in range(1, 17):
+        f.line(COLUMN * k, CELL, COLUMN * k, FACE_HEIGHT)
+    for k in (9, 11, 13, 15):
+        f.line(COLUMN * k, 0, COLUMN * k, CELL)
+
+    # Where the OP-Z's speaker is: the tempo display, INT and EXT, and the channel LEDs as its grille.
+    f.art.append(f'<rect x="3" y="3.5" width="31" height="{num(CELL - 7.0)}" rx="1.5" fill="{{box}}"/>')
+    f.place('TEMPO_WIDGET', 4.0, 4.5, 20.5, CELL - 9.0)
+    for y, name, label in [(CELL / 2 - 2.6, 'INTERNAL', 'INT'), (CELL / 2 + 2.6, 'EXTERNAL', 'EXT')]:
+        f.place(f'{name}_LIGHT', 26.6, y)
+        f.art.append(f'<path d="{NUNITO.path(label, 30.6, y, 1.8)}" fill="{{box_ink}}"/>')
+    for i in range(16):
+        f.place(f'CHANNEL{i}_LIGHT', 47.7 + 2.6 * (i % 8 - 3.5), CELL / 2 + 2.6 * (i // 8 - 0.5))
+
+    # The dials, each with its LED in the corner of its cell.
+    for d in range(4):
+        left = COLUMN * (9 + 2 * d)
+        f.place(f'DIAL{d}_WIDGET', left + COLUMN, COLUMN + 0.6)
+        f.place(f'DIAL{d}_LIGHT', left + 1.6, CELL - 1.8)
+
+    # The keys.
+    for (column, y), (name, symbol) in {(1, TOP): ('TRACK', 'track'), (1, MID): ('REC', 'rec'), (1, BOTTOM): ('OCTAVE_DOWN', 'minus'),
+                                        (2, MID): ('PLAY', 'play'), (2, BOTTOM): ('OCTAVE_UP', 'plus'),
+                                        (3, MID): ('STOP', 'stop'), (3, BOTTOM): ('SHIFT', 'shift')}.items():
+        round_key(f, f'{name}_PARAM', x(column), y, symbol)
+    for i, track in enumerate(TRACKS):
+        f.art.append(icon(track, x(i + 2), TOP - ICON, 2.2, '{ink}'))
+        round_key(f, f'STEP{i}_PARAM', x(i + 2), TOP)
+    for i, component in enumerate(COMPONENTS):
+        f.art.append(icon(component, x(i + 4), BOTTOM - ICON, 2.2, '{ink}'))
+        round_key(f, f'KEY{12 * (i // 7) + WHITE[i % 7]}_PARAM', x(i + 4), BOTTOM)
+    lines = [4, 5, 6, 8, 9, 11, 12, 13, 15, 16]  # the column line each black key sits on, after that column
+    for value, line in enumerate(lines):
+        number_key(f, f'KEY{12 * (value // 5) + BLACK[value % 5]}_PARAM', COLUMN * line, MID, str((value + 1) % 10))
+
+
+def key(p, name, cx, cy, symbol='dot'):
+    """A round key under the face, the size of the face's."""
+    with Scaled(p, cx, cy) as k:
+        round_key(k, name, 0, 0, symbol)
 
 
 def panel():
     p = Panel(WIDTH, HEIGHT)
     p.rect(0, 0, WIDTH, HEIGHT, 0, 'panel')
     p.title('Sequencer')
+    with Scaled(p, (WIDTH - SCALE * FACE_WIDTH) / 2, 10.5) as f:
+        face(f)
 
-    # The tempo: a display that reads INT or EXT, its knob and swing. Then the track's note length and quantize.
-    p.rect(3.0, 11.0, 33.0, 15.5, 2.0, 'box')
-    p.place('TEMPO_WIDGET', 4.5, 12.5, 21.0, 12.5)
-    for y, name in [(15.6, 'INT'), (21.9, 'EXT')]:
-        p.place(f'{"INTERNAL" if name == "INT" else "EXTERNAL"}_LIGHT', 28.2, y)
-        p.text(name, 32.4, y, size=1.8, fill='box_ink')
-    for x, name, label in zip(KNOBS, ['TEMPO', 'SWING', 'LENGTH', 'QUANTIZE'], ['TEMPO', 'SWING', 'LENGTH', 'QUANT']):
-        p.place(f'{name}_PARAM', x, KNOB_ROW)
-        p.text(label, x, KNOB_ROW + 6.6, size=SMALL)
-    p.line(58.25, 12.0, 58.25, 26.0)
-    p.line(3.0, 29.5, WIDTH - 3.0, 29.5)
-
-    # TRACK on the left, the transport on the right, each with its LED above.
-    keys = [(8.0, 'TRACK'), (WIDTH - 31.0, 'REC'), (WIDTH - 20.0, 'PLAY'), (WIDTH - 9.0, 'STOP')]
-    for x, name in keys:
-        if name != 'STOP':
-            p.place(f'{name}_LIGHT', x, LED_ROW)
-        p.place(f'{name}_PARAM', x, FUNCTION_ROW)
-        p.text(name, x, FUNCTION_ROW + 4.8, size=SMALL)
-
-    # The 16 steps, numbered on the beats.
-    pitch = (WIDTH - 6.0) / 16
-    for i in range(16):
-        x = 3.0 + pitch * (i + 0.5)
-        p.place(f'STEP{i}_PARAM', x, STEP_ROW)
-        if i % 4 == 0:
-            p.text(str(i + 1), x, STEP_ROW + 4.2, size=1.8)
-
-    # The channel LEDs between the octave keys, then two octaves of keys, laid out exactly as on an engine.
-    p.place('OCTAVE_DOWN_PARAM', 3.0 + FUNCTION_KEY[0] / 2, VOICE_ROW)
-    p.place('OCTAVE_UP_PARAM', WIDTH - 3.0 - FUNCTION_KEY[0] / 2, VOICE_ROW)
-    for i in range(16):
-        p.place(f'CHANNEL{i}_LIGHT', WIDTH / 2 + 3.4 * (i - 7.5), VOICE_ROW)
-    pitch = (WIDTH - 6.0) / 14
-    for octave in range(2):
-        for i, semitone in enumerate([0, 2, 4, 5, 7, 9, 11]):
-            x = 3.0 + pitch * (7 * octave + i + 0.5)
-            p.place(f'KEY{12 * octave + semitone}_PARAM', x, WHITE_ROW)
-            if semitone not in (4, 11):
-                p.place(f'KEY{12 * octave + semitone + 1}_PARAM', x + pitch / 2, BLACK_ROW)
-
-    # Inputs on the left: the clock's, then the notes to record. The outputs on the right, in their dark box.
+    # The jacks' columns, in four groups: the transport, the notes to record, the tracks, and the mix.
+    groups = [4, 2, 8, 1]
+    left = (WIDTH - sum(groups) * PITCH - GAP * (len(groups) - 1)) / 2
+    columns = []
+    for n in groups:
+        columns.append([left + PITCH * (i + 0.5) for i in range(n)])
+        left += n * PITCH + GAP
+    transport, notes, tracks, mix = columns
     top, bottom = JACK_ROWS
-    box = JACKS[3] - 6.0, JACKS[5] + 6.0
-    p.rect(box[0], top - 8.6, box[1] - box[0], bottom - top + 15.0, 2.0, 'box')
-    rows = [(top, ['CLOCK', 'RESET', 'ADVANCE'], ['CLOCK', 'RESET', None]),
-            (bottom, ['VOCT', 'GATE', 'VELOCITY'], ['VOCT', 'GATE', 'VELOCITY'])]
-    labels = dict(VOCT='V/OCT', VELOCITY='VEL', ADVANCE='ADV')
-    for y, ins, outs in rows:
-        for x, name, kind in zip(JACKS, ins + outs, ['INPUT'] * 3 + ['OUTPUT'] * 3):
-            if name:
-                p.text(labels.get(name, name), x, y - 6.2, size=LABEL, fill='box_ink' if kind == 'OUTPUT' else 'ink')
-                p.place(f'{name}_{kind}', x, y)
-                p.place(f'{name}_{kind}_LIGHT', x + 3.9, y - 3.9)
+
+    # The keys over them: TEMPO over the clock, the four pages, and a key per track over its jacks.
+    key(p, 'METRONOME_PARAM', transport[0], KEY_ROW, 'metronome')
+    span = notes[-1] - transport[1]
+    for i in range(4):
+        key(p, f'PAGE{i}_PARAM', transport[1] + span * (i + 0.5) / 4, KEY_ROW)
+    for t, cx in enumerate(tracks):
+        key(p, f'SELECT{t}_PARAM', cx, KEY_ROW, TRACKS[t])
+
+    # Outputs sit in dark boxes: the transport's along the bottom row, the tracks' and the mix in both.
+    def box(x1, x2, y1, y2):
+        p.rect(x1 - PITCH / 2 + 0.6, y1 - 8.6, x2 - x1 + PITCH - 1.2, y2 - y1 + 15.0, 2.0, 'box')
+    box(transport[0], transport[-1], bottom, bottom)
+    box(tracks[0], mix[0], top, bottom)
+
+    def jack(name, kind, cx, y, label, metered=True):
+        p.text(label, cx, y - 6.2, size=LABEL if len(label) < 5 else 2.3, fill='box_ink' if kind == 'OUTPUT' else 'ink')
+        p.place(f'{name}_{kind}', cx, y)
+        if metered:
+            p.place(f'{name}_{kind}_LIGHT', cx + 3.9, y - 3.9)
+
+    for cx, name in zip(transport, ['CLOCK', 'RUN', 'RESET', 'CONT']):
+        jack(name, 'INPUT', cx, top, name)
+        jack(name, 'OUTPUT', cx, bottom, name)
+    for (cx, y), name, label in zip([(notes[0], top), (notes[1], top), (notes[0], bottom), (notes[1], bottom)],
+                                    ['VOCT', 'GATE', 'VELOCITY', 'ADVANCE'], ['V/OCT', 'GATE', 'VEL', 'ADV']):
+        jack(name, 'INPUT', cx, y, label)
+    for t, cx in enumerate(tracks):
+        jack(f'VOCT{t}', 'OUTPUT', cx, top, 'V/OCT', metered=False)
+        jack(f'GATE{t}', 'OUTPUT', cx, bottom, 'GATE', metered=False)
+    jack('LEFT', 'OUTPUT', mix[0], top, 'L')
+    jack('RIGHT', 'OUTPUT', mix[0], bottom, 'R')
     return p

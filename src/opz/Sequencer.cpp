@@ -1,18 +1,26 @@
 /*
-Sequencer: an OP-Z synth track's sequencer. Sixteen steps of up to four notes each, filled from its own keyboard or
-from poly V/OCT, GATE and VEL inputs, and played out as poly V/OCT, GATE and VEL for an engine beside it. It keeps the
-tempo until a master module takes that over: its own, or a patched clock's.
+Sequencer: the OP-Z's front panel, and the master of the OP-Z modules to its right. It keeps the tempo and the
+transport, and sequences the first eight tracks: four drum tracks, then bass, lead, arp and chord. Each track has a
+lane of sixteen steps of up to four notes, filled from the keys or from poly V/OCT, GATE and VEL inputs.
 
-Rack can't hold one button down while clicking another, so a long press or a Ctrl+click picks a step up, and it
-stays held (blinking) until it's clicked again. TRACK and REC latch.
+Every lane has poly V/OCT and GATE outputs. Unpatched, they play the track's engine over the bus instead (Bus.hpp),
+and the engines' sound comes back to the L and R outputs. The four dials are the selected track's: whichever engine
+plays it, they turn its own parameters.
+
+Its keys are laid out as on the OP-Z: TRACK, REC and −, PLAY and +, STOP and SHIFT, then the 16 steps along the top,
+the numbered black keys and the white keys from F to E. Rack can't hold one button down while clicking another, so
+a long press or a Ctrl+click picks a step up, and it stays held (blinking) until it's clicked again; SHIFT latches
+the same way, and a click on it turns the page. TRACK and TEMPO latch.
 */
 #include "SynthTrack.hpp"
 #include "Sequence.hpp"
 
 namespace opz {
 
-/** The black keys double as the value keys, 1 to 9 then 0 from the left. */
-constexpr int BLACK_KEYS[5] = {1, 3, 6, 8, 10};
+/** The keyboard: two octaves, F to E. */
+constexpr int KEYS = 24;
+/** The black keys, in semitones above F, double as the value keys: 1 to 9 then 0 from the left. */
+constexpr int BLACK_KEYS[5] = {1, 3, 5, 8, 10};
 inline int keyValue(int key) {
 	const int* k = std::find(std::begin(BLACK_KEYS), std::end(BLACK_KEYS), key % 12);
 	return k == std::end(BLACK_KEYS) ? -1 : 5 * (key / 12) + int(k - BLACK_KEYS);
@@ -26,32 +34,63 @@ inline std::string noteName(int pitch) {
 	return string::f("%s%d", names[pitch % 12], pitch / 12 - 1);
 }
 
+/** The keys' LED colours, besides the notes' orange. */
+namespace led {
+const NVGcolor WHITE = nvgRGBf(1.f, 1.f, 1.f), RED = nvgRGBf(1.f, 0.1f, 0.06f), GREEN = nvgRGBf(0.15f, 1.f, 0.3f), BLUE = nvgRGBf(0.2f, 0.4f, 1.f);
+}
+
+static const char* const TRACK_NAMES[TRACKS] = {"Kick", "Snare", "Perc", "Sample", "Bass", "Lead", "Arp", "Chord"};
+/** Each track's polyphony to begin with, as the OP-Z's: one voice for the drums, bass and arp, three for the lead,
+four for the chords. */
+static const int TRACK_CHANNELS[TRACKS] = {1, 1, 1, 1, 1, 3, 1, 4};
+
 /** The note length dial's settings, in ticks of a ×1 step: 1/64 to a bar, dotted between, then drone. */
 constexpr int NOTE_LENGTHS[] = {6, 9, 12, 18, 24, 36, 48, 72, 96, 144, 192, 288, 384, DRONE};
 constexpr int LONGEST = STEPS * TICKS; // the longest note a step's menu sets, short of a drone
 
 
-struct Sequencer : Module {
+struct Sequencer : Module, BusNode {
 	enum ParamId {
-		TEMPO_PARAM, SWING_PARAM, LENGTH_PARAM, QUANTIZE_PARAM, STEP_COUNT_PARAM, STEP_LENGTH_PARAM,
-		TRACK_PARAM, REC_PARAM, PLAY_PARAM, STOP_PARAM, OCTAVE_DOWN_PARAM, OCTAVE_UP_PARAM,
-		ENUMS(STEP_PARAM, STEPS), ENUMS(KEY_PARAM, KEYS),
+		TEMPO_PARAM, SWING_PARAM,
+		ENUMS(LENGTH_PARAM, TRACKS), ENUMS(QUANTIZE_PARAM, TRACKS), ENUMS(STEP_COUNT_PARAM, TRACKS), ENUMS(STEP_LENGTH_PARAM, TRACKS),
+		// The keys, each with an RGB light: three light ids from KEY_LIGHT, in the same order.
+		TRACK_PARAM, REC_PARAM, PLAY_PARAM, STOP_PARAM, OCTAVE_DOWN_PARAM, OCTAVE_UP_PARAM, SHIFT_PARAM, METRONOME_PARAM,
+		ENUMS(STEP_PARAM, STEPS), ENUMS(KEY_PARAM, KEYS), ENUMS(SELECT_PARAM, TRACKS), ENUMS(PAGE_PARAM, PAGES),
 		PARAMS_LEN
 	};
-	enum InputId { CLOCK_INPUT, RESET_INPUT, ADVANCE_INPUT, VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, INPUTS_LEN };
-	enum OutputId { CLOCK_OUTPUT, RESET_OUTPUT, VOCT_OUTPUT, GATE_OUTPUT, VELOCITY_OUTPUT, OUTPUTS_LEN };
+	enum InputId { CLOCK_INPUT, RUN_INPUT, RESET_INPUT, CONT_INPUT, ADVANCE_INPUT, VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, INPUTS_LEN };
+	enum OutputId {
+		CLOCK_OUTPUT, RUN_OUTPUT, RESET_OUTPUT, CONT_OUTPUT, LEFT_OUTPUT, RIGHT_OUTPUT,
+		ENUMS(VOCT_OUTPUT, TRACKS), ENUMS(GATE_OUTPUT, TRACKS),
+		OUTPUTS_LEN
+	};
+	static constexpr int METERED_OUTPUTS = VOCT_OUTPUT; // the lanes' outputs show on the track keys instead
 	enum LightId {
-		ENUMS(STEP_LIGHT, 3 * STEPS), ENUMS(KEY_LIGHT, KEYS), ENUMS(CHANNEL_LIGHT, CHANNELS),
-		TRACK_LIGHT, REC_LIGHT, PLAY_LIGHT, OCTAVE_DOWN_LIGHT, OCTAVE_UP_LIGHT, INTERNAL_LIGHT, EXTERNAL_LIGHT,
-		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * OUTPUTS_LEN),
+		ENUMS(KEY_LIGHT, 3 * (PARAMS_LEN - TRACK_PARAM)), ENUMS(DIAL_LIGHT, 3 * 4),
+		ENUMS(CHANNEL_LIGHT, CHANNELS), INTERNAL_LIGHT, EXTERNAL_LIGHT,
+		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * METERED_OUTPUTS),
 		LIGHTS_LEN
 	};
 	static constexpr float LONG_PRESS = 0.4f, CLEAR_HOLD = 1.f; // seconds
 	static constexpr int SOURCES = KEYS + CHANNELS;             // live notes: the keys, then the GATE input's channels
+	static constexpr int ALL_KEYS = PARAMS_LEN - TRACK_PARAM;
 
-	/** A note played live, from a key or a GATE channel. */
+	static int keyLight(int param) {
+		return KEY_LIGHT + 3 * (param - TRACK_PARAM);
+	}
+
+	/** A track's sequence. */
+	struct Lane {
+		Pattern pattern;
+		Pattern recorded;        // the pattern as the undo history last saw it; the UI thread's
+		Settings settings;
+		Player player;
+	};
+
+	/** A note played live, from a key or a GATE channel, on the lane that was selected when it started. */
 	struct Live {
 		bool on = false;
+		int lane = 0;
 		uint32_t id = 0;        // the player's id for it
 		int pitch = 60;
 		int recorded = -1;      // the step it was recorded into while playing, which gets its length on release
@@ -63,9 +102,9 @@ struct Sequencer : Module {
 			Sequencer* m = static_cast<Sequencer*>(module);
 			int i = paramId - STEP_PARAM;
 			if (m->trackMode)
-				return string::f("Step count %d", i + 1);
+				return m->shifted ? string::f("Step count %d", i + 1) : i < TRACKS ? string::f("Track %d, %s", i + 1, TRACK_NAMES[i]) : "";
 			std::string label = string::f("Step %d", i + 1);
-			const Step& s = m->pattern.steps[i];
+			const Step& s = m->lane().pattern.steps[i];
 			for (int n = 0; n < s.count; n++)
 				label += (n ? " " : ": ") + noteName(s.notes[n].pitch);
 			return label;
@@ -76,143 +115,226 @@ struct Sequencer : Module {
 		std::string getLabel() override {
 			static const char* const values[] = {"×1", "×2", "×3", "×4", "×5", "×6", "×7", "×8", "×16", "one per ADV trigger"};
 			Sequencer* m = static_cast<Sequencer*>(module);
-			int key = paramId - KEY_PARAM;
-			if (m->trackMode && keyValue(key) >= 0)
-				return string::f("Step length %s", values[keyValue(key)]);
+			int key = paramId - KEY_PARAM, value = keyValue(key);
+			if (m->trackMode && value >= 0)
+				return string::f("Step length %s", values[value]);
+			if (m->tempoMode)
+				return value >= 0 ? string::f("Tempo digit %d", (value + 1) % 10) : "Tap tempo";
 			return noteName(m->keyPitch(key));
 		}
 	};
 
-	Pattern pattern;
-	Pattern recorded;            // the pattern as the undo history last saw it; the UI thread's
-	Settings settings;
-	Player player;
+	Lane lanes[TRACKS];
+	int track = DRUM_TRACKS;     // the selected track, from 0: bass
 	Step memory;                 // what a click on an empty step pastes: the last notes played, or the step last held
 	Live live[SOURCES];
 	bool playing = false;        // the transport, as PLAY shows it
-	bool armed = false;          // playing, but waiting for the clock's first pulse to start
-	bool recording = false, trackMode = false;
+	bool armed = false;          // playing, but waiting for the clock's next pulse to start
+	bool resuming = false;       // and when it comes, carrying on rather than starting over
+	bool recording = false, trackMode = false, tempoMode = false, shifted = false;
 	bool erasing = false;        // removing the held notes from the steps they pass, while recording
 	bool chord = false;          // notes are down for the step being step-recorded
 	int held = -1, cursor = 0, octave = 0, ppqn = 4;
+	int page = NEXT_PAGE;        // the page last asked of the selected track's engine, and how many times one was
+	uint32_t pageRequests = 0;
+	int typed = 0, digits = 0;   // a tempo being typed on the value keys
+	float sinceTap = -1.f, tapPeriod = 0.f; // tap tempo, in seconds
 	bool longPressHolds = true, ctrlClickHolds = true;
-	std::atomic<int> ctrlClicked{-1};
 	std::atomic<float> shownTempo{120.f}; // -1 while an external clock is still being measured
 
-	dsp::BooleanTrigger trackButton, recButton, playButton, stopButton, octaveDown, octaveUp;
-	bool stepDown[STEPS] = {}, stepUsed[STEPS] = {};
-	float stepTime[STEPS] = {};
-	bool keysDown[KEYS] = {};
+	KeyGesture gestures[ALL_KEYS]; // the keys', from TRACK_PARAM on
 	float clearing = -1.f;       // how long STOP has been held in track mode, or -1
-	dsp::SchmittTrigger gates[CHANNELS], clockIn, resetIn, advanceIn;
-	dsp::PulseGenerator clockOut, resetOut;
+	dsp::SchmittTrigger gates[CHANNELS], clockIn, runIn, resetIn, contIn, advanceIn;
+	dsp::PulseGenerator clockOut, resetOut, contOut;
 	bool external = false;
 	long pulses = 0, lastTick = -1;
 	float sincePulse = 0.f, pulsePeriod = 0.f; // seconds; a period of 0 is unknown
+	Upstream engines;            // the last the engines sent back, read at light rate
 	dsp::ClockDivider controlDivider, lightDivider;
-	Meter inputMeters[INPUTS_LEN], outputMeters[OUTPUTS_LEN];
+	Meter inputMeters[INPUTS_LEN], outputMeters[METERED_OUTPUTS];
 	float blink = 0.f;
 
 	Sequencer() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
+		attach(this);
 		ParamQuantity* q = configParam(TEMPO_PARAM, 40.f, 200.f, 120.f, "Tempo", " BPM");
 		q->snapEnabled = true;
 		q->randomizeEnabled = false;
 		q->description = "A patched CLOCK overrides it";
 		configParam(SWING_PARAM, 0.5f, 0.75f, 0.5f, "Swing", "%", 0.f, 100.f)->description = "Delays every second sixteenth; 50% is straight";
-		configSwitch(LENGTH_PARAM, 0.f, std::size(NOTE_LENGTHS) - 1, 4.f, "Note length",
-			{"1/64", "1/64.", "1/32", "1/32.", "1/16", "1/16.", "1/8", "1/8.", "1/4", "1/4.", "1/2", "1/2.", "1 bar", "Drone"})
-			->description = "For notes left at the default length";
-		configParam(QUANTIZE_PARAM, 0.f, 1.f, 0.f, "Quantize", "%", 0.f, 100.f)->description = "Pulls micro timing towards the grid as it plays";
-		configParam(STEP_COUNT_PARAM, 1.f, STEPS, STEPS, "Step count")->snapEnabled = true;
-		configSwitch(STEP_LENGTH_PARAM, 0.f, 9.f, 0.f, "Step length", {"×1", "×2", "×3", "×4", "×5", "×6", "×7", "×8", "×16", "Per ADV trigger"});
-		getParamQuantity(STEP_COUNT_PARAM)->randomizeEnabled = false;
-		getParamQuantity(STEP_LENGTH_PARAM)->randomizeEnabled = false;
-		configButton(TRACK_PARAM, "Track mode")->description = "On and off: the steps set the step count, the black keys the step length, − and + shift the pattern, and holding STOP clears it";
-		configButton(REC_PARAM, "Record")->description = "On and off: records the keys and inputs live while playing, or a step at a time while stopped";
-		configButton(PLAY_PARAM, "Play")->description = "Starts from the first step, or the clock's next pulse";
-		configButton(STOP_PARAM, "Stop")->description = "Stopped already: lets go of every note";
-		configButton(OCTAVE_DOWN_PARAM, "Octave down")->description = "Nudges a held step a tick earlier; with notes held while recording, erases them";
-		configButton(OCTAVE_UP_PARAM, "Octave up")->description = "Nudges a held step a tick later";
+		for (int t = 0; t < TRACKS; t++) {
+			std::string name = string::f("Track %d ", t + 1);
+			configSwitch(LENGTH_PARAM + t, 0.f, std::size(NOTE_LENGTHS) - 1, 4.f, name + "note length",
+				{"1/64", "1/64.", "1/32", "1/32.", "1/16", "1/16.", "1/8", "1/8.", "1/4", "1/4.", "1/2", "1/2.", "1 bar", "Drone"})
+				->description = "For notes left at the default length";
+			configParam(QUANTIZE_PARAM + t, 0.f, 1.f, 0.f, name + "quantize", "%", 0.f, 100.f)->description = "Pulls micro timing towards the grid as it plays";
+			configParam(STEP_COUNT_PARAM + t, 1.f, STEPS, STEPS, name + "step count")->snapEnabled = true;
+			configSwitch(STEP_LENGTH_PARAM + t, 0.f, 9.f, 0.f, name + "step length", {"×1", "×2", "×3", "×4", "×5", "×6", "×7", "×8", "×16", "Per ADV trigger"});
+			getParamQuantity(STEP_COUNT_PARAM + t)->randomizeEnabled = false;
+			getParamQuantity(STEP_LENGTH_PARAM + t)->randomizeEnabled = false;
+			configKey(this, SELECT_PARAM + t, string::f("Track %d, %s", t + 1, TRACK_NAMES[t]))->description = "Selects it for the keys, the steps and the dials";
+			configOutput(VOCT_OUTPUT + t, name + "1V/octave pitch");
+			configOutput(GATE_OUTPUT + t, name + "gate")->description = "Unpatched, the track plays its engine to the right";
+			lanes[t].settings.channels = TRACK_CHANNELS[t];
+		}
+		configKey(this, TRACK_PARAM, "Track")->description = "On and off: steps 1 to 8 select a track and the dials set its note length, style, "
+			"quantize and portamento. With SHIFT, the steps set the step count; the black keys set the step length. − and + shift the pattern, "
+			"and holding STOP clears it";
+		configKey(this, REC_PARAM, "Record")->description = "On and off: records the keys and inputs live while playing, or a step at a time while stopped";
+		configKey(this, PLAY_PARAM, "Play")->description = "Starts from the first step, or the clock's next pulse";
+		configKey(this, STOP_PARAM, "Stop")->description = "Stopped already: lets go of every note";
+		configKey(this, OCTAVE_DOWN_PARAM, "Octave down")->description = "Nudges a held step a tick earlier; with notes held while recording, erases them";
+		configKey(this, OCTAVE_UP_PARAM, "Octave up")->description = "Nudges a held step a tick later";
+		configKey(this, SHIFT_PARAM, "Shift")->description = "Click: the next page of dials. Long-press or " RACK_MOD_CTRL_NAME "+click: latch it";
+		configKey(this, METRONOME_PARAM, "Tempo")->description = "On and off: the dials set the tempo and swing, the black keys type a tempo, "
+			"and the white keys tap one";
 		for (int i = 0; i < STEPS; i++)
-			configButton<StepQuantity>(STEP_PARAM + i)->description = "Click: paste the last notes played, or clear. Long-press or " RACK_MOD_CTRL_NAME "+click: hold";
+			configKey<StepQuantity>(this, STEP_PARAM + i)->description = "Click: paste the last notes played, or clear. Long-press or " RACK_MOD_CTRL_NAME "+click: hold";
 		for (int i = 0; i < KEYS; i++)
-			configButton<KeyQuantity>(KEY_PARAM + i);
+			configKey<KeyQuantity>(this, KEY_PARAM + i);
+		static const char* const pages[PAGES] = {"Sound page", "Envelope page", "LFO page", "Mix page"};
+		for (int i = 0; i < PAGES; i++)
+			configKey(this, PAGE_PARAM + i, pages[i])->description = "Of the selected track's engine";
 		for (int i = 0; i < CHANNELS; i++)
 			configLight(CHANNEL_LIGHT + i, string::f("Channel %d", i + 1));
 
 		configInput(CLOCK_INPUT, "Clock; overrides the tempo");
+		configInput(RUN_INPUT, "Run: plays from the start while high, stops when low");
 		configInput(RESET_INPUT, "Reset");
+		configInput(CONT_INPUT, "Continue: plays on from where it stopped");
 		configInput(ADVANCE_INPUT, "Advance, one step per trigger at step length 0");
-		configInput(VOCT_INPUT, "1V/octave pitch, to play and record");
-		configInput(GATE_INPUT, "Gate, to play and record");
+		configInput(VOCT_INPUT, "1V/octave pitch, to play and record on the selected track");
+		configInput(GATE_INPUT, "Gate, to play and record on the selected track");
 		configInput(VELOCITY_INPUT, "Velocity (0-10V)");
 		configOutput(CLOCK_OUTPUT, "Clock, while playing");
+		configOutput(RUN_OUTPUT, "Run, high while playing");
 		configOutput(RESET_OUTPUT, "Reset, as it starts");
-		configOutput(VOCT_OUTPUT, "1V/octave pitch");
-		configOutput(GATE_OUTPUT, "Gate");
-		configOutput(VELOCITY_OUTPUT, "Velocity (0-10V)");
+		configOutput(CONT_OUTPUT, "Continue, as it plays on");
+		configOutput(LEFT_OUTPUT, "Left, the engines' mix");
+		configOutput(RIGHT_OUTPUT, "Right, the engines' mix");
 		memory.add(Note());
 		controlDivider.setDivision(16);
 		lightDivider.setDivision(64);
 	}
 
+	Lane& lane() {
+		return lanes[track];
+	}
+
+	/** The keys run from F3 to E5, an octave either side of middle C, before − and + move them. */
 	int keyPitch(int key) const {
-		return clamp(48 + 12 * octave + key, 0, 127);
+		return clamp(53 + 12 * octave + key, 0, 127);
 	}
 
 	bool anyHeld() const {
 		return std::any_of(std::begin(live), std::end(live), [](const Live& n) { return n.on; });
 	}
 
-	int stepCount() const {
-		return clamp(settings.stepCount, 1, STEPS);
+	int stepCount() {
+		return clamp(lane().settings.stepCount, 1, STEPS);
+	}
+
+	float bpm() {
+		return external && pulsePeriod > 0.f ? 60.f / (pulsePeriod * ppqn) : params[TEMPO_PARAM].getValue();
+	}
+
+	/** The engine playing a track, found as the bus finds it; for the UI thread. */
+	Track* engine(int t) {
+		int synth = DRUM_TRACKS;
+		for (Module* m = rightExpander.module; onBus(m); m = m->rightExpander.module)
+			if (Track* e = dynamic_cast<Track*>(m))
+				if (synth++ == t)
+					return e;
+		return nullptr;
+	}
+
+	/** The module and param a dial turns: the selected track's engine's, or in track and tempo mode, its settings. */
+	std::pair<Module*, int> dialTarget(int d) {
+		if (tempoMode)
+			return d < 2 ? std::make_pair<Module*, int>(this, d == 0 ? TEMPO_PARAM : SWING_PARAM) : std::make_pair<Module*, int>(nullptr, -1);
+		if (trackMode && d % 2 == 0)
+			return {this, (d == 0 ? LENGTH_PARAM : QUANTIZE_PARAM) + track};
+		Track* e = engine(track);
+		int p = e ? Track::DIALS[trackMode ? PAGE_TRACK : e->shownPage()][d] : -1;
+		return p < 0 ? std::make_pair<Module*, int>(nullptr, -1) : std::make_pair<Module*, int>(e, int(p));
 	}
 
 	void restart() {
-		player.start();
+		for (Lane& l : lanes)
+			l.player.start();
 		lastTick = -1;
 		pulses = 0;
 		resetOut.trigger(1e-3f);
 	}
 
+	void resume() {
+		for (Lane& l : lanes)
+			l.player.resume();
+		pulses = (long) std::floor(lanes[0].player.song() * ppqn / 4.0 + 1e-9);
+		contOut.trigger(1e-3f);
+	}
+
 	/** Starts now, or with an external clock, on its next pulse. */
-	void play() {
+	void play(bool carryOn = false) {
 		playing = true;
 		armed = external;
+		resuming = carryOn;
 		if (armed)
-			player.stop();
+			for (Lane& l : lanes)
+				l.player.stop();
+		else if (carryOn)
+			resume();
 		else
 			restart();
 	}
 
+	void halt() {
+		playing = armed = erasing = false;
+		for (Lane& l : lanes)
+			l.player.stop();
+	}
+
 	void stop() {
 		if (trackMode)
-			player.silence();
-		else if (playing) {
-			playing = armed = erasing = false;
-			player.stop();
-		}
+			lane().player.silence();
+		else if (playing)
+			halt();
 		else
-			player.panic();
+			for (Lane& l : lanes)
+				l.player.panic();
+	}
+
+	void select(int t) {
+		if (t == track)
+			return;
+		for (int s = 0; s < SOURCES; s++)
+			noteUp(s);
+		track = t;
+		held = -1;
+		cursor = 0;
+		chord = erasing = false;
+	}
+
+	void requestPage(int p) {
+		page = p;
+		pageRequests++;
 	}
 
 	void toggleHold(int i) {
 		held = held == i ? -1 : i;
-		const Step& s = pattern.steps[i];
+		const Step& s = lane().pattern.steps[i];
 		if (held >= 0 && !s.empty()) {
 			memory = s;
 			if (!playing)
-				player.preview(s, settings);
+				lane().player.preview(s, lane().settings);
 		}
 	}
 
 	/** A click on a step that doesn't pick it up. */
 	void clickStep(int i) {
+		Pattern& pattern = lane().pattern;
 		Step& s = pattern.steps[i];
-		if (trackMode)
-			params[STEP_COUNT_PARAM].setValue(i + 1);
-		else if (held == i)
+		if (held == i)
 			held = -1;
 		else if (held >= 0) {
 			// The held step's notes last until the end of this one, or go back to the default if they already do.
@@ -235,9 +357,9 @@ struct Sequencer : Module {
 
 	void shift(int direction) {
 		if (trackMode)
-			pattern.rotate(direction, stepCount());
+			lane().pattern.rotate(direction, stepCount());
 		else if (held >= 0)
-			pattern.steps[held].nudge(direction);
+			lane().pattern.steps[held].nudge(direction);
 		else if (direction < 0 && recording && playing && anyHeld())
 			erasing = true;
 		else
@@ -247,16 +369,18 @@ struct Sequencer : Module {
 	/** A live note starts: it plays, and goes into the held step, the record, or the notes a click pastes. */
 	void noteDown(int source, int pitch, float volts, int velocity) {
 		bool first = !anyHeld();
+		Lane& l = lane();
 		Live& n = live[source];
 		n = Live();
 		n.on = true;
+		n.lane = track;
 		n.pitch = pitch = clamp(pitch, 0, 127);
-		n.id = player.noteOn(volts, velocity / 127.f, INFINITY, true, settings);
+		n.id = l.player.noteOn(volts, velocity / 127.f, INFINITY, true, l.settings);
 		Note note;
 		note.pitch = pitch;
 		note.velocity = clamp(velocity, 1, 127);
 		if (held >= 0) {
-			Step& s = pattern.steps[held];
+			Step& s = l.pattern.steps[held];
 			if (s.indexOf(pitch) >= 0)
 				s.remove(pitch);
 			else
@@ -272,20 +396,20 @@ struct Sequencer : Module {
 			return;
 		if (playing) {
 			int step, ticks;
-			if (player.locate(&step, &ticks)) {
+			if (l.player.locate(&step, &ticks)) {
 				note.offset = ticks;
-				if (pattern.steps[step].add(note)) {
+				if (l.pattern.steps[step].add(note)) {
 					n.recorded = step;
-					n.start = player.now;
-					n.slot = player.stepLength();
+					n.start = l.player.now;
+					n.slot = l.player.stepLength();
 				}
 			}
 		}
 		else {
 			if (!chord)
-				pattern.steps[cursor].clear();
+				l.pattern.steps[cursor].clear();
 			chord = true;
-			pattern.steps[cursor].add(note);
+			l.pattern.steps[cursor].add(note);
 		}
 	}
 
@@ -294,12 +418,13 @@ struct Sequencer : Module {
 		if (!n.on)
 			return;
 		n.on = false;
-		player.release(n.id);
+		Lane& l = lanes[n.lane];
+		l.player.release(n.id);
 		if (n.recorded >= 0) {
-			Step& s = pattern.steps[n.recorded];
+			Step& s = l.pattern.steps[n.recorded];
 			int i = s.indexOf(n.pitch);
 			if (i >= 0)
-				s.notes[i].length = (int16_t) std::clamp(std::lround((player.now - n.start) / n.slot * TICKS), 1L, long(DRONE - 1));
+				s.notes[i].length = (int16_t) std::clamp(std::lround((l.player.now - n.start) / n.slot * TICKS), 1L, long(DRONE - 1));
 		}
 		if (chord && !anyHeld()) {
 			chord = false;
@@ -307,86 +432,134 @@ struct Sequencer : Module {
 		}
 	}
 
+	/** In tempo mode the value keys type a tempo, three digits as on the OP-Z, and the white keys tap one. */
+	void tempoKey(int key) {
+		int value = keyValue(key);
+		if (value >= 0) {
+			typed = 10 * typed + (value + 1) % 10;
+			if (++digits == 3) {
+				params[TEMPO_PARAM].setValue(clamp(typed, 40, 200));
+				typed = digits = 0;
+			}
+			return;
+		}
+		if (sinceTap > 0.2f && sinceTap < 1.5f) {
+			tapPeriod = tapPeriod > 0.f ? 0.5f * (tapPeriod + sinceTap) : sinceTap;
+			params[TEMPO_PARAM].setValue(clamp(std::round(60.f / tapPeriod), 40.f, 200.f));
+		}
+		else
+			tapPeriod = 0.f;
+		sinceTap = 0.f;
+	}
+
 	void keyDown(int key) {
-		if (!trackMode)
-			noteDown(key, keyPitch(key), octave - 1.f + key / 12.f, 100);
+		if (tempoMode)
+			tempoKey(key);
+		else if (!trackMode)
+			noteDown(key, keyPitch(key), (keyPitch(key) - 60) / 12.f, 100);
 		else if (keyValue(key) >= 0)
-			params[STEP_LENGTH_PARAM].setValue(keyValue(key));
+			params[STEP_LENGTH_PARAM + track].setValue(keyValue(key));
 	}
 
 	void handleControls(float dt) {
-		settings.stepCount = (int) params[STEP_COUNT_PARAM].getValue();
-		settings.stepLength = stepLengthOfKey((int) params[STEP_LENGTH_PARAM].getValue());
-		settings.noteLength = NOTE_LENGTHS[(int) params[LENGTH_PARAM].getValue()];
-		settings.quantize = params[QUANTIZE_PARAM].getValue();
-		settings.swing = params[SWING_PARAM].getValue();
-
-		if (trackButton.process(params[TRACK_PARAM].getValue() > 0.f))
-			trackMode = !trackMode;
-		if (recButton.process(params[REC_PARAM].getValue() > 0.f)) {
-			recording = !recording;
-			cursor = 0;
+		for (int t = 0; t < TRACKS; t++) {
+			Settings& s = lanes[t].settings;
+			s.stepCount = (int) params[STEP_COUNT_PARAM + t].getValue();
+			s.stepLength = stepLengthOfKey((int) params[STEP_LENGTH_PARAM + t].getValue());
+			s.noteLength = NOTE_LENGTHS[(int) params[LENGTH_PARAM + t].getValue()];
+			s.quantize = params[QUANTIZE_PARAM + t].getValue();
+			s.swing = params[SWING_PARAM].getValue();
 		}
-		if (playButton.process(params[PLAY_PARAM].getValue() > 0.f))
-			play();
-		bool stopDown = params[STOP_PARAM].getValue() > 0.f;
-		if (stopButton.process(stopDown)) {
-			stop();
-			clearing = trackMode ? 0.f : -1.f;
+		if (sinceTap >= 0.f)
+			sinceTap += dt;
+
+		for (int p = TRACK_PARAM; p < PARAMS_LEN; p++) {
+			KeyGesture& g = gestures[p - TRACK_PARAM];
+			if (KeyGesture::Event e = g.process(params[p].getValue(), dt, LONG_PRESS))
+				onKey(p, e, g);
 		}
 		if (clearing >= 0.f) {
-			if (!stopDown || !trackMode)
+			const KeyGesture& stop = gestures[STOP_PARAM - TRACK_PARAM];
+			if (!stop.down() || !trackMode)
 				clearing = -1.f;
-			else if ((clearing += dt) >= CLEAR_HOLD) {
-				pattern.clear();
+			else if ((clearing = stop.held) >= CLEAR_HOLD) {
+				lane().pattern.clear();
 				clearing = -1.f;
 			}
-		}
-		if (octaveDown.process(params[OCTAVE_DOWN_PARAM].getValue() > 0.f))
-			shift(-1);
-		if (octaveUp.process(params[OCTAVE_UP_PARAM].getValue() > 0.f))
-			shift(1);
-
-		// A quick click acts on release; a long press picks the step up as soon as it's long enough.
-		for (int i = 0; i < STEPS; i++) {
-			bool down = params[STEP_PARAM + i].getValue() > 0.f;
-			if (down && !stepDown[i]) {
-				stepTime[i] = 0.f;
-				stepUsed[i] = false;
-			}
-			else if (down && !stepUsed[i] && (stepTime[i] += dt) >= LONG_PRESS && longPressHolds && !trackMode) {
-				toggleHold(i);
-				stepUsed[i] = true;
-			}
-			else if (!down && stepDown[i] && !stepUsed[i])
-				clickStep(i);
-			stepDown[i] = down;
-		}
-		int clicked = ctrlClicked.exchange(-1);
-		if (clicked >= 0) {
-			if (trackMode)
-				clickStep(clicked);
-			else
-				toggleHold(clicked);
-		}
-
-		for (int k = 0; k < KEYS; k++) {
-			bool down = params[KEY_PARAM + k].getValue() > 0.f;
-			if (down && !keysDown[k])
-				keyDown(k);
-			else if (!down && keysDown[k])
-				noteUp(k);
-			keysDown[k] = down;
 		}
 
 		if (erasing) {
 			int step, ticks;
 			if (!recording || !playing || !anyHeld())
 				erasing = false;
-			else if (player.locate(&step, &ticks))
+			else if (lane().player.locate(&step, &ticks))
 				for (const Live& n : live)
 					if (n.on)
-						pattern.steps[step].remove(n.pitch);
+						lane().pattern.steps[step].remove(n.pitch);
+		}
+	}
+
+	/** Whether this press picks a key up: a long press, or a Ctrl+click, as the context menu allows. */
+	bool picksUp(KeyGesture::Event e, const KeyGesture& g) const {
+		return !g.handled && (e == KeyGesture::PRESS ? g.press == KEY_CTRL && ctrlClickHolds : e == KeyGesture::LONG_PRESS && longPressHolds);
+	}
+
+	/** A step acts when it's let go, so the module can tell a click from a long press, which picks it up as soon as it's
+	long enough; a Ctrl+click picks it up straight away. SHIFT does the same. The other keys act as they go down. */
+	void onKey(int p, KeyGesture::Event e, KeyGesture& g) {
+		if (p >= PAGE_PARAM) {
+			if (e == KeyGesture::PRESS)
+				requestPage(p - PAGE_PARAM);
+		}
+		else if (p >= SELECT_PARAM) {
+			if (e == KeyGesture::PRESS)
+				select(p - SELECT_PARAM);
+		}
+		else if (p >= KEY_PARAM) {
+			if (e == KeyGesture::PRESS)
+				keyDown(p - KEY_PARAM);
+			else if (e == KeyGesture::CLICK || e == KeyGesture::RELEASE)
+				noteUp(p - KEY_PARAM);
+		}
+		else if (p >= STEP_PARAM) {
+			int i = p - STEP_PARAM;
+			if (trackMode) {
+				if (e != KeyGesture::PRESS)
+					return;
+				if (shifted)
+					params[STEP_COUNT_PARAM + track].setValue(i + 1);
+				else if (i < TRACKS)
+					select(i);
+			}
+			else if (picksUp(e, g)) {
+				toggleHold(i);
+				g.handled = true;
+			}
+			else if (e == KeyGesture::CLICK)
+				clickStep(i);
+		}
+		else if (p == SHIFT_PARAM) {
+			if (picksUp(e, g)) {
+				shifted = !shifted;
+				g.handled = true;
+			}
+			else if (e == KeyGesture::CLICK) {
+				if (shifted)
+					shifted = false;
+				else
+					requestPage(NEXT_PAGE);
+			}
+		}
+		else if (e == KeyGesture::PRESS) {
+			switch (p) {
+				case TRACK_PARAM: trackMode = !trackMode; tempoMode = false; break;
+				case METRONOME_PARAM: tempoMode = !tempoMode; trackMode = false; typed = digits = 0; break;
+				case REC_PARAM: recording = !recording; cursor = 0; break;
+				case PLAY_PARAM: play(); break;
+				case STOP_PARAM: stop(); clearing = trackMode ? 0.f : -1.f; break;
+				case OCTAVE_DOWN_PARAM: shift(-1); break;
+				case OCTAVE_UP_PARAM: shift(1); break;
+			}
 		}
 	}
 
@@ -407,14 +580,32 @@ struct Sequencer : Module {
 					break;
 				default:
 					if (n.on)
-						if (Player::Channel* channel = player.find(n.id))
+						if (Player::Channel* channel = lanes[n.lane].player.find(n.id))
 							channel->pitch = volts;
 			}
 		}
 	}
 
-	/** Runs the player at the tempo, or follows the clock: between pulses at the rate they last came, but never past
-	where the next one is due, and on a pulse straight to it. */
+	/** RUN plays from the start while high and stops when it falls, CONT plays on, and RESET starts over. */
+	void handleTransport() {
+		switch (runIn.processEvent(inputs[RUN_INPUT].getVoltage(), 0.1f, 1.f)) {
+			case dsp::SchmittTrigger::TRIGGERED: play(); break;
+			case dsp::SchmittTrigger::UNTRIGGERED: if (playing) halt(); break;
+			default: break;
+		}
+		if (contIn.process(inputs[CONT_INPUT].getVoltage(), 0.1f, 1.f) && !playing)
+			play(true);
+		if (resetIn.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f) && playing)
+			play();
+		if (advanceIn.process(inputs[ADVANCE_INPUT].getVoltage(), 0.1f, 1.f))
+			for (Lane& l : lanes)
+				if (l.settings.stepLength == 0)
+					l.player.trigger(l.pattern, l.settings);
+	}
+
+	/** Runs the players at the tempo, or follows the clock: between pulses at the rate they last came, but never past
+	where the next one is due, and on a pulse straight to it. Every lane keeps the same time, so the first one's is
+	everyone's. */
 	void runClock(float dt) {
 		bool patched = inputs[CLOCK_INPUT].isConnected();
 		if (patched != external) {
@@ -423,11 +614,7 @@ struct Sequencer : Module {
 			if (playing)
 				play();
 		}
-		if (resetIn.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f) && playing)
-			play();
-		if (advanceIn.process(inputs[ADVANCE_INPUT].getVoltage(), 0.1f, 1.f) && settings.stepLength == 0)
-			player.trigger(pattern, settings);
-
+		const Player& time = lanes[0].player;
 		double perPulse = 4.0 / ppqn;
 		double rate = external && pulsePeriod > 0.f ? perPulse / pulsePeriod : params[TEMPO_PARAM].getValue() / 15.0;
 		double d = rate * dt;
@@ -439,20 +626,21 @@ struct Sequencer : Module {
 				sincePulse = 0.f;
 				if (armed) {
 					armed = false;
-					restart();
+					resuming ? resume() : restart();
 				}
-				else if (player.running)
+				else if (time.running)
 					pulses++;
 			}
-			if (player.running) {
-				double due = pulses * 4.0 / ppqn;
-				d = player.now < due ? due - player.now : pulsePeriod > 0.f ? std::min(d, due + perPulse - 1e-9 - player.now) : 0.0;
+			if (time.running) {
+				double due = pulses * perPulse, song = time.song();
+				d = song < due ? due - song : pulsePeriod > 0.f ? std::min(d, due + perPulse - 1e-9 - song) : 0.0;
 				d = std::max(d, 0.0);
 			}
 		}
-		player.advance(d, pattern, settings);
-		if (player.running) {
-			long tick = (long) std::floor(player.now / perPulse + 1e-9);
+		for (Lane& l : lanes)
+			l.player.advance(d, l.pattern, l.settings);
+		if (time.running) {
+			long tick = (long) std::floor(time.song() / perPulse + 1e-9);
 			if (tick != lastTick) {
 				lastTick = tick;
 				clockOut.trigger(1e-3f);
@@ -460,25 +648,54 @@ struct Sequencer : Module {
 		}
 	}
 
+	/** Each lane to its jacks, and to the bus for its engine while its GATE output is unpatched. */
 	void writeOutputs(float dt) {
-		int n = clamp(settings.channels, 1, CHANNELS);
-		for (int c = 0; c < n; c++) {
-			Player::Channel& channel = player.channels[c];
-			outputs[VOCT_OUTPUT].setVoltage(channel.pitch, c);
-			outputs[GATE_OUTPUT].setVoltage(channel.gate && !channel.retrigger ? 10.f : 0.f, c);
-			outputs[VELOCITY_OUTPUT].setVoltage(10.f * channel.velocity, c);
-			channel.retrigger = false;
+		Downstream* bus = toRight(this);
+		for (int t = 0; t < TRACKS; t++) {
+			Lane& l = lanes[t];
+			int n = clamp(l.settings.channels, 1, CHANNELS);
+			bool patched = outputs[GATE_OUTPUT + t].isConnected();
+			Downstream::Lane* out = bus ? &bus->lanes[t] : nullptr;
+			if (out)
+				out->channels = patched ? 0 : n;
+			for (int c = 0; c < n; c++) {
+				Player::Channel& channel = l.player.channels[c];
+				bool gate = channel.gate && !channel.retrigger;
+				outputs[VOCT_OUTPUT + t].setVoltage(channel.pitch, c);
+				outputs[GATE_OUTPUT + t].setVoltage(gate ? 10.f : 0.f, c);
+				if (out) {
+					out->pitch[c] = channel.pitch;
+					out->velocity[c] = channel.velocity;
+					out->gate[c] = gate;
+				}
+				channel.retrigger = false;
+			}
+			outputs[VOCT_OUTPUT + t].setChannels(n);
+			outputs[GATE_OUTPUT + t].setChannels(n);
 		}
-		for (int o : {VOCT_OUTPUT, GATE_OUTPUT, VELOCITY_OUTPUT})
-			outputs[o].setChannels(n);
+		if (bus) {
+			bus->secondsPerBeat = 60.f / bpm();
+			bus->selected = track;
+			bus->trackMode = trackMode;
+			bus->page = page;
+			bus->pageRequests = pageRequests;
+			bus->synths = 0;
+		}
+		const Upstream* up = fromRight(this);
+		engines = up ? *up : Upstream();
+		outputs[LEFT_OUTPUT].setVoltage(engines.left);
+		outputs[RIGHT_OUTPUT].setVoltage(engines.right);
 		outputs[CLOCK_OUTPUT].setVoltage(clockOut.process(dt) ? 10.f : 0.f);
+		outputs[RUN_OUTPUT].setVoltage(playing && !armed ? 10.f : 0.f);
 		outputs[RESET_OUTPUT].setVoltage(resetOut.process(dt) ? 10.f : 0.f);
+		outputs[CONT_OUTPUT].setVoltage(contOut.process(dt) ? 10.f : 0.f);
 	}
 
 	void process(const ProcessArgs& args) override {
 		if (controlDivider.process())
 			handleControls(args.sampleTime * controlDivider.getDivision());
 		handleInputs();
+		handleTransport();
 		runClock(args.sampleTime);
 		writeOutputs(args.sampleTime);
 		if (lightDivider.process())
@@ -486,101 +703,159 @@ struct Sequencer : Module {
 	}
 
 	/** How many steps the held step's longest note reaches over, itself included. */
-	int heldSpan(int loop) const {
-		const Step& s = pattern.steps[held];
+	int heldSpan(int loop) {
+		const Step& s = lane().pattern.steps[held];
 		int span = 0;
 		for (int n = 0; n < s.count; n++) {
-			int ticks = s.notes[n].length ? s.notes[n].length : settings.noteLength;
+			int ticks = s.notes[n].length ? s.notes[n].length : lane().settings.noteLength;
 			span = std::max(span, ticks == DRONE ? loop : (ticks + TICKS - 1) / TICKS);
 		}
 		return std::min(span, loop);
 	}
 
-	void setStepLight(int i, float r, float g, float b) {
-		lights[STEP_LIGHT + 3 * i].setBrightness(r);
-		lights[STEP_LIGHT + 3 * i + 1].setBrightness(g);
-		lights[STEP_LIGHT + 3 * i + 2].setBrightness(b);
+	void setRgb(int light, NVGcolor c, float brightness) {
+		lights[light].setBrightness(c.r * brightness);
+		lights[light + 1].setBrightness(c.g * brightness);
+		lights[light + 2].setBrightness(c.b * brightness);
+	}
+
+	void setKeyLight(int param, NVGcolor c, float brightness) {
+		setRgb(keyLight(param), c, brightness);
+	}
+
+	static bool sounding(const Lane& l) {
+		return std::any_of(l.player.channels, l.player.channels + clamp(l.settings.channels, 1, CHANNELS), [](const Player::Channel& c) { return c.gate; });
+	}
+
+	/** A dial's value from 0 to 1 as its LED shows it, or -1 for a dial with nothing to do. */
+	float dialValue(int d) {
+		if (tempoMode)
+			return d < 2 ? paramQuantities[d == 0 ? TEMPO_PARAM : SWING_PARAM]->getScaledValue() : -1.f;
+		if (trackMode && d % 2 == 0)
+			return paramQuantities[(d == 0 ? LENGTH_PARAM : QUANTIZE_PARAM) + track]->getScaledValue();
+		return engines.dials[d];
 	}
 
 	void updateLights(float dt) {
 		blink = std::fmod(blink + dt, 0.5f);
 		bool on = blink < 0.25f;
-		int count = stepCount(), head = player.running ? player.playing() : -1;
+		Lane& l = lane();
+		int count = stepCount(), head = l.player.running ? l.player.playing() : -1;
 		int loop = held < count ? count : STEPS, span = held >= 0 ? heldSpan(loop) : 0;
+		bool beat = l.player.running && std::fmod(l.player.song(), 4.0) < 1.0;
 
-		// Steps: red for notes, white for the playhead (red while recording), blue for how long the held step's notes
-		// last. In track mode, white up to the step count; holding STOP there fills them red until the pattern clears.
+		// Steps: orange for notes, white for the playhead (red while recording), blue for how long the held step's
+		// notes last. In track mode, the tracks on the first eight, white for the one selected and orange while one
+		// plays; with SHIFT, white up to the step count. Holding STOP there fills them red until the pattern clears.
 		for (int i = 0; i < STEPS; i++) {
-			float r = 0.f, g = 0.f, b = 0.f;
-			if (clearing >= 0.f)
-				r = i < clearing / CLEAR_HOLD * STEPS ? 1.f : 0.f;
-			else if (trackMode)
-				r = g = b = i == count - 1 ? 1.f : i < count ? 0.15f : 0.f;
+			NVGcolor c = led::WHITE;
+			float b = 0.f;
+			if (clearing >= 0.f) {
+				c = led::RED;
+				b = i < clearing / CLEAR_HOLD * STEPS;
+			}
+			else if (trackMode && shifted)
+				b = i == count - 1 ? 1.f : i < count ? 0.15f : 0.f;
+			else if (trackMode) {
+				if (i == track)
+					b = 1.f;
+				else if (i < TRACKS && sounding(lanes[i])) {
+					c = NOTE_COLOR;
+					b = 0.6f;
+				}
+			}
 			else {
-				if (!pattern.steps[i].empty())
-					r = i < count ? 0.6f : 0.2f;
+				if (!l.pattern.steps[i].empty()) {
+					c = NOTE_COLOR;
+					b = i < count ? 0.6f : 0.2f;
+				}
 				int d = i - held;
 				if (d < 0)
 					d += loop;
-				if (held >= 0 && i < loop && d > 0 && d < span)
+				if (held >= 0 && i < loop && d > 0 && d < span) {
+					c = led::BLUE;
 					b = 0.8f;
-				if (i == held) {
-					if (r == 0.f)
-						r = g = b = 0.4f;
-					if (!on)
-						r = g = b = 0.f;
 				}
-				if (recording && !playing && i == cursor)
-					r = on ? 1.f : 0.f;
+				if (i == held)
+					b = on ? std::max(b, 0.4f) : 0.f;
+				if (recording && !playing && i == cursor) {
+					c = led::RED;
+					b = on;
+				}
 				if (i == head) {
-					r = 1.f;
-					g = b = recording ? 0.f : 1.f;
+					c = recording ? led::RED : led::WHITE;
+					b = 1.f;
 				}
 			}
-			setStepLight(i, r, g, b);
+			setKeyLight(STEP_PARAM + i, c, b);
 		}
 
-		// Keys: the notes sounding, brighter for the ones held or on the held step. In track mode, the step length.
-		float keys[KEYS] = {};
+		// Keys: the notes sounding, brighter for the ones held or on the held step. In track mode, the step length, in
+		// blue like the held step's length on the steps; in tempo mode, the value keys that type it.
+		float level[KEYS] = {};
 		auto light = [&](int pitch, float b) {
 			int k = pitch - keyPitch(0);
 			if (k >= 0 && k < KEYS)
-				keys[k] = std::max(keys[k], b);
+				level[k] = std::max(level[k], b);
 		};
+		NVGcolor keyColor = NOTE_COLOR;
 		if (trackMode) {
+			keyColor = led::BLUE;
 			for (int v = 0; v < 10; v++)
-				keys[valueKey(v)] = v == (int) params[STEP_LENGTH_PARAM].getValue() ? 1.f : 0.15f;
+				level[valueKey(v)] = v == (int) params[STEP_LENGTH_PARAM + track].getValue() ? 1.f : 0.15f;
+		}
+		else if (tempoMode) {
+			keyColor = led::WHITE;
+			for (int v = 0; v < 10; v++)
+				level[valueKey(v)] = 0.2f;
 		}
 		else {
-			for (const Player::Channel& c : player.channels)
+			for (const Player::Channel& c : l.player.channels)
 				if (c.gate)
 					light(60 + (int) std::round(c.pitch * 12.f), 0.4f);
 			for (const Live& n : live)
-				if (n.on)
+				if (n.on && n.lane == track)
 					light(n.pitch, 1.f);
 			if (held >= 0)
-				for (int n = 0; n < pattern.steps[held].count; n++)
-					light(pattern.steps[held].notes[n].pitch, 1.f);
+				for (int n = 0; n < l.pattern.steps[held].count; n++)
+					light(l.pattern.steps[held].notes[n].pitch, 1.f);
 		}
 		for (int k = 0; k < KEYS; k++)
-			lights[KEY_LIGHT + k].setBrightness(keys[k]);
+			setKeyLight(KEY_PARAM + k, keyColor, level[k]);
 		for (int c = 0; c < CHANNELS; c++) {
-			const Player::Channel& channel = player.channels[c];
-			lights[CHANNEL_LIGHT + c].setBrightness(channel.gate && c < settings.channels ? 0.2f + 0.8f * channel.velocity : 0.f);
+			const Player::Channel& channel = l.player.channels[c];
+			lights[CHANNEL_LIGHT + c].setBrightness(channel.gate && c < l.settings.channels ? 0.2f + 0.8f * channel.velocity : 0.f);
 		}
 
-		lights[OCTAVE_DOWN_LIGHT].setBrightness(erasing ? on : octave < 0 ? 0.2f - 0.2f * octave : 0.f);
-		lights[OCTAVE_UP_LIGHT].setBrightness(octave > 0 ? 0.2f + 0.2f * octave : 0.f);
-		lights[TRACK_LIGHT].setBrightness(trackMode);
-		lights[REC_LIGHT].setBrightness(recording);
-		lights[PLAY_LIGHT].setBrightness(playing && (!armed || on));
+		// The track keys: white for the one selected, orange while one plays. The page keys light in their colours,
+		// brightly for the page the selected track's engine is on.
+		for (int t = 0; t < TRACKS; t++) {
+			bool playingNotes = sounding(lanes[t]);
+			setKeyLight(SELECT_PARAM + t, t == track ? led::WHITE : NOTE_COLOR, t == track ? 1.f : playingNotes ? 0.8f : 0.f);
+		}
+		int shown = trackMode || tempoMode ? -1 : engines.page[track];
+		for (int p = 0; p < PAGES; p++)
+			setKeyLight(PAGE_PARAM + p, PAGE_COLORS[p], shown < 0 ? 0.f : p == shown ? 1.f : 0.12f);
+		for (int d = 0; d < 4; d++) {
+			float v = dialValue(d);
+			setRgb(DIAL_LIGHT + 3 * d, shown >= 0 ? PAGE_COLORS[shown] : led::WHITE, v < 0.f ? 0.f : 0.15f + 0.85f * v);
+		}
+
+		setKeyLight(TRACK_PARAM, led::WHITE, trackMode);
+		setKeyLight(REC_PARAM, led::RED, recording);
+		setKeyLight(PLAY_PARAM, led::GREEN, playing && (!armed || on));
+		setKeyLight(STOP_PARAM, led::RED, clearing >= 0.f);
+		setKeyLight(OCTAVE_DOWN_PARAM, erasing ? led::RED : led::WHITE, erasing ? on : octave < 0 ? 0.2f - 0.2f * octave : 0.f);
+		setKeyLight(OCTAVE_UP_PARAM, led::WHITE, octave > 0 ? 0.2f + 0.2f * octave : 0.f);
+		setKeyLight(SHIFT_PARAM, led::WHITE, shifted);
+		setKeyLight(METRONOME_PARAM, led::WHITE, tempoMode ? 1.f : beat ? 0.3f : 0.f);
 		lights[INTERNAL_LIGHT].setBrightness(!external);
 		lights[EXTERNAL_LIGHT].setBrightness(external);
-		shownTempo = !external ? params[TEMPO_PARAM].getValue() : pulsePeriod > 0.f ? 60.f / (pulsePeriod * ppqn) : -1.f;
+		shownTempo = !external || pulsePeriod > 0.f ? bpm() : -1.f;
 
 		for (int i = 0; i < INPUTS_LEN; i++)
 			meter(inputMeters[i], inputs[i], INPUT_LIGHT + 2 * i, dt);
-		for (int i = 0; i < OUTPUTS_LEN; i++)
+		for (int i = 0; i < METERED_OUTPUTS; i++)
 			meter(outputMeters[i], outputs[i], OUTPUT_LIGHT + 2 * i, dt);
 	}
 
@@ -595,16 +870,20 @@ struct Sequencer : Module {
 
 	void onReset(const ResetEvent& e) override {
 		Module::onReset(e);
-		pattern.clear();
+		for (int t = 0; t < TRACKS; t++) {
+			Lane& l = lanes[t];
+			l.pattern.clear();
+			l.player.panic();
+			l.settings.channels = TRACK_CHANNELS[t];
+			l.recorded = l.pattern;
+		}
 		memory.clear();
 		memory.add(Note());
-		player.panic();
-		playing = armed = recording = trackMode = erasing = chord = false;
+		playing = armed = resuming = recording = trackMode = tempoMode = shifted = erasing = chord = false;
 		held = -1;
 		cursor = octave = 0;
+		track = DRUM_TRACKS;
 		ppqn = 4;
-		settings.channels = 4;
-		recorded = pattern;
 	}
 
 	/** Buttons are saved like any param, so one held down while saving would come back stuck. */
@@ -614,9 +893,8 @@ struct Sequencer : Module {
 			params[i].setValue(0.f);
 	}
 
-	/** The pattern is a list of steps, each a list of notes: [pitch, velocity, micro timing, length]. */
-	json_t* dataToJson() override {
-		json_t* root = json_object();
+	/** A pattern is a list of steps, each a list of notes: [pitch, velocity, micro timing, length]. */
+	static json_t* patternToJson(const Pattern& pattern) {
 		json_t* steps = json_array();
 		for (const Step& s : pattern.steps) {
 			json_t* notes = json_array();
@@ -626,38 +904,67 @@ struct Sequencer : Module {
 			}
 			json_array_append_new(steps, notes);
 		}
-		json_object_set_new(root, "pattern", steps);
+		return steps;
+	}
+
+	static void patternFromJson(json_t* steps, Pattern& pattern) {
+		pattern.clear();
+		size_t i, j;
+		json_t *notes, *n;
+		json_array_foreach(steps, i, notes) {
+			if (i >= STEPS)
+				break;
+			json_array_foreach(notes, j, n) {
+				int pitch, velocity, offset, length;
+				if (json_unpack(n, "[iiii]", &pitch, &velocity, &offset, &length) == 0)
+					pattern.steps[i].add({int8_t(clamp(pitch, 0, 127)), uint8_t(clamp(velocity, 1, 127)),
+						int8_t(clamp(offset, MIN_OFFSET, MAX_OFFSET)), int16_t(clamp(length, 0, DRONE))});
+			}
+		}
+	}
+
+	json_t* dataToJson() override {
+		json_t* root = json_object();
+		json_t* tracks = json_array();
+		for (const Lane& l : lanes) {
+			json_t* t = json_object();
+			json_object_set_new(t, "pattern", patternToJson(l.pattern));
+			json_object_set_new(t, "channels", json_integer(l.settings.channels));
+			json_array_append_new(tracks, t);
+		}
+		json_object_set_new(root, "tracks", tracks);
+		json_object_set_new(root, "track", json_integer(track));
 		json_object_set_new(root, "octave", json_integer(octave));
 		json_object_set_new(root, "ppqn", json_integer(ppqn));
-		json_object_set_new(root, "channels", json_integer(settings.channels));
 		json_object_set_new(root, "longPressHolds", json_boolean(longPressHolds));
 		json_object_set_new(root, "ctrlClickHolds", json_boolean(ctrlClickHolds));
 		return root;
 	}
 
+	/** A patch from before the tracks has one pattern, which goes to the bass track. */
 	void dataFromJson(json_t* root) override {
-		if (json_t* steps = json_object_get(root, "pattern")) {
-			pattern.clear();
-			size_t i, j;
-			json_t *notes, *n;
-			json_array_foreach(steps, i, notes) {
-				if (i >= STEPS)
+		if (json_t* tracks = json_object_get(root, "tracks")) {
+			size_t i;
+			json_t* t;
+			json_array_foreach(tracks, i, t) {
+				if (i >= TRACKS)
 					break;
-				json_array_foreach(notes, j, n) {
-					int pitch, velocity, offset, length;
-					if (json_unpack(n, "[iiii]", &pitch, &velocity, &offset, &length) == 0)
-						pattern.steps[i].add({int8_t(clamp(pitch, 0, 127)), uint8_t(clamp(velocity, 1, 127)),
-							int8_t(clamp(offset, MIN_OFFSET, MAX_OFFSET)), int16_t(clamp(length, 0, DRONE))});
-				}
+				if (json_t* p = json_object_get(t, "pattern"))
+					patternFromJson(p, lanes[i].pattern);
+				if (json_t* c = json_object_get(t, "channels"))
+					lanes[i].settings.channels = clamp((int) json_integer_value(c), 1, CHANNELS);
 			}
 		}
-		recorded = pattern;
+		else if (json_t* p = json_object_get(root, "pattern"))
+			patternFromJson(p, lanes[DRUM_TRACKS].pattern);
+		for (Lane& l : lanes)
+			l.recorded = l.pattern;
+		if (json_t* j = json_object_get(root, "track"))
+			track = clamp((int) json_integer_value(j), 0, TRACKS - 1);
 		if (json_t* j = json_object_get(root, "octave"))
 			octave = clamp((int) json_integer_value(j), -3, 3);
 		if (json_t* j = json_object_get(root, "ppqn"))
 			ppqn = std::max((int) json_integer_value(j), 1);
-		if (json_t* j = json_object_get(root, "channels"))
-			settings.channels = clamp((int) json_integer_value(j), 1, CHANNELS);
 		if (json_t* j = json_object_get(root, "longPressHolds"))
 			longPressHolds = json_boolean_value(j);
 		if (json_t* j = json_object_get(root, "ctrlClickHolds"))
@@ -666,14 +973,15 @@ struct Sequencer : Module {
 };
 
 
-/** The pattern changes in the audio thread, from the keys and inputs, so the widget notices each change and saves it
+/** A pattern changes in the audio thread, from the keys and inputs, so the widget notices each change and saves it
 here for undo, rather than being told. */
 struct PatternChange : history::ModuleAction {
+	int lane;
 	Pattern before, after;
 
 	void set(const Pattern& p) {
 		if (Sequencer* m = dynamic_cast<Sequencer*>(APP->engine->getModule(moduleId)))
-			m->pattern = m->recorded = p;
+			m->lanes[lane].pattern = m->lanes[lane].recorded = p;
 	}
 	void undo() override {
 		set(before);
@@ -740,45 +1048,17 @@ struct NoteSlider : ui::Slider {
 	}
 };
 
-/** A step key: a click acts on release, so the module can tell it from a long press. A Ctrl+click is passed to the
-module directly and never moves the key, so it can't count as a click too. */
-struct StepKey : LitKey {
-	bool ctrlClicked = false;
-
-	StepKey() {
-		setGraphics("StepKey", {nvgRGB(0xff, 0x30, 0x30), nvgRGB(0x30, 0xff, 0x30), nvgRGB(0x30, 0x30, 0xff)});
-	}
-
+/** A step key, whose context menu edits its notes. */
+struct StepKey : RoundKey {
 	Sequencer* sequencer() {
 		return module ? static_cast<Sequencer*>(module) : nullptr;
-	}
-
-	void onButton(const ButtonEvent& e) override {
-		Sequencer* m = sequencer();
-		if (m && m->ctrlClickHolds && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT && (e.mods & RACK_MOD_MASK) == RACK_MOD_CTRL) {
-			m->ctrlClicked = paramId - Sequencer::STEP_PARAM;
-			ctrlClicked = true;
-			e.consume(this);
-			return;
-		}
-		LitKey::onButton(e);
-	}
-	void onDragStart(const DragStartEvent& e) override {
-		if (!ctrlClicked)
-			LitKey::onDragStart(e);
-	}
-	void onDragEnd(const DragEndEvent& e) override {
-		if (ctrlClicked)
-			ctrlClicked = false;
-		else
-			LitKey::onDragEnd(e);
 	}
 
 	void appendContextMenu(Menu* menu) override {
 		Sequencer* m = sequencer();
 		if (!m)
 			return;
-		Step* step = &m->pattern.steps[paramId - Sequencer::STEP_PARAM];
+		Step* step = &m->lane().pattern.steps[paramId - Sequencer::STEP_PARAM];
 		menu->addChild(new MenuSeparator);
 		if (step->empty()) {
 			menu->addChild(createMenuLabel("Empty step"));
@@ -851,6 +1131,23 @@ struct TempoDisplay : widget::Widget {
 };
 
 
+
+
+/** One of the four dials. It turns whatever the master says it does now, mostly a param of the selected track's
+engine, so its tooltip, undo and MIDI mapping are that param's own; with nothing to turn, it stands still. */
+struct MasterDial : SmallDial {
+	Sequencer* master = nullptr;
+	int dial = 0;
+
+	void step() override {
+		std::pair<Module*, int> target = master ? master->dialTarget(dial) : std::make_pair<Module*, int>(nullptr, -1);
+		module = target.first;
+		paramId = target.second;
+		SmallDial::step();
+	}
+};
+
+
 struct SequencerWidget : ModuleWidget {
 	SequencerWidget(Sequencer* module) {
 		setModule(module);
@@ -866,54 +1163,82 @@ struct SequencerWidget : ModuleWidget {
 		addChild(display);
 		addChild(createLightCentered<SmallSimpleLight<NoteLight>>(AT(INTERNAL_LIGHT)));
 		addChild(createLightCentered<SmallSimpleLight<NoteLight>>(AT(EXTERNAL_LIGHT)));
-		addParam(createParamCentered<SoftKnob>(AT(TEMPO_PARAM)));
-		addParam(createParamCentered<SoftKnob>(AT(SWING_PARAM)));
-		addParam(createParamCentered<SoftKnob>(AT(LENGTH_PARAM)));
-		addParam(createParamCentered<SoftKnob>(AT(QUANTIZE_PARAM)));
-
-		addParam(createParamCentered<FunctionKey>(AT(TRACK_PARAM)));
-		addParam(createParamCentered<RecKey>(AT(REC_PARAM)));
-		addParam(createParamCentered<PlayKey>(AT(PLAY_PARAM)));
-		addParam(createParamCentered<StopKey>(AT(STOP_PARAM)));
-		addChild(createLightCentered<SmallSimpleLight<ColorLight<4>>>(AT(TRACK_LIGHT)));
-		addChild(createLightCentered<SmallSimpleLight<ColorLight<3>>>(AT(REC_LIGHT)));
-		addChild(createLightCentered<SmallSimpleLight<ColorLight<0>>>(AT(PLAY_LIGHT)));
-
-		for (int i = 0; i < STEPS; i++)
-			addParam(createLightParamCentered<StepKey>(layout.center(string::f("STEP%d_PARAM", i)), module, Sequencer::STEP_PARAM + i, Sequencer::STEP_LIGHT + 3 * i));
-		addParam(createLightParamCentered<OctaveDownKey>(AT(OCTAVE_DOWN_PARAM), Sequencer::OCTAVE_DOWN_LIGHT));
-		addParam(createLightParamCentered<OctaveUpKey>(AT(OCTAVE_UP_PARAM), Sequencer::OCTAVE_UP_LIGHT));
 		for (int i = 0; i < CHANNELS; i++)
 			addChild(createLightCentered<DotLight<NoteLight>>(layout.center(string::f("CHANNEL%d_LIGHT", i)), module, Sequencer::CHANNEL_LIGHT + i));
-		for (int k = 0; k < KEYS; k++) {
-			math::Vec pos = layout.center(string::f("KEY%d_PARAM", k));
-			if (keySlot(k) >= 0)
-				addParam(createLightParamCentered<WhiteKey>(pos, module, Sequencer::KEY_PARAM + k, Sequencer::KEY_LIGHT + k));
-			else
-				addParam(createLightParamCentered<BlackKey>(pos, module, Sequencer::KEY_PARAM + k, Sequencer::KEY_LIGHT + k));
+
+		for (int d = 0; d < 4; d++) {
+			MasterDial* dial = createWidgetCentered<MasterDial>(layout.center(string::f("DIAL%d_WIDGET", d)));
+			dial->color(d);
+			dial->master = module;
+			dial->dial = d;
+			addParam(dial);
+			addChild(createLightCentered<SmallLight<RedGreenBlueLight>>(layout.center(string::f("DIAL%d_LIGHT", d)), module, Sequencer::DIAL_LIGHT + 3 * d));
 		}
 
-		static const char* const inputs[] = {"CLOCK", "RESET", "ADVANCE", "VOCT", "GATE", "VELOCITY"};
-		static const char* const outputs[] = {"CLOCK", "RESET", "VOCT", "GATE", "VELOCITY"};
+		// Every key, with the symbol its LED lights: an icon for the function and track keys, a number for the black
+		// keys, a dot for the rest.
+		static const char* const functions[][2] = {{"TRACK", "track"}, {"REC", "rec"}, {"PLAY", "play"}, {"STOP", "stop"},
+			{"OCTAVE_DOWN", "minus"}, {"OCTAVE_UP", "plus"}, {"SHIFT", "shift"}, {"METRONOME", "metronome"}};
+		static const char* const tracks[TRACKS] = {"kick", "snare", "perc", "sample", "bass", "lead", "arp", "chord"};
+		for (int p = Sequencer::TRACK_PARAM; p < Sequencer::PARAMS_LEN; p++) {
+			int light = Sequencer::keyLight(p);
+			std::string name, symbol = "dot";
+			RoundKey* key;
+			if (p >= Sequencer::PAGE_PARAM)
+				name = string::f("PAGE%d", p - Sequencer::PAGE_PARAM);
+			else if (p >= Sequencer::SELECT_PARAM) {
+				name = string::f("SELECT%d", p - Sequencer::SELECT_PARAM);
+				symbol = tracks[p - Sequencer::SELECT_PARAM];
+			}
+			else if (p >= Sequencer::KEY_PARAM) {
+				int k = p - Sequencer::KEY_PARAM;
+				name = string::f("KEY%d", k);
+				if (keyValue(k) >= 0)
+					symbol = std::to_string((keyValue(k) + 1) % 10);
+			}
+			else if (p >= Sequencer::STEP_PARAM)
+				name = string::f("STEP%d", p - Sequencer::STEP_PARAM);
+			else {
+				name = functions[p - Sequencer::TRACK_PARAM][0];
+				symbol = functions[p - Sequencer::TRACK_PARAM][1];
+			}
+			if (p >= Sequencer::STEP_PARAM && p < Sequencer::KEY_PARAM)
+				key = createLightParam<StepKey>(math::Vec(), module, p, light);
+			else
+				key = createLightParam<RoundKey>(math::Vec(), module, p, light);
+			key->setRing(layout.box(name + "_PARAM"), symbol);
+			addParam(key);
+		}
+
+		static const char* const inputs[] = {"CLOCK", "RUN", "RESET", "CONT", "ADVANCE", "VOCT", "GATE", "VELOCITY"};
+		static const char* const outputs[] = {"CLOCK", "RUN", "RESET", "CONT", "LEFT", "RIGHT"};
 		for (int i = 0; i < Sequencer::INPUTS_LEN; i++) {
 			addInput(createInputCentered<ThemedPJ301MPort>(layout.center(string::f("%s_INPUT", inputs[i])), module, i));
 			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(string::f("%s_INPUT_LIGHT", inputs[i])), module, Sequencer::INPUT_LIGHT + 2 * i));
 		}
-		for (int i = 0; i < Sequencer::OUTPUTS_LEN; i++) {
+		for (int i = 0; i < Sequencer::METERED_OUTPUTS; i++) {
 			addOutput(createOutputCentered<ThemedPJ301MPort>(layout.center(string::f("%s_OUTPUT", outputs[i])), module, i));
 			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(string::f("%s_OUTPUT_LIGHT", outputs[i])), module, Sequencer::OUTPUT_LIGHT + 2 * i));
+		}
+		for (int t = 0; t < TRACKS; t++) {
+			addOutput(createOutputCentered<ThemedPJ301MPort>(layout.center(string::f("VOCT%d_OUTPUT", t)), module, Sequencer::VOCT_OUTPUT + t));
+			addOutput(createOutputCentered<ThemedPJ301MPort>(layout.center(string::f("GATE%d_OUTPUT", t)), module, Sequencer::GATE_OUTPUT + t));
 		}
 #undef AT
 	}
 
 	void step() override {
 		Sequencer* m = getModule<Sequencer>();
-		if (m && !(m->pattern == m->recorded)) {
+		for (int t = 0; m && t < TRACKS; t++) {
+			Sequencer::Lane& l = m->lanes[t];
+			if (l.pattern == l.recorded)
+				continue;
 			PatternChange* h = new PatternChange;
-			h->name = "edit pattern";
+			h->name = string::f("edit track %d", t + 1);
 			h->moduleId = m->id;
-			h->before = m->recorded;
-			h->after = m->recorded = m->pattern;
+			h->lane = t;
+			h->before = l.recorded;
+			h->after = l.recorded = l.pattern;
 			APP->history->push(h);
 		}
 		ModuleWidget::step();
@@ -930,9 +1255,9 @@ struct SequencerWidget : ModuleWidget {
 		menu->addChild(createIndexSubmenuItem("Clock pulses per beat", ppqn,
 			[=]() { return std::find(std::begin(Track::PPQN), std::end(Track::PPQN), module->ppqn) - std::begin(Track::PPQN); },
 			[=](size_t i) { module->ppqn = Track::PPQN[i]; }));
-		menu->addChild(createIndexSubmenuItem("Polyphony channels", channels,
-			[=]() { return module->settings.channels - 1; },
-			[=](size_t i) { module->settings.channels = i + 1; }));
+		menu->addChild(createIndexSubmenuItem(string::f("Track %d polyphony", module->track + 1), channels,
+			[=]() { return module->lane().settings.channels - 1; },
+			[=](size_t i) { module->lane().settings.channels = i + 1; }));
 		menu->addChild(createBoolPtrMenuItem("Long-press toggles hold", "", &module->longPressHolds));
 		menu->addChild(createBoolPtrMenuItem(RACK_MOD_CTRL_NAME "-click toggles hold", "", &module->ctrlClickHolds));
 	}

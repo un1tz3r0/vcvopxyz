@@ -1,17 +1,22 @@
 /*
 Screen: the OP-Z's phone app as an expander. Placed to the right of an OP-Z engine, it shows a picture of the page the
-dials are on (the filter over a scope, the envelope with a dot per voice, the LFO, the mix, the track settings and
-quick slots), the value of the dial last touched, and every dial of every page. Click a dial on it to select it and
-its page, and drag anywhere on it to change the selected dial, like the app's touch pad.
+dials are on (the filter over a scope, the envelope with a dot per voice, the LFO, the mix, the track settings), the
+value of the dial last touched, and every dial of every page. Click a dial on it to select it and its page, and drag
+anywhere on it to change the selected dial, like the app's touch pad.
 */
 #include "SynthTrack.hpp"
 
 namespace opz {
 
-/** The module does nothing itself: its widget reads the track to its left. */
-struct Screen : Module {
+/** The module only passes the bus on; its widget reads the track to its left. */
+struct Screen : Module, BusNode {
 	Screen() {
 		config(0, 0, 0, 0);
+		attach(this);
+	}
+
+	void process(const ProcessArgs& args) override {
+		relay(this);
 	}
 
 	Track* track() {
@@ -402,7 +407,7 @@ struct Display : widget::OpaqueWidget {
 		stroke(vg, DIAL_COLORS[3], 0.4f);
 	}
 
-	/** The note style, the portamento as a slide between two notes, and the quick slots as the white keys show them. */
+	/** The note style, and the portamento as a slide between two notes. */
 	void drawTrackSettings(NVGcontext* vg, Track* track, math::Rect v) {
 		int style = (int) track->params[Track::STYLE_PARAM].getValue();
 		static const char* const styles[] = {"POLY", "MONO", "LEGATO"};
@@ -433,23 +438,6 @@ struct Display : widget::OpaqueWidget {
 				nvgLineTo(vg, x, y);
 		}
 		stroke(vg, DIAL_COLORS[3], 0.5f);
-
-		// The slots, two rows of seven like the white keys: filled ones glow faintly, the last one used brightly.
-		int filled = track->slotsFilled, current = track->slot;
-		float sw = (v.size.x - 6.f) / 7, sy = v.pos.y + 24.f;
-		for (int s = 0; s < SLOTS; s++) {
-			float x = v.pos.x + 3.f + sw * (s % 7), y = sy + 6.2f * (s / 7);
-			nvgBeginPath(vg);
-			nvgRoundedRect(vg, x + 0.4f, y, sw - 0.8f, 5.0f, 0.6f);
-			if (s == current)
-				nvgFillColor(vg, NOTE_COLOR);
-			else if ((filled >> s) & 1)
-				nvgFillColor(vg, nvgTransRGBAf(INK, 0.35f));
-			else
-				nvgFillColor(vg, FAINT);
-			nvgFill(vg);
-		}
-		text(vg, v.pos.x + 3.f, sy - 1.6f, 1.5f, DIM, NVG_ALIGN_LEFT, "QUICK SLOTS");
 	}
 
 	/** Every dial as an arc in its colour, a row per page, with the page the dials are on lit up. */
