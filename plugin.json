@@ -1,14 +1,14 @@
 {
   "slug": "vcvopxyz",
   "name": "vcvopxyz",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "license": "MIT",
   "brand": "un1tz3r0",
   "author": "Victor Condino",
   "authorEmail": "",
   "authorUrl": "https://github.com/un1tz3r0",
   "pluginUrl": "https://github.com/un1tz3r0/vcvopxyz",
-  "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#readme",
+  "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/README.md",
   "sourceUrl": "https://github.com/un1tz3r0/vcvopxyz",
   "donateUrl": "",
   "changelogUrl": "https://github.com/un1tz3r0/vcvopxyz/releases",
@@ -18,7 +18,7 @@
       "slug": "Sequencer",
       "name": "Sequencer",
       "description": "The OP-Z's synth track sequencer: 16 steps of up to four notes, micro timing, step count and length, live and step recording",
-      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#sequencer",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/sequencer.md",
       "tags": [
         "Sequencer",
         "Hardware clone",
@@ -30,7 +30,7 @@
       "slug": "Digital",
       "name": "Digital",
       "description": "The OP-Z's raw digital FM engine on a full synth track: filter, envelope, LFO, note styles and portamento",
-      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#digital",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/synth-tracks.md#the-engines",
       "tags": [
         "Synth voice",
         "Hardware clone",
@@ -45,7 +45,7 @@
       "slug": "Analog",
       "name": "Analog",
       "description": "The OP-Z's subtractive engine, saw, sub and noise through an enveloped low-pass, on a full synth track",
-      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#analog",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/synth-tracks.md#the-engines",
       "tags": [
         "Synth voice",
         "Hardware clone",
@@ -60,7 +60,7 @@
       "slug": "Cluster",
       "name": "Cluster",
       "description": "The OP-Z's clustered oscillators, seven detuned saws per note, on a full synth track",
-      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#cluster",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/synth-tracks.md#the-engines",
       "tags": [
         "Synth voice",
         "Hardware clone",
@@ -75,7 +75,7 @@
       "slug": "Organ",
       "name": "Organ",
       "description": "The OP-Z's FM organ, eight algorithms from drawbars to reeds and bells, on a full synth track",
-      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#organ",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/synth-tracks.md#the-engines",
       "tags": [
         "Synth voice",
         "Hardware clone",
@@ -90,7 +90,7 @@
       "slug": "Breakout",
       "name": "Breakout",
       "description": "An OP-Z synth track for a voice made of other modules: pitch, gate, envelope, LFO and dials out, the sound back in through its filter and envelope",
-      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#breakout",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/breakout.md",
       "tags": [
         "Synth voice",
         "Hardware clone",
@@ -105,7 +105,7 @@
       "slug": "Screen",
       "name": "Screen",
       "description": "The OP-Z's phone app as an expander: place it to the right of an OP-Z engine to see its pages, its sound and every dial, and to edit them by touch",
-      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#screen",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/screen.md",
       "tags": [
         "Visual",
         "Expander"

@@ -1,0 +1,115 @@
+# Design
+
+How vcvopxyz is put together, and why. For what the modules do, see the [manual](docs/README.md).
+
+## Goals
+
+- **Workflow and feel, not samples.** The modules copy the OP-Z's parameters, ranges, pages and quirks, and are
+  tuned by ear. Nothing is null-tested against recordings of the hardware.
+- **The OP-Z first, the OP-XY later.** The OP-Z's synth tracks and sequencer come first because each tests the
+  other; the OP-XY's sequencer and engines follow once the OP-Z's are complete.
+- **One row, no cables.** The hardware is one box, so the modules are one row: a master on the left and engines to
+  its right that find their tracks by position. Every connection the bus makes can still be patched by hand.
+- **Rack-native where the hardware can't translate.** Latched modes stand in for held keys, a CV input stands in for
+  the motion sensor, and every dial is an ordinary Rack param with undo, MIDI mapping and typed values.
+
+## The bus
+
+`src/opz/Bus.hpp`. The Sequencer sits at the left end of a row as the master. Every OP-Z module is a `BusNode`,
+which owns the double buffers Rack's expander messages flip between, and passes on what it gets, a sample later:
+
+- **Downstream** (rightward): each track's lane (poly pitch, velocity, gate and the sweep offsets), the tempo, the
+  selected track, track mode, page requests, and a count of the synth engines passed so far.
+- **Upstream** (leftward): the L/R mix of every engine whose own outputs are unpatched, each engine's page, and the
+  selected engine's four dial values for the master's dial LEDs.
+
+An engine takes its track from the count: the first synth engine plays track 5, the next track 6, and so on, and
+drum engines will count their own way from track 1. A track whose GATE output is patched sends an empty lane, which
+takes its engine off the bus without moving the others. A module from another plugin ends the bus, since
+`onBus` checks the plugin before casting. A Screen only relays.
+
+Expander messages are the only safe way to share state between modules that Rack may run on different threads, and
+the one-sample delay per module is inaudible for notes and dials. The master's dials carry no state of their own:
+each frame, a `MasterDial` widget re-points itself at the param it turns now, mostly one of the selected engine's,
+so a turn is that param's own, with its tooltip, undo and MIDI mapping.
+
+## Synth tracks
+
+`src/opz/SynthTrack.hpp`. `Track` holds what every synth track has and a Screen reads: the pages, the dial
+legend, the state published for the UI through a `TripleBuffer`. `SynthTrack<Engine>` adds the rest:
+
+- **Per sample:** the bus, the tempo, the notes, and each voice's envelope and engine voice. Voices are summed
+  before the filter: the filter has one cutoff for the whole track and is linear, so filtering the mix sounds the
+  same as filtering each voice, for a fraction of the work.
+- **At control rate:** the LFO and the dials after it (`Controls`). `modulated()` adds the LFO's offset when it
+  targets a dial, and the sweep component's offset, both as shares of the dial's travel, so the knob stays put while
+  the sound moves.
+- **After the voices:** the filter pair, level, FX sends, the soft limit (linear to ±5V, then bending towards ±10V)
+  and the pan, then the outputs, the bus mix and the meters.
+
+### Engines
+
+An engine supplies only its sound:
+
+```cpp
+struct Analog {
+	static constexpr const char* SLUG = "Analog";            // module slug, and its panel in res/
+	static void configSound(Module* m, int p1, int p2);     // configures its two sound dials
+	struct Voice {
+		// One sample, about ±1. `envelope` is the voice's amp envelope, 0 to 1, for an engine with a filter envelope.
+		float process(float frequency, float sampleTime, float p1, float p2, float envelope);
+	};
+};
+Model* modelAnalog = createModel<opz::SynthTrack<Analog>, opz::SynthTrackWidget<Analog>>(Analog::SLUG);
+```
+
+Breakout is the exception that proves the split: it derives from `SynthTrack<BreakoutSound>` and overrides
+`process` to send each stage out as CV and skip the stages whose outputs are patched, with `lfoInside` turning the
+LFO's inside targets off.
+
+## The sequencer
+
+`src/opz/Sequence.hpp` holds the pattern, the track settings and the `Player`, with no Rack in it, so it can be
+tested on its own. `src/opz/Sequencer.cpp` is the module: the face, the modes, recording, the clock and the bus.
+
+- **Time** is counted in sixteenths, the length of a step at step length ×1. A step is 24 ticks, for micro timing
+  and note lengths, so both stretch with the step length.
+- **Two clocks:** the player's clock always runs, for notes played live. Song time stands still while stopped, so
+  CONT carries on where it stopped and sweeps stay in phase with the pattern.
+- **One slot ahead:** the player schedules each step slot a slot early, which covers micro timing from −23 to +24
+  ticks and still starts every note exactly on time. A slot is one step's turn under the playhead; pulse and pulse
+  hold give a step several.
+- **Channels:** each track's poly outputs have a fixed number of channels. A new note takes the channel silent
+  longest, or failing that the one playing longest, and drops its gate for a sample so the engine retriggers.
+- **Undo:** the pattern changes in the audio thread, so the widget compares it with the last recorded copy every
+  frame and pushes a `PatternChange` when they differ. Every edit, from any source, is one undo step.
+- **Components** are a bitmask and a value per step. Most act in the player when it schedules a slot; sweeps go out
+  over the bus as offsets on the lane; the gate step jump advances the tracks that wait for triggers, as **ADV** does.
+
+## Panels
+
+Panels are generated, never drawn by hand. `res-src/panel.py` builds every panel from Python (`panelkit.py` for
+the kit, `synth_track.py` for the shared synth track layout, `opz.py` for the OP-Z's icons and keys) and writes
+light and dark SVGs into `res/`, with text converted to paths. A hidden `components` layer records where each widget
+goes, by its C++ enum name, and `PanelLayout` reads it back at runtime, so the panel is the only place the layout is
+written down.
+
+The OP-Z's artwork, name and logo stay off the panels: the icons are redrawn, and the modules are named by what they
+do, so the plugin can go to the VCV Library some day.
+
+## Choices made where the OP-Z guide is silent
+
+- **Note styles** use the OP-Z's names: mono retriggers on every change, legato doesn't, and neither restarts the
+  note-triggered LFO shapes on a slide. Portamento glides in mono and legato only.
+- **Digital's dials:** octave steps the modulator from −2 to +3 octaves from the note, and feedback is FM depth, up
+  to two cycles of phase deviation. Unconfirmed against the hardware.
+- **LFO:** synced speeds run 1/64 at the far left to 2/1 just left of centre, in the order the guide lists them, so
+  the dial is slowest in the middle. Depth is squared, for fine vibrato; at full depth the LFO sweeps a target's
+  whole range, or ±2 octaves of pitch. Free shapes are bipolar; note-triggered shapes are unipolar.
+- **Filter:** two 12 dB state-variable filters, Q from 0.5 to 10. The dial sweeps a low-pass up across its left half
+  and a high-pass up across its right.
+- **Step components:** values follow the guide's chart where its text survives; where it doesn't (multiply's broken
+  chord and quantize, sweep's long versions, the sparks' modes), the closest reading of the hardware's behaviour.
+  Ramps use C major until a tonality master exists.
+- **Untuned:** engine voicing, sweep depth (half a dial's travel) and glide times (up to a beat) are first guesses,
+  waiting to be tuned by ear.
