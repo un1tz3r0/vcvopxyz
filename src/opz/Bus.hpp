@@ -14,7 +14,6 @@ so on, as drum engines will take tracks 1 to 4.
 */
 namespace opz {
 
-constexpr int TRACKS = 8, DRUM_TRACKS = 4, SYNTH_TRACKS = TRACKS - DRUM_TRACKS;
 constexpr int PAGES = 4;              // pages of dials per track
 constexpr int NEXT_PAGE = -1;         // a page request that steps on to the next one
 
@@ -25,6 +24,7 @@ struct Downstream {
 		float pitch[CHANNELS] = {}, velocity[CHANNELS] = {};
 		bool gate[CHANNELS] = {};
 		float sweep[SWEEP_TARGETS] = {}; // how far the track's sweep moves its engine's dials, as a share of their travel
+		float level = 1.f;            // the mixer's gain for the track: its group's level, or 0 with its sound muted
 	};
 	Lane lanes[TRACKS];
 	float secondsPerBeat = 0.5f;

@@ -7,7 +7,8 @@
 
 The OP-Z's front panel, and the master of the OP-Z modules to its right. It keeps the tempo and the transport and
 sequences the OP-Z's first eight tracks: kick, snare, perc and sample, then bass, lead, arp and chord. Each track has
-16 steps of up to four notes, with micro timing, note lengths, step count and step length.
+16 steps of up to four notes, with micro timing, note lengths, step count and step length, and ten project slots
+that save it all.
 
 ## The chain
 
@@ -15,16 +16,18 @@ Place engines to its right, Screens beside them if you like, and they need no ca
 track 5 (bass), the next track 6, and so on; drum engines will take tracks 1 to 4 the same way. Each track has poly
 **V/OCT** and **GATE** outputs. While a track's GATE is unpatched, its notes, velocity and the tempo go to its engine
 over the bus instead. Engines with their own outputs unpatched are mixed into **L** and **R**. A module from another
-plugin ends the chain.
+plugin ends the chain. The engines have no dials of their own: the Sequencer's four turn them, and a Screen beside
+one shows every page.
 
 ## The face
 
 The face copies the OP-Z's, icons and all, scaled up to fill the panel above the jacks: four dials over 17 columns
 of round keys. **TRACK**, **REC** and **−**, **PLAY** and **+**, **STOP** and **SHIFT** on the left, the 16 steps along
 the top under the track icons, the black keys numbered 1 to 0 on the column lines, and the white keys along the
-bottom under the step component icons. Each key has an RGB LED that lights up its symbol. The tempo display and the
-selected track's channel dots sit where the OP-Z's speaker is. Under the face, a row of keys: **TEMPO**, the four
-pages, and a key per track over its jacks.
+bottom under the step component icons. Each key has an RGB LED that lights up its symbol. Top left are the OP-Z's
+four index keys, **PROJECT**, **MIXER**, **TEMPO** and **SCREEN**, and under them, where the OP-Z's speaker is, the
+display and the selected track's channel dots. Under the face, a row of keys: the four pages, and a key per track
+over its jacks.
 
 ## Tracks and dials
 
@@ -32,7 +35,8 @@ pages, and a key per track over its jacks.
   **TRACK** on and click one of steps 1 to 8. The keys, steps, dials and recording all work on the selected track.
 - **Dials:** they are the selected track's engine's dials, so turning one turns that parameter on the engine, with
   its own tooltip, undo and MIDI mapping. Click **SHIFT**, or one of the four page keys, to change the page; the
-  page keys and the dials' LEDs show it in its colour.
+  page keys and the dials' LEDs show it in its colour. In track, tempo and mixer mode they set those modes' own
+  values instead.
 
 ## Steps
 
@@ -55,11 +59,50 @@ pages, and a key per track over its jacks.
   the step length in blue (1 to 8 for ×1 to ×8, 9 for ×16, 0 for one step per trigger on **ADV**), and **−** and
   **+** shift the pattern a step. With SHIFT latched too, the steps set the step count. **STOP** lets go of the
   notes, and held for a second clears the track.
-- **Tempo mode:** click **TEMPO** to switch it on. The dials set the **tempo** (40 to 200 BPM) and **swing** (50%,
-  straight, to 75%, which delays every second sixteenth). Type a tempo on the black keys, three digits as on the
-  OP-Z, or tap one on the white keys. Its LED flashes on the beat.
-- **SHIFT:** a click turns the page. A long press or a Ctrl+click latches it, for track mode's step count and the
-  step components.
+- **SHIFT:** a click turns the page. A long press or a Ctrl+click latches it, for track mode's step count, the
+  step components and the mixer's sound mutes.
+
+The index keys stand in for the OP-Z's held keys the same way: click one to switch its mode on, again to switch it
+off. Switching one on switches the others, and track mode, off.
+
+- **Tempo:** the dials set the **tempo** (40 to 200 BPM), **swing** (50%, straight, to 75%, which delays every
+  second sixteenth), the **metronome sound** (click, wood, beep, cowbell, hat or blip, higher on each bar's first beat) and the
+  **metronome level** (off fully left; it plays into **L** and **R** while the sequencer plays). Type a tempo on the
+  black keys, three digits as on the OP-Z, tap one on the white keys, or nudge it a BPM with **−** and **+**. The
+  key's LED flashes on the beat.
+- **Mixer:** the dials set the **drum level** (tracks 1 to 4), the **synth level** (tracks 5 to 8), **punch** (a
+  compressor on **L** and **R** that gets louder as it squashes) and the **master level** of **L** and **R**. Steps
+  1 to 8 light for the tracks that play; click one to mute its track, which stops its gates. With SHIFT latched, a
+  click mutes only its sound, and the step lights red. The black keys pick one of ten mute groups, each its own set
+  of mutes, and the display shows which.
+- **Project:** the black keys are ten project slots, lit dimly for the ones in use and brightly for the one
+  playing. Click one to load it; the project left is saved to its own slot first, as on the OP-Z, unless
+  **Save the project on switching** is off in the context menu's **Projects**. A long press or a Ctrl+click saves
+  the project to that slot instead. An empty slot loads as a new, blank project. Holding **STOP** for a second clears
+  every track. The display shows the project's number.
+- **Screen:** hold it to see the battery, on the display and on the steps in green. There is no battery, so it runs
+  down slowly while playing and charges while stopped.
+
+## Projects
+
+A slot keeps everything that makes a song: each track's pattern, step components, step count and length, note length,
+quantize and polyphony, every dial of the engine playing it (the note style and portamento too), the tempo, swing
+and metronome, and the mixer's levels and ten mute groups. Loading one sets the engines' dials too, so each
+engine plays the sound it had. The slots save with the patch.
+
+The context menu's **Projects** moves them in and out of files:
+
+- **Save the slots to a file** and **Load the slots from a file** keep all ten in one JSON file, to carry them from
+  one patch to another.
+- **Export the slots to a projects folder** writes each slot in use as `project01.opz` to `project10.opz`, the
+  files the OP-Z shows in its disk mode's `projects` folder. **Import a projects folder** reads them back into the
+  slots of the same numbers, and **Import a project** reads one file into the current slot.
+
+The OP-Z's project files hold far more than a slot does: 16 patterns per track, chains, the drum tracks' samples and
+the FX, master and module tracks. An imported file is kept with the patch, and its export writes the slot over it, so
+whatever the Sequencer doesn't model goes back unchanged. Only the first pattern is read and written. The file
+format comes from the OP-Z community's reverse engineering, not from teenage engineering, and has not been tried on
+a real OP-Z yet, so copy your OP-Z's projects somewhere safe before you put exported files on it.
 
 ## Recording
 

@@ -26,6 +26,11 @@
       component's glide times (up to a beat now).
 - [ ] Jack LEDs on unpatched outputs stay dark, since an unpatched output has no channels to meter.
 - [ ] The RUN, RESET and CONT inputs aren't tested in a running Rack yet.
+- [ ] **OP-Z project files** are untested on a real OP-Z. Check an export loads, and work out the track settings'
+      bytes (step count, step length, note length, quantize) and swing, which are guesses.
+- [ ] Write the mixer's mutes into exported project files.
+- [ ] **16 patterns and chains** per project, read and written in project files, once the master module has them.
+      Only the pattern playing is read and written now.
 
 ## Waiting on Vic
 

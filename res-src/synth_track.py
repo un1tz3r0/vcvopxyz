@@ -1,66 +1,32 @@
 """The panel every OP-Z synth track shares, whatever its engine.
 
-Like the hardware, it has four dials whose meaning changes with the page: PAGE steps through the pages, and the
-legend below the dials says what each dial does on each one. Then the voice LEDs and the jacks; the notes come from a
-Sequencer, which has the keys. Only the names of the two sound dials change from engine to engine, except on
-Breakout, which is wider for the jacks that take its voice out to other modules and back."""
+The engines have no dials of their own: the Sequencer's four turn them, and a Screen beside one shows every page.
+So a track is a slim strip: a status screen (the Sequencer track it plays, its icon, a scope, its voices and level),
+an LED for when the Sequencer has it selected and one for when it plays, then its jacks. Breakout is wider, for the
+jacks that take its voice out to other modules and back."""
 from panelkit import HP, LABEL, Panel
 
 HEIGHT = 128.5
-LEFT = 7.0                    # the column of page controls
-LED_ROW, DIAL_ROW = 14.0, 24.5
-LEGEND = [37.5 + 5.0 * i for i in range(5)]
-JACK_ROWS = [69.5, 82.5, 97.5, 112.5]
-PITCH = 15.5                  # between the jacks' columns
-SMALL = 2.0                   # legend font size (mm)
+SCREEN_TOP, SCREEN_HEIGHT = 12.6, 30.0
+LED_ROW = 47.2
+PITCH = 12.5                  # between the jacks' columns
 LABELS = dict(VOCT='V/OCT', VELOCITY='VEL', LEFT='L', RIGHT='R', FX1='FX 1', FX2='FX 2', RETURN_L='RET L',
               RETURN_R='RET R', CV_VOCT='V/OCT', CV_GATE='GATE', CV_ENV='ENV', CV_LFO='LFO', CV_FILTER='FILTER',
               CV_RESONANCE='RESO', CV_FX1='FX 1', CV_FX2='FX 2', CV_P1='CV 1', CV_P2='CV 2')
 
 
-def dials_and_legend(slug, p1, p2, hp):
-    """The panel down to the legend: PAGE, the four dials and what they do on every page."""
+def status(slug, hp):
+    """The panel down to the LEDs: the title, the status screen, and SEL and NOTE under it."""
     width = hp * HP
     p = Panel(width, HEIGHT)
     p.rect(0, 0, width, HEIGHT, 0, 'panel')
     p.title(slug)
-    dials = [14.0 + (width - 17.0) * (i + 0.5) / 4 for i in range(4)]
-
-    # PAGE and its LED, level with the dials and theirs.
-    p.place('PAGE_LIGHT', LEFT, LED_ROW)
-    p.place('PAGE_PARAM', LEFT, DIAL_ROW)
-    p.text('PAGE', LEFT, DIAL_ROW + 5.6, size=SMALL)
-    for i, x in enumerate(dials):
-        p.place(f'DIAL{i}_LIGHT', x, LED_ROW)
-        p.place(f'DIAL{i}_WIDGET', x, DIAL_ROW)
-
-    # The legend: each page's name, which selects it, over a bar in its colour, then its four dials.
-    pages = [('SOUND', [p1, p2, 'FILTER', 'RESO']),
-             ('ENV', ['ATTACK', 'DECAY', 'SUSTAIN', 'RELEASE']),
-             ('LFO', ['AMOUNT', 'SPEED', 'TARGET', 'SHAPE']),
-             ('MIX', ['FX 1', 'FX 2', 'PAN', 'LEVEL']),
-             ('TRACK', ['', 'STYLE', '', 'GLIDE'])]
-    p.line(3.0, LEGEND[0] - 4.0, width - 3.0, LEGEND[0] - 4.0)
-    p.line(3.0, LEGEND[-1] - 2.5, width - 3.0, LEGEND[-1] - 2.5)
-    for i, (y, (page, names)) in enumerate(zip(LEGEND, pages)):
-        p.text(page, LEFT, y, size=SMALL)
-        p.place(f'SELECT{i}_LIGHT', LEFT - 3.5, y + 1.6, 7.0, 0.6)
-        p.place(f'SELECT{i}_PARAM', LEFT - 5.0, y - 2.0, 10.0, 4.3)
-        for x, name in zip(dials, names):
-            if name:
-                p.text(name, x, y, size=SMALL)
-    p.line(3.0, LEGEND[-1] + 3.5, width - 3.0, LEGEND[-1] + 3.5)
+    p.rect(2.2, SCREEN_TOP, width - 4.4, SCREEN_HEIGHT, 1.5, 'box')
+    p.place('STATUS_WIDGET', 2.2, SCREEN_TOP, width - 4.4, SCREEN_HEIGHT)
+    for x, name, label in [(width / 2 - 6.0, 'SELECTED', 'SEL'), (width / 2 + 6.0, 'ACTIVE', 'NOTE')]:
+        p.place(f'{name}_LIGHT', x - 3.0, LED_ROW)
+        p.text(label, x + 1.4, LED_ROW, size=2.2, anchor='middle')
     return p
-
-
-def voices(p, cx, cy, pitch, boxed=True):
-    """The voice LEDs, two rows of eight, in a box like the Sequencer's channel LEDs."""
-    w = 8 * pitch + 6.8
-    if boxed:
-        p.rect(cx - w / 2, cy - 7.5, w, 15.0, 1.5, 'box')
-    p.text('VOICES', cx, cy - 3.6, size=SMALL, fill='box_ink')
-    for i in range(16):
-        p.place(f'VOICE{i}_LIGHT', cx + pitch * (i % 8 - 3.5), cy + 1.2 + 3.6 * (i // 8))
 
 
 def jacks(p, rows, columns):
@@ -70,43 +36,41 @@ def jacks(p, rows, columns):
         for x, jack in zip(columns, row):
             if jack:
                 name, kind = jack
-                p.text(LABELS.get(name, name), x, y - 6.2, size=LABEL if len(LABELS.get(name, name)) < 6 else 2.2,
-                       fill='box_ink' if kind == 'OUTPUT' else 'ink')
+                label = LABELS.get(name, name)
+                p.text(label, x, y - 6.2, size=LABEL if len(label) < 5 else 2.2, fill='box_ink' if kind == 'OUTPUT' else 'ink')
                 p.place(f'{name}_{kind}', x, y)
                 p.place(f'{name}_LIGHT', x + 3.9, y - 3.9)
 
 
 def box(p, columns, first, last, top, bottom=None):
     """A dark box behind the outputs from column `first` to `last`, in the rows from `top` to `bottom`."""
-    p.rect(columns[first] - 6.9, top - 8.4, columns[last] - columns[first] + 13.8, (bottom or top) - top + 14.8, 2.0, 'box')
+    p.rect(columns[first] - 5.9, top - 8.4, columns[last] - columns[first] + 11.8, (bottom or top) - top + 14.8, 2.0, 'box')
 
 
-def synth_track_panel(slug, p1, p2):
-    p = dials_and_legend(slug, p1, p2, 16)
-    width = 16 * HP
-    voices(p, width / 2, 75.0, 4.4)
-    # Inputs in the top row; EXT, then the outputs in their dark box, in the bottom one.
-    columns = [width / 2 + PITCH * (i - 2) for i in range(5)]
-    _, _, top, bottom = JACK_ROWS
-    box(p, columns, 1, 4, bottom)
-    jacks(p, [(top, [(n, 'INPUT') for n in ['VOCT', 'GATE', 'VELOCITY', 'CLOCK', 'RESET']]),
-              (bottom, [('EXT', 'INPUT')] + [(n, 'OUTPUT') for n in ['LEFT', 'RIGHT', 'FX1', 'FX2']])], columns)
+def synth_track_panel(slug):
+    """6 HP: the inputs in three rows of two, the outputs in a dark box below."""
+    p = status(slug, 6)
+    columns = [3 * HP - PITCH / 2, 3 * HP + PITCH / 2]
+    inputs = [('VOCT', 'GATE'), ('VELOCITY', 'CLOCK'), ('RESET', 'EXT')]
+    outputs = [('LEFT', 'RIGHT'), ('FX1', 'FX2')]
+    rows = [59.5, 72.5, 85.5, 102.0, 115.0]
+    box(p, columns, 0, 1, rows[3], rows[4])
+    jacks(p, [(y, [(n, 'INPUT') for n in names]) for y, names in zip(rows, inputs)]
+          + [(y, [(n, 'OUTPUT') for n in names]) for y, names in zip(rows[3:], outputs)], columns)
     return p
 
 
 def breakout_panel():
-    """Four rows of six jacks: the voice going out, in one dark box with the voice LEDs; the notes coming in; the
-    return and the outputs."""
-    p = dials_and_legend('Breakout', 'CV 1', 'CV 2', 20)
-    width = 20 * HP
-    columns = [width / 2 + PITCH * (i - 2.5) for i in range(6)]
-    first, second, third, fourth = JACK_ROWS
-    box(p, columns, 0, 5, first, second)
-    box(p, columns, 2, 5, fourth)
-    voices(p, (columns[4] + columns[5]) / 2, second - 1.2, 3.4, boxed=False)
+    """12 HP: the voice going out in a dark box, the notes coming in with the return, then the outputs."""
+    p = status('Breakout', 12)
+    columns = [6 * HP + 11.2 * (i - 2) for i in range(5)]
+    rows = [59.5, 72.5, 87.5, 100.5, 115.0]
+    box(p, columns, 0, 4, rows[0], rows[1])
+    box(p, columns, 1, 4, rows[4])
     out = lambda *names: [(n, 'OUTPUT') for n in names]
-    jacks(p, [(first, out('CV_VOCT', 'CV_GATE', 'CV_ENV', 'CV_LFO', 'CV_P1', 'CV_P2')),
-              (second, out('CV_FILTER', 'CV_RESONANCE', 'CV_FX1', 'CV_FX2')),
-              (third, [(n, 'INPUT') for n in ['VOCT', 'GATE', 'VELOCITY', 'CLOCK', 'RESET', 'EXT']]),
-              (fourth, [('RETURN_L', 'INPUT'), ('RETURN_R', 'INPUT')] + out('LEFT', 'RIGHT', 'FX1', 'FX2'))], columns)
+    jacks(p, [(rows[0], out('CV_VOCT', 'CV_GATE', 'CV_ENV', 'CV_LFO', 'CV_P1')),
+              (rows[1], out('CV_FILTER', 'CV_RESONANCE', 'CV_FX1', 'CV_FX2', 'CV_P2')),
+              (rows[2], [(n, 'INPUT') for n in ['VOCT', 'GATE', 'VELOCITY', 'CLOCK', 'RESET']]),
+              (rows[3], [('EXT', 'INPUT'), ('RETURN_L', 'INPUT'), ('RETURN_R', 'INPUT')]),
+              (rows[4], [None] + out('LEFT', 'RIGHT', 'FX1', 'FX2'))], columns)
     return p

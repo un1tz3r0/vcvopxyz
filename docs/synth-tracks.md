@@ -5,14 +5,29 @@ sound. Everything on this page but the last section applies to each of them; onl
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/digital-screen-dark.png">
-  <img alt="Digital with a Screen beside it" src="assets/digital-screen-light.png" width="400">
+  <img alt="Digital with a Screen beside it" src="assets/digital-screen-light.png" width="270">
 </picture>
+
+## The panel
+
+A synth track is a slim strip with no dials, since the [Sequencer](sequencer.md)'s turn them. At the top, a status
+screen:
+
+- **Track:** the Sequencer track it plays, as a big digit beside that track's icon and name. The icon lights white
+  while the Sequencer has the track selected. Off the bus the digit is a dash, and the track plays from its inputs.
+- **Scope:** its output, the last 1024 samples at ±5V.
+- **Voices:** a dot per voice, as bright as its envelope.
+- **Level:** its output in twelve segments, green, then yellow, then red as it goes into the soft limit.
+
+Under it, **SEL** lights while the Sequencer has its track selected, and **NOTE** glows while it plays. Its jacks fill
+the rest.
 
 ## Pages
 
-Like the hardware, a track has four dials whose job changes with the page. **PAGE** steps through the pages, and the
-LED above each dial flashes the new page's colour, then glows in it as bright as the dial is turned. The legend under
-the dials says what each one does on each page, and clicking a page's name there jumps straight to it.
+Like the hardware, a track has four dials whose job changes with the page. They are the Sequencer's four while its
+track is selected there: click **SHIFT** or one of the Sequencer's page keys to turn the page, and its dial LEDs
+glow in the page's colour. A [Screen](screen.md) beside the track shows every dial on every page and turns them by
+touch, with or without a Sequencer.
 
 | Page | Dials |
 | --- | --- |
@@ -22,15 +37,15 @@ the dials says what each one does on each page, and clicking a page's name there
 | Mix (red) | **FX 1** and **FX 2** (sends to the outputs of the same names), **Pan**, **Level** |
 | Track (white) | **Style** (poly, mono, legato) on the second dial, **Glide** (mono and legato) on the fourth |
 
-**Track mode:** click **TRACK** in the legend to switch it on, and again to switch it off. It stands in for holding
-the hardware's track key, and the dials set the track settings.
+**Track mode:** the Sequencer's **TRACK**, or the track row on a Screen, puts the note style and portamento on the
+dials. It stands in for holding the hardware's track key.
 
 ## Playing
 
 - **Notes:** an engine has no keys of its own. Placed to the right of a [Sequencer](sequencer.md), it plays its
   track from there, follows its tempo, and its dials are the Sequencer's while its track is selected. A patched
   **GATE** plays the poly **V/OCT**, **GATE** and **VEL** inputs instead, and a patched **CLOCK** sets the LFO's
-  tempo. The 16 dots under **VOICES** light with each voice's envelope.
+  tempo.
 - **Note styles:** poly plays each gate channel on its own voice. Mono plays the newest held note and retriggers
   the envelope on every change, including falling back to an older note. Legato does the same without retriggering.
 - **LFO targets:** the two sound dials, filter, resonance, attack, pitch (up to ±2 octaves), pan and level.
@@ -52,7 +67,7 @@ the hardware's track key, and the dials set the track settings.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/engines-dark.png">
-  <img alt="Analog, Cluster and Organ" src="assets/engines-light.png" width="650">
+  <img alt="Analog, Cluster and Organ" src="assets/engines-light.png" width="270">
 </picture>
 
 | Engine | Sound | First dial | Second dial |

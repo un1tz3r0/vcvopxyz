@@ -1,5 +1,5 @@
 """The sequencer: the OP-Z's face, and the master of the engines to its right. Under the face, the keys that select a
-track, a page and the tempo mode, then two rows of jacks: the transport in and out, the notes to record, each
+track and a page, then two rows of jacks: the transport in and out, the notes to record, each
 track's V/OCT and GATE, and the engines' mix.
 
 The face copies the OP-Z's: four dials over 17 columns of round keys. TRACK, REC and −, PLAY and +, STOP and SHIFT
@@ -57,14 +57,18 @@ def face(f):
     for k in (9, 11, 13, 15):
         f.line(COLUMN * k, 0, COLUMN * k, CELL)
 
-    # Where the OP-Z's speaker is: the tempo display, INT and EXT, and the channel LEDs as its grille.
-    f.art.append(f'<rect x="3" y="3.5" width="31" height="{num(CELL - 7.0)}" rx="1.5" fill="{{box}}"/>')
-    f.place('TEMPO_WIDGET', 4.0, 4.5, 20.5, CELL - 9.0)
-    for y, name, label in [(CELL / 2 - 2.6, 'INTERNAL', 'INT'), (CELL / 2 + 2.6, 'EXTERNAL', 'EXT')]:
-        f.place(f'{name}_LIGHT', 26.6, y)
-        f.art.append(f'<path d="{NUNITO.path(label, 30.6, y, 1.8)}" fill="{{box_ink}}"/>')
+    # Along the top, the four index keys: project, mixer, tempo and screen. Under them, where the OP-Z's speaker is,
+    # the tempo display, INT and EXT, and the channel LEDs as its grille.
+    for i, (name, symbol) in enumerate([('PROJECT', 'project'), ('MIXER', 'mixer'), ('METRONOME', 'metronome'), ('SCREEN', 'screen')]):
+        round_key(f, f'{name}_PARAM', 9.0 + 13.5 * i, 3.6, symbol)
+    display = 7.6                            # the display box's top
+    f.art.append(f'<rect x="3" y="{num(display)}" width="25" height="{num(CELL - display - 1.4)}" rx="1.2" fill="{{box}}"/>')
+    f.place('TEMPO_WIDGET', 3.6, display + 0.6, 14.4, CELL - display - 2.6)
+    for y, name, label in [(display + 2.6, 'INTERNAL', 'INT'), (CELL - 4.0, 'EXTERNAL', 'EXT')]:
+        f.place(f'{name}_LIGHT', 20.0, y)
+        f.art.append(f'<path d="{NUNITO.path(label, 24.2, y, 1.8)}" fill="{{box_ink}}"/>')
     for i in range(16):
-        f.place(f'CHANNEL{i}_LIGHT', 47.7 + 2.6 * (i % 8 - 3.5), CELL / 2 + 2.6 * (i // 8 - 0.5))
+        f.place(f'CHANNEL{i}_LIGHT', 44.4 + 2.6 * (i % 8 - 3.5), (display + CELL - 1.4) / 2 + 2.6 * (i // 8 - 0.5))
 
     # The dials, each with its LED in the corner of its cell.
     for d in range(4):
@@ -111,11 +115,10 @@ def panel():
     transport, notes, tracks, mix = columns
     top, bottom = JACK_ROWS
 
-    # The keys over them: TEMPO over the clock, the four pages, and a key per track over its jacks.
-    key(p, 'METRONOME_PARAM', transport[0], KEY_ROW, 'metronome')
-    span = notes[-1] - transport[1]
+    # The keys over them: the four pages over the transport and the notes, and a key per track over its jacks.
+    span = notes[-1] - transport[0]
     for i in range(4):
-        key(p, f'PAGE{i}_PARAM', transport[1] + span * (i + 0.5) / 4, KEY_ROW)
+        key(p, f'PAGE{i}_PARAM', transport[0] + span * (i + 0.5) / 4, KEY_ROW)
     for t, cx in enumerate(tracks):
         key(p, f'SELECT{t}_PARAM', cx, KEY_ROW, TRACKS[t])
 

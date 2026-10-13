@@ -13,11 +13,12 @@ Not affiliated with or endorsed by teenage engineering. OP-Z and OP-XY are their
 
 ## Modules
 
-A Sequencer on the left is the master; engines to its right pick up its tracks with no cables.
+A Sequencer on the left is the master; engines to its right pick up its tracks with no cables, and its dials turn
+theirs.
 
 | Module | |
 | --- | --- |
-| [Sequencer](docs/sequencer.md) | The OP-Z's front panel: tempo, transport, eight tracks of 16 steps with micro timing, recording, and [step components](docs/step-components.md). |
+| [Sequencer](docs/sequencer.md) | The OP-Z's front panel: tempo, transport, eight tracks of 16 steps with micro timing, recording, [step components](docs/step-components.md), a mixer, and ten project slots that import and export the OP-Z's project files. |
 | [Digital](docs/synth-tracks.md#the-engines) | Two binary-counter oscillators reading a 4-bit sine, one frequency-modulating the other. |
 | [Analog](docs/synth-tracks.md#the-engines) | Saw, sub and noise through an enveloped low-pass. |
 | [Cluster](docs/synth-tracks.md#the-engines) | Seven detuned saws per note. |

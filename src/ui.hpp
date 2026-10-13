@@ -112,14 +112,6 @@ inline const NVGcolor DIAL_COLORS[] = {nvgRGB(0x8f, 0xcc, 0x88), nvgRGB(0x8d, 0x
 /** Held notes, on the keys and the voice LEDs. */
 inline const NVGcolor NOTE_COLOR = nvgRGB(0xff, 0x7a, 0x2e);
 
-/** One LED that takes the colour of whichever page it shows. */
-struct PageLight : GrayModuleLightWidget {
-	PageLight() {
-		for (NVGcolor c : PAGE_COLORS)
-			addBaseColor(c);
-	}
-};
-
 struct NoteLight : GrayModuleLightWidget {
 	NoteLight() {
 		addBaseColor(NOTE_COLOR);
@@ -142,88 +134,16 @@ struct DotLight : TBase {
 	}
 };
 
-/** A light painted over whatever is under it, rather than added to it as Rack's LEDs are, so it shows up on light
-surfaces too: the inside of a key, or a bar of colour. `off` is drawn while it's dark. */
-struct SolidLight : app::ModuleLightWidget {
-	float radius = 0.f;
-	NVGcolor off = nvgRGBA(0, 0, 0, 0);
-
-	void fill(const DrawArgs& args, NVGcolor c) {
-		if (c.a <= 0.f)
-			return;
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, 0, 0, box.size.x, box.size.y, radius);
-		nvgFillColor(args.vg, c);
-		nvgFill(args.vg);
+/** OP-Z style dial, two of the Sequencer's key columns across: a big flat cap in one of the four dial colours (0 to 3:
+green, blue, yellow, red), with a dimple that shows where it points. */
+struct SmallDial : RoundKnob {
+	SmallDial() {
+		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/SmallDial.svg")));
 	}
-	void draw(const DrawArgs& args) override {
-		fill(args, off);
-	}
-	void drawLayer(const DrawArgs& args, int layer) override {
-		if (layer == 1)
-			fill(args, color);
-		Widget::drawLayer(args, layer);
-	}
-};
-
-/** The bar under a page's name in the legend: faint in the page's colour, bright while that page is showing. */
-struct PageBar : SolidLight {
-	void setPage(int page) {
-		addBaseColor(PAGE_COLORS[page]);
-		off = nvgTransRGBAf(PAGE_COLORS[page], 0.25f);
-	}
-};
-
-inline std::shared_ptr<window::Svg> dialCap(int color, const std::string& kind = "Dial") {
-	static const char* const colors[] = {"green", "blue", "yellow", "red"};
-	return Svg::load(asset::plugin(pluginInstance, "res/components/" + kind + "_bg-" + colors[color] + ".svg"));
-}
-
-/** OP-Z style dial: a big flat cap in one of the four dial colours (0 to 3: green, blue, yellow, red), with a dimple
-that shows where it points. */
-struct Dial : RoundKnob {
-	std::string kind;
-
-	explicit Dial(std::string kind = "Dial") : kind(kind) {
-		setSvg(Svg::load(asset::plugin(pluginInstance, "res/components/" + kind + ".svg")));
-	}
-	Dial* color(int c) {
-		bg->setSvg(dialCap(c, kind));
+	SmallDial* color(int c) {
+		static const char* const colors[] = {"green", "blue", "yellow", "red"};
+		bg->setSvg(Svg::load(asset::plugin(pluginInstance, string::f("res/components/SmallDial_bg-%s.svg", colors[c]))));
 		return this;
-	}
-};
-
-/** A dial that fills two of the Sequencer's key columns. */
-struct SmallDial : Dial {
-	SmallDial() : Dial("SmallDial") {}
-};
-
-/** A dial with nothing to do on this page: it looks like the others, but doesn't turn. */
-struct IdleDial : widget::Widget {
-	explicit IdleDial(int color, const std::string& kind = "Dial") {
-		widget::SvgWidget* cap = new widget::SvgWidget;
-		cap->setSvg(dialCap(color, kind));
-		app::CircularShadow* shadow = new app::CircularShadow;
-		shadow->box = math::Rect(math::Vec(0, cap->box.size.y * 0.1f), cap->box.size);
-		box.size = cap->box.size;
-		addChild(shadow);
-		addChild(cap);
-	}
-};
-
-/** Momentary key with a little travel. Its two frames are res/components/<name>_0.svg (up) and _1.svg (down). */
-struct Key : app::SvgSwitch {
-	void setGraphics(const std::string& name) {
-		momentary = true;
-		shadow->opacity = 0.f;
-		addFrame(Svg::load(asset::plugin(pluginInstance, "res/components/" + name + "_0.svg")));
-		addFrame(Svg::load(asset::plugin(pluginInstance, "res/components/" + name + "_1.svg")));
-	}
-};
-
-struct PageKey : Key {
-	PageKey() {
-		setGraphics("PageKey");
 	}
 };
 
@@ -408,3 +328,62 @@ struct HotSpot : app::Switch {
 	}
 };
 
+
+
+/** A seven-segment LED display's characters, drawn as pointed bars and slanted a little. A mask's bits are the
+segments from the top clockwise, then the middle one. */
+struct SevenSegment {
+	static constexpr uint8_t DIGITS[10] = {0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f};
+
+	/** Digits, '-', '_', ' ', and the letters a seven-segment display can make. */
+	static uint8_t mask(char c) {
+		if (c >= '0' && c <= '9')
+			return DIGITS[c - '0'];
+		switch (c) {
+			case 'A': return 0x77; case 'b': return 0x7c; case 'C': return 0x39; case 'c': return 0x58;
+			case 'd': return 0x5e; case 'E': return 0x79; case 'F': return 0x71; case 'G': return 0x3d;
+			case 'H': return 0x76; case 'h': return 0x74; case 'i': return 0x10; case 'J': return 0x1e;
+			case 'L': return 0x38; case 'n': return 0x54; case 'o': return 0x5c; case 'P': return 0x73;
+			case 'r': return 0x50; case 'S': return 0x6d; case 't': return 0x78; case 'U': return 0x3e;
+			case 'u': return 0x1c; case 'y': return 0x6e; case '-': return 0x40; case '_': return 0x08;
+			default: return 0;
+		}
+	}
+
+	/** A segment from p to q, pointed at both ends and pulled back from them a little. */
+	static void segment(NVGcontext* vg, math::Vec p, math::Vec q, float r) {
+		math::Vec u = q.minus(p).normalize(), n(-u.y, u.x);
+		float gap = 0.25f * r;
+		nvgMoveTo(vg, VEC_ARGS(p.plus(u.mult(gap))));
+		nvgLineTo(vg, VEC_ARGS(p.plus(u.mult(gap + r)).plus(n.mult(r))));
+		nvgLineTo(vg, VEC_ARGS(q.minus(u.mult(gap + r)).plus(n.mult(r))));
+		nvgLineTo(vg, VEC_ARGS(q.minus(u.mult(gap))));
+		nvgLineTo(vg, VEC_ARGS(q.minus(u.mult(gap + r)).minus(n.mult(r))));
+		nvgLineTo(vg, VEC_ARGS(p.plus(u.mult(gap + r)).minus(n.mult(r))));
+		nvgClosePath(vg);
+	}
+
+	/** `text`'s lit segments, or for the ghosts behind them its unlit ones, spread across `box`. */
+	static void draw(NVGcontext* vg, math::Rect box, const std::string& text, bool lit, NVGcolor color) {
+		int n = std::max((int) text.size(), 1);
+		float h = box.size.y, w = 0.5f * h, r = 0.06f * h;
+		float gap = n > 1 ? (box.size.x - n * w) / (n - 1) : 0.f, left = n > 1 ? box.pos.x : box.pos.x + (box.size.x - w) / 2;
+		nvgSave(vg);
+		nvgTranslate(vg, 0, box.pos.y + h / 2);
+		nvgSkewX(vg, -0.1f);
+		nvgTranslate(vg, 0, -(box.pos.y + h / 2));
+		nvgBeginPath(vg);
+		for (int d = 0; d < (int) text.size(); d++) {
+			uint8_t m = mask(text[d]);
+			float x = left + d * (w + gap), y = box.pos.y;
+			const math::Vec corners[6] = {{x, y}, {x + w, y}, {x + w, y + h / 2}, {x + w, y + h}, {x, y + h}, {x, y + h / 2}};
+			const int ends[7][2] = {{0, 1}, {1, 2}, {2, 3}, {3, 4}, {5, 4}, {0, 5}, {5, 2}};
+			for (int s = 0; s < 7; s++)
+				if (bool(m & (1 << s)) == lit)
+					segment(vg, corners[ends[s][0]], corners[ends[s][1]], r);
+		}
+		nvgFillColor(vg, color);
+		nvgFill(vg);
+		nvgRestore(vg);
+	}
+};

@@ -3,16 +3,105 @@
 
 namespace opz {
 
-/** Every synth track's panel has the same layout, so one widget serves them all.
+inline const char* const TRACK_SYMBOLS[TRACKS] = {"kick", "snare", "perc", "sample", "bass", "lead", "arp", "chord"};
+inline const char* const TRACK_LABELS[TRACKS] = {"KICK", "SNARE", "PERC", "SAMPLE", "BASS", "LEAD", "ARP", "CHORD"};
 
-Each dial position holds a dial for every page, and only the page showing is visible. So each parameter keeps a
-dial of its own, with its tooltip, MIDI mapping and undo, while the panel looks like the hardware's four. */
+/** A synth track's status screen: the Sequencer track it plays, as a big digit and that track's icon, then a scope of
+its output, a dot per voice and a level bar. Off the bus it shows a dash and plays from its inputs. */
+struct TrackStatus : widget::Widget {
+	Track* module = nullptr;
+	std::shared_ptr<window::Svg> symbols[TRACKS];
+
+	TrackStatus() {
+		for (int t = 0; t < TRACKS; t++)
+			symbols[t] = Svg::load(asset::plugin(pluginInstance, string::f("res/components/symbols/%s.svg", TRACK_SYMBOLS[t])));
+	}
+
+	void step() override {
+		// The UI thread is the buffer's one consumer, shared with a Screen beside the track.
+		if (module)
+			module->snapshots.update();
+		widget::Widget::step();
+	}
+
+	void draw(const DrawArgs& args) override {
+		int track = module ? module->busTrack : -1;
+		math::Rect digit(mm2px(math::Vec(2.f, 2.2f)), mm2px(math::Vec(6.f, 11.f)));
+		SevenSegment::draw(args.vg, digit, "8", false, nvgTransRGBAf(NOTE_COLOR, 0.08f));
+		if (track < 0)
+			return;
+		NVGcolor ink = nvgRGB(0xc9, 0xc8, 0xc4);
+		nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+		nvgFontSize(args.vg, mm2px(2.2f));
+		nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_BASELINE);
+		nvgFillColor(args.vg, ink);
+		nvgText(args.vg, box.size.x - mm2px(1.6f), mm2px(13.2f), TRACK_LABELS[track], nullptr);
+	}
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		if (layer != 1)
+			return Widget::drawLayer(args, layer);
+		if (!module)
+			return Widget::drawLayer(args, layer);
+		int track = module->busTrack;
+		bool on = track >= 0;
+		const Track::Snapshot& snapshot = module->snapshots.read();
+		math::Rect digit(mm2px(math::Vec(2.f, 2.2f)), mm2px(math::Vec(6.f, 11.f)));
+		SevenSegment::draw(args.vg, digit, on ? std::to_string(track + 1) : "-", true, NOTE_COLOR);
+
+		// The track's icon, lit white while the Sequencer has it selected.
+		if (on && symbols[track]->handle) {
+			math::Vec size = symbols[track]->getSize();
+			float side = mm2px(11.f), scale = side / size.x;
+			nvgSave(args.vg);
+			nvgTranslate(args.vg, box.size.x - mm2px(5.4f) - side / 2, mm2px(6.6f) - side / 2);
+			nvgScale(args.vg, scale, scale);
+			nvgTint(args.vg, module->selected ? nvgRGB(0xff, 0xff, 0xff) : nvgRGB(0x8a, 0x89, 0x86));
+			window::svgDraw(args.vg, symbols[track]->handle);
+			nvgRestore(args.vg);
+		}
+
+		// The scope: the output's last 1024 samples, ±5V full height.
+		float x0 = mm2px(1.6f), w = box.size.x - 2 * x0, mid = mm2px(19.6f), h = mm2px(4.f);
+		nvgBeginPath(args.vg);
+		for (int i = 0; i < Track::Snapshot::SCOPE; i += 4) {
+			float x = x0 + w * i / (Track::Snapshot::SCOPE - 1), y = mid - h * clamp(snapshot.scope[i] / 5.f, -1.f, 1.f);
+			i ? nvgLineTo(args.vg, x, y) : nvgMoveTo(args.vg, x, y);
+		}
+		nvgStrokeColor(args.vg, nvgRGB(0x3b, 0xe0, 0x7a));
+		nvgStrokeWidth(args.vg, 1.f);
+		nvgStroke(args.vg);
+
+		// A dot per voice, as bright as its envelope.
+		float pitch = w / PORT_MAX_CHANNELS;
+		for (int i = 0; i < PORT_MAX_CHANNELS; i++) {
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x0 + pitch * (i + 0.5f), mm2px(25.6f), mm2px(0.5f));
+			nvgFillColor(args.vg, snapshot.levels[i] > 0.f ? nvgTransRGBAf(NOTE_COLOR, 0.2f + 0.8f * snapshot.levels[i]) : nvgRGB(0x2c, 0x2d, 0x30));
+			nvgFill(args.vg);
+		}
+
+		// The level, in twelve segments: green, then yellow, then red into the soft limit.
+		float level = std::fmax(snapshot.outputs[Track::LEFT_OUTPUT], snapshot.outputs[Track::RIGHT_OUTPUT]);
+		float segment = w / 12;
+		for (int i = 0; i < 12; i++) {
+			bool lit = level > (i + 0.5f) / 12;
+			NVGcolor c = i < 8 ? nvgRGB(0x3b, 0xe0, 0x7a) : i < 11 ? nvgRGB(0xff, 0xc8, 0x2e) : nvgRGB(0xff, 0x4d, 0x3d);
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, x0 + segment * i + 0.5f, mm2px(27.9f), segment - 1.f, mm2px(1.2f));
+			nvgFillColor(args.vg, lit ? c : nvgTransRGBAf(c, 0.12f));
+			nvgFill(args.vg);
+		}
+		Widget::drawLayer(args, layer);
+	}
+};
+
+
+/** Every synth track's panel: the status screen, SEL and NOTE, and whichever jacks the panel has. The track's dials
+are the Sequencer's, or a Screen's beside it. */
 template <class Engine>
 struct SynthTrackWidget : ModuleWidget {
 	using Track = SynthTrack<Engine>;
-
-	app::ParamWidget* dials[PAGES_LEN][4] = {};
-	IdleDial* idle[4] = {};
 
 	SynthTrackWidget(Track* module) {
 		setModule(module);
@@ -21,36 +110,12 @@ struct SynthTrackWidget : ModuleWidget {
 		addScrews(this);
 
 		PanelLayout layout(panel);
-#define AT(ID) layout.center(#ID), module, Track::ID
-		addParam(createParamCentered<PageKey>(AT(PAGE_PARAM)));
-		addChild(createLightCentered<SmallSimpleLight<PageLight>>(AT(PAGE_LIGHT)));
-		for (int d = 0; d < 4; d++) {
-			math::Vec pos = layout.center(string::f("DIAL%d_WIDGET", d));
-			idle[d] = new IdleDial(d);
-			idle[d]->box.pos = pos.minus(idle[d]->box.size.div(2));
-			addChild(idle[d]);
-			for (int p = 0; p < PAGES_LEN; p++) {
-				if (Track::DIALS[p][d] >= 0) {
-					dials[p][d] = createParamCentered<Dial>(pos, module, Track::DIALS[p][d])->color(d);
-					addParam(dials[p][d]);
-				}
-			}
-			addChild(createLightCentered<SmallSimpleLight<PageLight>>(layout.center(string::f("DIAL%d_LIGHT", d)), module, Track::DIAL_LIGHT + PAGES_LEN * d));
-		}
-		for (int i = 0; i < PAGES_LEN; i++) {
-			math::Rect bar = layout.box(string::f("SELECT%d_LIGHT", i));
-			PageBar* light = createLight<PageBar>(bar.pos, module, Track::SELECT_LIGHT + i);
-			light->box.size = bar.size;
-			light->setPage(i);
-			addChild(light);
-			math::Rect spot = layout.box(string::f("SELECT%d_PARAM", i));
-			HotSpot* button = createParam<HotSpot>(spot.pos, module, Track::SELECT_PARAM + i);
-			button->box.size = spot.size;
-			addParam(button);
-		}
-
-		for (int i = 0; i < PORT_MAX_CHANNELS; i++)
-			addChild(createLightCentered<DotLight<NoteLight>>(layout.center(string::f("VOICE%d_LIGHT", i)), module, Track::VOICE_LIGHT + i));
+		TrackStatus* status = createWidget<TrackStatus>(math::Vec());
+		status->box = layout.box("STATUS_WIDGET");
+		status->module = module;
+		addChild(status);
+		addChild(createLightCentered<SmallLight<WhiteLight>>(layout.center("SELECTED_LIGHT"), module, Track::SELECTED_LIGHT));
+		addChild(createLightCentered<SmallLight<NoteLight>>(layout.center("ACTIVE_LIGHT"), module, Track::ACTIVE_LIGHT));
 
 		// Only the jacks the panel has: Breakout's return and CV outputs are on its panel alone.
 		static const char* const inputs[] = {"VOCT", "GATE", "VELOCITY", "CLOCK", "RESET", "EXT", "RETURN_L", "RETURN_R"};
@@ -70,19 +135,6 @@ struct SynthTrackWidget : ModuleWidget {
 			addOutput(createOutputCentered<ThemedPJ301MPort>(layout.center(name + "_OUTPUT"), module, i));
 			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(name + "_LIGHT"), module, Track::OUTPUT_LIGHT + 2 * i));
 		}
-#undef AT
-	}
-
-	void step() override {
-		Track* track = getModule<Track>();
-		int shown = track ? track->shownPage() : PAGE_SOUND;
-		for (int d = 0; d < 4; d++) {
-			for (int p = 0; p < PAGES_LEN; p++)
-				if (dials[p][d])
-					dials[p][d]->setVisible(p == shown);
-			idle[d]->setVisible(!dials[shown][d]);
-		}
-		ModuleWidget::step();
 	}
 
 	void appendContextMenu(Menu* menu) override {
