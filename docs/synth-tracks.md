@@ -46,6 +46,8 @@ dials. It stands in for holding the hardware's track key.
   track from there, follows its tempo, and its dials are the Sequencer's while its track is selected. A patched
   **GATE** plays the poly **V/OCT**, **GATE** and **VEL** inputs instead, and a patched **CLOCK** sets the LFO's
   tempo.
+- **Parameter locks:** a Sequencer step can lock any of the track's dials while it plays. The engine plays the
+  locked value and the dial stays where it is; see [the Sequencer](sequencer.md#steps).
 - **Note styles:** poly plays each gate channel on its own voice. Mono plays the newest held note and retriggers
   the envelope on every change, including falling back to an older note. Legato does the same without retriggering.
 - **LFO targets:** the two sound dials, filter, resonance, attack, pitch (up to ±2 octaves), pan and level.

@@ -25,6 +25,8 @@ struct Downstream {
 		bool gate[CHANNELS] = {};
 		float sweep[SWEEP_TARGETS] = {}; // how far the track's sweep moves its engine's dials, as a share of their travel
 		float level = 1.f;            // the mixer's gain for the track: its group's level, or 0 with its sound muted
+		uint32_t locks = 0;           // the dials the step playing locks, by the synth track's param
+		float lockValues[SOUND_PARAMS] = {}; // where it holds them, 0 to 1 over each one's travel
 	};
 	Lane lanes[TRACKS];
 	float secondsPerBeat = 0.5f;

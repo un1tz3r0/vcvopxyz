@@ -18,8 +18,8 @@ How vcvopxyz is put together, and why. For what the modules do, see the [manual]
 `src/opz/Bus.hpp`. The Sequencer sits at the left end of a row as the master. Every OP-Z module is a `BusNode`,
 which owns the double buffers Rack's expander messages flip between, and passes on what it gets, a sample later:
 
-- **Downstream** (rightward): each track's lane (poly pitch, velocity, gate, the sweep offsets, and its level from
-  the mixer, 0 while its sound is muted), the tempo, the selected track, track mode, page requests, and a count of
+- **Downstream** (rightward): each track's lane (poly pitch, velocity, gate, the sweep offsets, the parameter
+  locks of the step playing, and its level from the mixer, 0 while its sound is muted), the tempo, the selected track, track mode, page requests, and a count of
   the synth engines passed so far.
 - **Upstream** (leftward): the L/R mix of every engine whose own outputs are unpatched, each engine's page, and the
   selected engine's four dial values for the master's dial LEDs.
@@ -90,6 +90,12 @@ tested on its own. `src/opz/Sequencer.cpp` is the module: the face, the modes, r
   frame and pushes a `PatternChange` when they differ. Every edit, from any source, is one undo step.
 - **Components** are a bitmask and a value per step. Most act in the player when it schedules a slot; sweeps go out
   over the bus as offsets on the lane; the gate step jump advances the tracks that wait for triggers, as **ADV** does.
+- **Parameter locks** are a mask and a value per step over the synth track's 18 params, each a share of the
+  dial's travel, as the OP-Z's files keep them. The player marks each slot with whether the step's parameter spark
+  let its locks through, and the lane carries the locks of the slot under the playhead; the engine reads every dial
+  through `value()`, which takes a lock over the param, so the knob stays put. While a step is held, the dials
+  turn four `LockQuantity` params on the Sequencer that read and write the held step's locks on the UI thread, as
+  the step menu does, and the pattern's undo records the change.
 - **Modes:** TRACK and the three latching index keys (PROJECT, MIXER, TEMPO) are one mode at a time, each taking
   over the dials, steps and value keys. The dials re-point at the mode's own params, so the mixer's levels and the
   metronome are ordinary params with undo and MIDI mapping too.
@@ -107,8 +113,7 @@ load at its next control step.
 
 The .opz layout comes from the OP-Z community's reverse engineering (see the comment at the top of `Project.hpp`).
 Each imported file is kept, in the patch's storage folder, so an export writes the slot over the file it came from
-and keeps everything the Sequencer doesn't model: the other 15 patterns, chains, parameter locks, the drum and FX
-tracks.
+and keeps everything the Sequencer doesn't model: the other 15 patterns, chains, the drum and FX tracks.
 
 ## Panels
 
@@ -142,6 +147,9 @@ do, so the plugin can go to the VCV Library some day.
 - **Mixer:** levels are squared, as the engines' are, and only reach the engines over the bus; a mute stops a
   track's gates, outputs included, while a sound mute (SHIFT) only zeroes its level. Punch is a compressor with
   make-up gain, and the master level comes after it.
+- **Parameter locks** hold for the step's slots, from its slot's start until the next step's, rather than for its
+  notes' lengths, so a lock on an empty step changes the notes still sounding from earlier ones. A held step plays
+  its locks only while stopped; while playing, the playhead's step does.
 - **Metronome:** the OP-Z counts in a voice that can't be copied, so its sounds are six synthesized clicks.
 - **Project files:** what the track settings' bytes mean is unknown, so the step count, step length, note length,
   quantize, swing and the length of notes are written in the most likely reading and read back the same way.

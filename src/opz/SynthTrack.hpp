@@ -119,6 +119,7 @@ struct Track : Module, BusNode {
 		STYLE_PARAM, GLIDE_PARAM,
 		PARAMS_LEN
 	};
+	static_assert(PARAMS_LEN == SOUND_PARAMS, "a step locks any of a synth track's params");
 	// The return and the CV outputs belong to Breakout, which hands the voice to other modules; the other engines'
 	// panels leave them out.
 	enum InputId { VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, CLOCK_INPUT, RESET_INPUT, EXT_INPUT, RETURN_L_INPUT, RETURN_R_INPUT, INPUTS_LEN };
@@ -305,7 +306,7 @@ struct SynthTrack : Track {
 		v.velocity = velocity;
 		v.envelope.gate(true);
 		v.started = ++notesPlayed;
-		if (Lfo::triggered((int) params[LFO_SHAPE_PARAM].getValue()))
+		if (Lfo::triggered((int) value(LFO_SHAPE_PARAM)))
 			lfo.restart();
 	}
 
@@ -350,7 +351,7 @@ struct SynthTrack : Track {
 	}
 
 	void handleNotes(const Downstream::Lane* from) {
-		int newStyle = (int) params[STYLE_PARAM].getValue();
+		int newStyle = (int) value(STYLE_PARAM);
 		if (newStyle != style || bool(from) != bool(lane)) {
 			style = newStyle;
 			releaseAll();
@@ -432,10 +433,19 @@ struct SynthTrack : Track {
 		}
 	}
 
+	/** A dial's value: where the step playing locks it, or where it's turned. */
+	float value(int param) {
+		if (!lane || !(lane->locks >> param & 1))
+			return params[param].getValue();
+		const ParamQuantity* q = paramQuantities[param];
+		float v = math::rescale(lane->lockValues[param], 0.f, 1.f, q->minValue, q->maxValue);
+		return q->snapEnabled ? std::round(v) : v;
+	}
+
 	/** A dial's value, moved by the LFO when the LFO targets it, and by a sweep. Both are shares of its travel. */
 	float modulated(int param, int target, float lfoOffset, float sweep = 0.f) {
-		float v = params[param].getValue();
-		float offset = sweep + ((int) params[LFO_TARGET_PARAM].getValue() == target ? lfoOffset : 0.f);
+		float v = value(param);
+		float offset = sweep + ((int) value(LFO_TARGET_PARAM) == target ? lfoOffset : 0.f);
 		if (offset == 0.f)
 			return v;
 		ParamQuantity* q = paramQuantities[param];
@@ -444,14 +454,14 @@ struct SynthTrack : Track {
 	}
 
 	void updateControls(float sampleTime) {
-		float amount = params[LFO_AMOUNT_PARAM].getValue();
+		float amount = value(LFO_AMOUNT_PARAM);
 		// Squaring the amount leaves room for subtle settings, like vibrato, near the middle.
 		Controls& c = controls;
 		c.lfo = amount * std::fabs(amount) * lfoValue;
 		float offset = lfoInside ? c.lfo : 0.f;
 		c.p1 = modulated(P1_PARAM, TARGET_P1, offset, sweep[SWEEP_SYNTH]);
 		c.p2 = modulated(P2_PARAM, TARGET_P2, offset);
-		c.pitch = (int) params[LFO_TARGET_PARAM].getValue() == TARGET_PITCH ? 2.f * offset : 0.f;
+		c.pitch = (int) value(LFO_TARGET_PARAM) == TARGET_PITCH ? 2.f * offset : 0.f;
 
 		// The resonance belongs to whichever filter the dial is moving; the other one stays flat.
 		c.filter = modulated(FILTER_PARAM, TARGET_FILTER, offset, sweep[SWEEP_FILTER]);
@@ -460,19 +470,19 @@ struct SynthTrack : Track {
 		lowpass.tune(lowpassHz(c.filter) * sampleTime, c.filter < 0.5f ? damping : float(M_SQRT2));
 		highpass.tune(highpassHz(c.filter) * sampleTime, c.filter > 0.5f ? damping : float(M_SQRT2));
 
-		c.envelope.set(envelopeTime(modulated(ATTACK_PARAM, TARGET_ATTACK, offset)), envelopeTime(params[DECAY_PARAM].getValue()),
-			params[SUSTAIN_PARAM].getValue(), envelopeTime(params[RELEASE_PARAM].getValue()), sampleTime);
-		float glide = params[GLIDE_PARAM].getValue();
+		c.envelope.set(envelopeTime(modulated(ATTACK_PARAM, TARGET_ATTACK, offset)), envelopeTime(value(DECAY_PARAM)),
+			value(SUSTAIN_PARAM), envelopeTime(value(RELEASE_PARAM)), sampleTime);
+		float glide = value(GLIDE_PARAM);
 		c.glide = glide > 0.f ? xyz::Adsr::Shape::coefficient(glide * glide, sampleTime) : 1.f;
-		c.lfoCycles = sampleTime / Lfo::period(params[LFO_SPEED_PARAM].getValue(), secondsPerBeat);
+		c.lfoCycles = sampleTime / Lfo::period(value(LFO_SPEED_PARAM), secondsPerBeat);
 
 		float pan = modulated(PAN_PARAM, TARGET_PAN, offset, sweep[SWEEP_PAN]);
 		float level = modulated(LEVEL_PARAM, TARGET_VOLUME, offset);
 		c.left = std::cos((pan + 1.f) * float(M_PI) / 4.f);
 		c.right = std::sin((pan + 1.f) * float(M_PI) / 4.f);
 		c.gain = 5.f * level * level * (lane ? lane->level : 1.f);
-		c.fx1 = params[FX1_PARAM].getValue() * params[FX1_PARAM].getValue();
-		c.fx2 = params[FX2_PARAM].getValue() * params[FX2_PARAM].getValue();
+		c.fx1 = value(FX1_PARAM) * value(FX1_PARAM);
+		c.fx2 = value(FX2_PARAM) * value(FX2_PARAM);
 	}
 
 	/** Everything up to the voices, once a sample: the bus, the tempo, the keys, the notes, the LFO and the dials. */
@@ -488,7 +498,7 @@ struct SynthTrack : Track {
 		handleNotes(fromBus ? &bus->lanes[busTrack] : nullptr);
 		for (int i = 0; i < SWEEP_TARGETS; i++)
 			sweep[i] = lane ? lane->sweep[i] : 0.f;
-		lfoValue = lfo.process((int) params[LFO_SHAPE_PARAM].getValue(), controls.lfoCycles, inputs[EXT_INPUT].getVoltage() / 5.f);
+		lfoValue = lfo.process((int) value(LFO_SHAPE_PARAM), controls.lfoCycles, inputs[EXT_INPUT].getVoltage() / 5.f);
 		if (control)
 			updateControls(args.sampleTime);
 

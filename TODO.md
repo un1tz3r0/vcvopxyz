@@ -2,8 +2,6 @@
 
 ## Next
 
-- [ ] **Parameter locks over the bus:** per-step dial values for the engine playing each track, held like a step
-      and set by turning a dial. Brings the **parameter spark** component to life.
 - [ ] **Drum engines** for tracks 1 to 4 (kick, snare, perc, sample), with the drum note styles: retrig, mono, gate,
       loop.
 
@@ -29,6 +27,9 @@
 - [ ] **OP-Z project files** are untested on a real OP-Z. Check an export loads, and work out the track settings'
       bytes (step count, step length, note length, quantize) and swing, which are guesses.
 - [ ] Write the mixer's mutes into exported project files.
+- [ ] **Recording dial moves as parameter locks** while recording live, if the OP-Z does: the dials only lock a
+      held step now.
+- [ ] A Screen shows the dials' own values, not the locks of the step playing.
 - [ ] **16 patterns and chains** per project, read and written in project files, once the master module has them.
       Only the pattern playing is read and written now.
 

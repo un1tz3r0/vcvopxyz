@@ -48,6 +48,11 @@ over its jacks.
   a step is held, the keys add and remove its notes, clicking another step makes its notes last to the end of that
   one (blue LEDs show how far; the same click again restores the default length), and **−** and **+** nudge it a
   tick, 1/24 of a step. Picking a step up while stopped plays it, and copies it for pasting.
+- **Parameter locks:** while a step is held, the dials are that step's. Turn one to lock its parameter on the step,
+  and its LED turns white; double-click it to let go of the lock. A lock holds the engine's dial where you set it
+  for as long as the step is under the playhead, then lets it go back to where the dial is, so the knob itself
+  never moves. Any dial on any of the four pages can be locked, and a held step plays with its locks while stopped,
+  so you can hear them. A step's tooltip counts its locks, and its context menu clears them.
 - **Step components:** with **SHIFT** latched, steps take components that bend how they play. See
   [Step components](step-components.md).
 
@@ -85,9 +90,9 @@ off. Switching one on switches the others, and track mode, off.
 
 ## Projects
 
-A slot keeps everything that makes a song: each track's pattern, step components, step count and length, note length,
-quantize and polyphony, every dial of the engine playing it (the note style and portamento too), the tempo, swing
-and metronome, and the mixer's levels and ten mute groups. Loading one sets the engines' dials too, so each
+A slot keeps everything that makes a song: each track's pattern, step components, parameter locks, step count and
+length, note length, quantize and polyphony, every dial of the engine playing it (the note style and portamento too),
+the tempo, swing and metronome, and the mixer's levels and ten mute groups. Loading one sets the engines' dials too, so each
 engine plays the sound it had. The slots save with the patch.
 
 The context menu's **Projects** moves them in and out of files:
