@@ -8,5 +8,9 @@ extern Plugin* pluginInstance;
 
 // One Model per module. Each is defined at the bottom of its module's .cpp and registered in plugin.cpp.
 extern Model* modelDigital;
+extern Model* modelAnalog;
+extern Model* modelCluster;
+extern Model* modelOrgan;
+extern Model* modelBreakout;
 extern Model* modelScreen;
 extern Model* modelSequencer;

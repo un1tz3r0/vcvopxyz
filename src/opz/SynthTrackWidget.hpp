@@ -52,15 +52,23 @@ struct SynthTrackWidget : ModuleWidget {
 		for (int i = 0; i < PORT_MAX_CHANNELS; i++)
 			addChild(createLightCentered<DotLight<NoteLight>>(layout.center(string::f("VOICE%d_LIGHT", i)), module, Track::VOICE_LIGHT + i));
 
-		static const char* const inputs[] = {"VOCT", "GATE", "VELOCITY", "CLOCK", "RESET", "EXT"};
-		static const char* const outputs[] = {"LEFT", "RIGHT", "FX1", "FX2"};
+		// Only the jacks the panel has: Breakout's return and CV outputs are on its panel alone.
+		static const char* const inputs[] = {"VOCT", "GATE", "VELOCITY", "CLOCK", "RESET", "EXT", "RETURN_L", "RETURN_R"};
+		static const char* const outputs[] = {"LEFT", "RIGHT", "FX1", "FX2",
+			"CV_VOCT", "CV_GATE", "CV_ENV", "CV_LFO", "CV_P1", "CV_P2", "CV_FILTER", "CV_RESONANCE", "CV_FX1", "CV_FX2"};
 		for (int i = 0; i < Track::INPUTS_LEN; i++) {
-			addInput(createInputCentered<ThemedPJ301MPort>(layout.center(string::f("%s_INPUT", inputs[i])), module, i));
-			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(string::f("%s_LIGHT", inputs[i])), module, Track::INPUT_LIGHT + 2 * i));
+			std::string name = inputs[i];
+			if (!layout.has(name + "_INPUT"))
+				continue;
+			addInput(createInputCentered<ThemedPJ301MPort>(layout.center(name + "_INPUT"), module, i));
+			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(name + "_LIGHT"), module, Track::INPUT_LIGHT + 2 * i));
 		}
 		for (int i = 0; i < Track::OUTPUTS_LEN; i++) {
-			addOutput(createOutputCentered<ThemedPJ301MPort>(layout.center(string::f("%s_OUTPUT", outputs[i])), module, i));
-			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(string::f("%s_LIGHT", outputs[i])), module, Track::OUTPUT_LIGHT + 2 * i));
+			std::string name = outputs[i];
+			if (!layout.has(name + "_OUTPUT"))
+				continue;
+			addOutput(createOutputCentered<ThemedPJ301MPort>(layout.center(name + "_OUTPUT"), module, i));
+			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(name + "_LIGHT"), module, Track::OUTPUT_LIGHT + 2 * i));
 		}
 #undef AT
 	}

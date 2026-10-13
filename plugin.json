@@ -1,7 +1,7 @@
 {
   "slug": "vcvopxyz",
   "name": "vcvopxyz",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "license": "MIT",
   "brand": "un1tz3r0",
   "author": "Victor Condino",
@@ -35,6 +35,66 @@
         "Synth voice",
         "Hardware clone",
         "Digital",
+        "Polyphonic",
+        "Filter",
+        "Envelope generator",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "Analog",
+      "name": "Analog",
+      "description": "The OP-Z's subtractive engine, saw, sub and noise through an enveloped low-pass, on a full synth track",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#analog",
+      "tags": [
+        "Synth voice",
+        "Hardware clone",
+        "Oscillator",
+        "Polyphonic",
+        "Filter",
+        "Envelope generator",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "Cluster",
+      "name": "Cluster",
+      "description": "The OP-Z's clustered oscillators, seven detuned saws per note, on a full synth track",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#cluster",
+      "tags": [
+        "Synth voice",
+        "Hardware clone",
+        "Oscillator",
+        "Polyphonic",
+        "Filter",
+        "Envelope generator",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "Organ",
+      "name": "Organ",
+      "description": "The OP-Z's FM organ, eight algorithms from drawbars to reeds and bells, on a full synth track",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#organ",
+      "tags": [
+        "Synth voice",
+        "Hardware clone",
+        "Oscillator",
+        "Polyphonic",
+        "Filter",
+        "Envelope generator",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "Breakout",
+      "name": "Breakout",
+      "description": "An OP-Z synth track for a voice made of other modules: pitch, gate, envelope, LFO and dials out, the sound back in through its filter and envelope",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz#breakout",
+      "tags": [
+        "Synth voice",
+        "Hardware clone",
+        "Utility",
         "Polyphonic",
         "Filter",
         "Envelope generator",

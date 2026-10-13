@@ -108,6 +108,31 @@ the dials says what each one does on each page, and clicking a page's name there
 - **Jack LEDs:** green follows each jack's level. Red means clipping: above 10V on an input, or into the soft
   limiter that keeps the outputs within ±10V.
 
+### Analog, Cluster, Organ
+
+Three more OP-Z engines on the same synth track as Digital: the same pages, legend, jacks, note styles and bus. Only
+the two sound dials differ.
+
+| Engine | Sound | First dial | Second dial |
+| --- | --- | --- | --- |
+| Analog | A saw, a square an octave below and noise, through a low-pass the amp envelope opens | **Mix**: saw, then saw and sub, then sub and noise | **Envelope**: how far the filter closes between notes, for the envelope to sweep it up to eight octaves |
+| Cluster | Seven detuned saws per note | **Tone**: a low-pass that follows the note, from a near sine to fully bright | **Gravity**: pulls the saws together, from almost two semitones each way to one saw |
+| Organ | Up to four sine carriers and one modulator, in eight algorithms | **Algorithm**: flute, jazz, full and gospel drawbars, reed, pipe, combo, bell | **Tweak**: FM depth, from pure drawbars to grit |
+
+### Breakout
+
+A synth track whose voice is made of other modules. It is 20 HP and has everything an engine has, plus a dark box of
+outputs that send the track out, and **RET L** and **RET R** to take the sound back in.
+
+- **Out:** **V/OCT**, **GATE** and **ENV** are polyphonic, a channel per voice (one in mono and legato), with the
+  glide and the LFO's pitch in V/OCT. **LFO** is the LFO after its amount, ±5V. **CV 1** and **CV 2** are the sound
+  page's dials, and **FILTER**, **RESO**, **FX 1** and **FX 2** the dials of those names, all 0 to 10V, with the LFO.
+- **Return:** whatever goes out, the track stops doing itself. With **ENV** patched the return isn't enveloped; with
+  **FILTER** or **RESO** patched it isn't filtered; with an **FX** amount patched, that **FX** output carries the
+  full signal for an outside VCA; with **LFO** patched, the LFO moves nothing inside. Level and pan always apply.
+- **Envelope:** a polyphonic return is enveloped channel by channel, one voice each; a mono one by the loudest
+  voice. **RET R** is normalled to **RET L**.
+
 ### Screen
 
 The OP-Z's phone app, as an expander: the OP-Z famously has no screen, since you already carry one. Place it
@@ -178,8 +203,9 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | `src/opz/Sequence.hpp` | The sequencer's steps and the player that schedules them, knowing nothing of Rack. |
 | `src/opz/Sequencer.cpp` | The Sequencer module. |
 | `src/opz/Bus.hpp` | The bus between the Sequencer and the engines and Screens to its right. |
-| `src/dsp/` | Building blocks that know nothing of Rack: filter, envelope. |
-| `src/Digital.cpp` | The Digital engine. |
+| `src/dsp/` | Building blocks that know nothing of Rack: filter, envelope, band-limited saw. |
+| `src/Digital.cpp`, `Analog.cpp`, `Cluster.cpp`, `Organ.cpp` | The engines. |
+| `src/Breakout.cpp` | Breakout, the synth track for a voice made of other modules. |
 | `src/opz/Screen.cpp` | The Screen expander. |
 | `src/Screen.*` | A reusable display widget whose readouts line up with the controls around it. |
 | `src/ui.hpp` | Panel layout lookup, plus the custom dials, keys, buttons and lights. |

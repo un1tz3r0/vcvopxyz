@@ -24,6 +24,14 @@ struct Svf {
 		a3 = g * a2;
 	}
 
+	/** Takes another filter's tuning, keeping its own state. */
+	void tuneLike(const Svf& o) {
+		a1 = o.a1;
+		a2 = o.a2;
+		a3 = o.a3;
+		k = o.k;
+	}
+
 	Out process(float x) {
 		float v3 = x - s2;
 		float v1 = a1 * s1 + a2 * v3;
