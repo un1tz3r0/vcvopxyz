@@ -10,13 +10,18 @@ plays it, they turn its own parameters.
 Its keys are laid out as on the OP-Z: TRACK, REC and −, PLAY and +, STOP and SHIFT, then the 16 steps along the top,
 the numbered black keys and the white keys from F to E. Rack can't hold one button down while clicking another, so
 a long press or a Ctrl+click picks a step up, and it stays held (blinking) until it's clicked again; SHIFT latches
-the same way, and a click on it turns the page. TRACK and TEMPO latch.
+the same way, and a click on it turns the page. TRACK latches, and so do the first three of the OP-Z's four index
+keys over the display: PROJECT (ten project slots on the value keys), MIXER (group levels, punch, master, and mutes
+on the steps) and TEMPO (tempo, swing and the metronome). The fourth, SCREEN, shows the battery while it's held.
 
 With SHIFT latched, the steps are picked for step components (blinking green), the white keys put a component on
 them, as the icons above the keys say, and the black keys set its value.
 */
 #include "SynthTrack.hpp"
 #include "Sequence.hpp"
+#include "Project.hpp"
+#include <mutex>
+#include <osdialog.h>
 
 namespace opz {
 
@@ -106,17 +111,71 @@ static const char* const TRACK_NAMES[TRACKS] = {"Kick", "Snare", "Perc", "Sample
 four for the chords. */
 static const int TRACK_CHANNELS[TRACKS] = {1, 1, 1, 1, 1, 3, 1, 4};
 
-/** The note length dial's settings, in ticks of a ×1 step: 1/64 to a bar, dotted between, then drone. */
-constexpr int NOTE_LENGTHS[] = {6, 9, 12, 18, 24, 36, 48, 72, 96, 144, 192, 288, 384, DRONE};
 constexpr int LONGEST = STEPS * TICKS; // the longest note a step's menu sets, short of a drone
+
+
+/** The metronome's clicks. The OP-Z counts in voices (Swedish, English, German...), which these six synthesized
+sounds stand in for; the first beat of each bar is higher. */
+struct Metronome {
+	static constexpr int SOUNDS = 6;
+	int sound = 0;
+	float phase = 0.f, env = 0.f, freq = 0.f;
+	uint32_t noise = 0x2545F491u;
+
+	void trigger(int s, bool accent) {
+		static const float pitches[SOUNDS] = {2000.f, 1300.f, 880.f, 540.f, 0.f, 3000.f};
+		sound = s;
+		freq = pitches[s] * (accent ? 1.5f : 1.f);
+		phase = 0.f;
+		env = 1.f;
+	}
+
+	float process(float dt) {
+		if (env < 1e-4f)
+			return 0.f;
+		static const float decays[SOUNDS] = {0.006f, 0.025f, 0.06f, 0.12f, 0.025f, 0.012f};
+		env *= std::exp(-dt / decays[sound]);
+		noise ^= noise << 13;
+		noise ^= noise >> 17;
+		noise ^= noise << 5;
+		float white = int32_t(noise) * (1.f / 2147483648.f);
+		float f = sound == 5 ? freq * (0.3f + 0.7f * env) : freq;    // the blip falls as it fades
+		phase = std::fmod(phase + f * dt, 1.f);
+		float sine = std::sin(2.f * float(M_PI) * phase), square = phase < 0.5f ? 1.f : -1.f;
+		switch (sound) {
+			case 2: return env * 0.6f * square;
+			case 3: return env * 0.5f * (square + (std::fmod(phase * 1.48f, 1.f) < 0.5f ? 1.f : -1.f));
+			case 4: return env * white;
+			default: return env * sine;
+		}
+	}
+};
+
+/** The mixer's punch: a compressor on the mix that pulls loud passages down and the whole back up. */
+struct Punch {
+	float env = 0.f;
+
+	void process(float& left, float& right, float amount, float dt) {
+		if (amount <= 0.f)
+			return;
+		float level = std::fmax(std::fabs(left), std::fabs(right)) / 5.f;
+		env += (level - env) * (1.f - std::exp(-dt / (level > env ? 0.005f : 0.12f)));
+		float threshold = 1.f - 0.75f * amount, ratio = 1.f + 7.f * amount;
+		float gain = (env > threshold ? std::pow(env / threshold, 1.f / ratio - 1.f) : 1.f) * (1.f + 1.5f * amount);
+		left *= gain;
+		right *= gain;
+	}
+};
 
 
 struct Sequencer : Module, BusNode {
 	enum ParamId {
 		TEMPO_PARAM, SWING_PARAM,
 		ENUMS(LENGTH_PARAM, TRACKS), ENUMS(QUANTIZE_PARAM, TRACKS), ENUMS(STEP_COUNT_PARAM, TRACKS), ENUMS(STEP_LENGTH_PARAM, TRACKS),
+		ENUMS(LEVEL_PARAM, LEVELS_LEN), METRONOME_SOUND_PARAM, METRONOME_LEVEL_PARAM,
 		// The keys, each with an RGB light: three light ids from KEY_LIGHT, in the same order.
-		TRACK_PARAM, REC_PARAM, PLAY_PARAM, STOP_PARAM, OCTAVE_DOWN_PARAM, OCTAVE_UP_PARAM, SHIFT_PARAM, METRONOME_PARAM,
+		TRACK_PARAM, REC_PARAM, PLAY_PARAM, STOP_PARAM, OCTAVE_DOWN_PARAM, OCTAVE_UP_PARAM, SHIFT_PARAM,
+		PROJECT_PARAM, MIXER_PARAM, METRONOME_PARAM, SCREEN_PARAM,
 		ENUMS(STEP_PARAM, STEPS), ENUMS(KEY_PARAM, KEYS), ENUMS(SELECT_PARAM, TRACKS), ENUMS(PAGE_PARAM, PAGES),
 		PARAMS_LEN
 	};
@@ -163,6 +222,10 @@ struct Sequencer : Module, BusNode {
 		std::string getLabel() override {
 			Sequencer* m = static_cast<Sequencer*>(module);
 			int i = paramId - STEP_PARAM;
+			if (m->mixerMode)
+				return i < TRACKS ? string::f("Track %d, %s: %s", i + 1, TRACK_NAMES[i], m->muted(i) ? "muted" : m->audioMuted(i) ? "audio muted" : "on") : "";
+			if (m->projectMode)
+				return i == 0 ? "Pattern 1" : "";
 			if (m->trackMode)
 				return m->shifted ? string::f("Step count %d", i + 1) : i < TRACKS ? string::f("Track %d, %s", i + 1, TRACK_NAMES[i]) : "";
 			std::string label = string::f("Step %d", i + 1);
@@ -187,6 +250,10 @@ struct Sequencer : Module, BusNode {
 				return string::f("Step length %s", values[value]);
 			if (m->tempoMode)
 				return value >= 0 ? string::f("Tempo digit %d", (value + 1) % 10) : "Tap tempo";
+			if (m->projectMode)
+				return value >= 0 ? string::f("Project %d%s", value + 1, m->projects[value].used ? "" : " (empty)") : "";
+			if (m->mixerMode)
+				return value >= 0 ? string::f("Mute group %d", value + 1) : "";
 			if (m->editingComponents()) {
 				if (value < 0)
 					return COMPONENT_NAMES[keyComponent(key)];
@@ -204,7 +271,7 @@ struct Sequencer : Module, BusNode {
 	bool playing = false;        // the transport, as PLAY shows it
 	bool armed = false;          // playing, but waiting for the clock's next pulse to start
 	bool resuming = false;       // and when it comes, carrying on rather than starting over
-	bool recording = false, trackMode = false, tempoMode = false, shifted = false;
+	bool recording = false, trackMode = false, tempoMode = false, projectMode = false, mixerMode = false, shifted = false;
 	bool erasing = false;        // removing the held notes from the steps they pass, while recording
 	bool chord = false;          // notes are down for the step being step-recorded
 	int held = -1, cursor = 0, octave = 0, ppqn = 4;
@@ -217,12 +284,23 @@ struct Sequencer : Module, BusNode {
 	bool longPressHolds = true, ctrlClickHolds = true;
 	std::atomic<float> shownTempo{120.f}; // -1 while an external clock is still being measured
 
+	Project projects[PROJECTS];
+	int project = 0;             // the slot the live project came from, and goes back to
+	bool autoSave = true;        // as the OP-Z: switching projects saves the one left
+	std::mutex projectsMutex;    // the slots, between the audio thread's switches and the UI thread's files
+	std::atomic<int> reload{-1}; // a slot the UI thread changed, to load as the live project
+	uint16_t mutes[MUTE_GROUPS] = {}, audioMutes[MUTE_GROUPS] = {};
+	int muteGroup = 0;
+	float battery = 0.87f, batteryShown = 0.f; // a pretend charge, and how long SCREEN shows it after a press
+	Metronome metronome;
+	Punch punch;
+
 	KeyGesture gestures[ALL_KEYS]; // the keys', from TRACK_PARAM on
 	float clearing = -1.f;       // how long STOP has been held in track mode, or -1
 	dsp::SchmittTrigger gates[CHANNELS], clockIn, runIn, resetIn, contIn, advanceIn;
 	dsp::PulseGenerator clockOut, resetOut, contOut;
 	bool external = false;
-	long pulses = 0, lastTick = -1;
+	long pulses = 0, lastTick = -1, lastBeat = -1;
 	float sincePulse = 0.f, pulsePeriod = 0.f; // seconds; a period of 0 is unknown
 	Upstream engines;            // the last the engines sent back, read at light rate
 	dsp::ClockDivider controlDivider, lightDivider;
@@ -237,6 +315,12 @@ struct Sequencer : Module, BusNode {
 		q->randomizeEnabled = false;
 		q->description = "A patched CLOCK overrides it";
 		configParam(SWING_PARAM, 0.5f, 0.75f, 0.5f, "Swing", "%", 0.f, 100.f)->description = "Delays every second sixteenth; 50% is straight";
+		configParam(LEVEL_PARAM + DRUM_LEVEL, 0.f, 1.f, 1.f, "Drum level", "%", 0.f, 100.f)->description = "Tracks 1 to 4";
+		configParam(LEVEL_PARAM + SYNTH_LEVEL, 0.f, 1.f, 1.f, "Synth level", "%", 0.f, 100.f)->description = "Tracks 5 to 8";
+		configParam(LEVEL_PARAM + PUNCH, 0.f, 1.f, 0.f, "Punch", "%", 0.f, 100.f)->description = "Compresses the mix at L and R";
+		configParam(LEVEL_PARAM + MASTER_LEVEL, 0.f, 1.f, 1.f, "Master level", "%", 0.f, 100.f);
+		configSwitch(METRONOME_SOUND_PARAM, 0.f, Metronome::SOUNDS - 1, 0.f, "Metronome sound", {"Click", "Wood", "Beep", "Cowbell", "Hat", "Blip"});
+		configParam(METRONOME_LEVEL_PARAM, 0.f, 1.f, 0.f, "Metronome level", "%", 0.f, 100.f)->description = "Off fully left. Into L and R while playing";
 		for (int t = 0; t < TRACKS; t++) {
 			std::string name = string::f("Track %d ", t + 1);
 			configSwitch(LENGTH_PARAM + t, 0.f, std::size(NOTE_LENGTHS) - 1, 4.f, name + "note length",
@@ -263,8 +347,13 @@ struct Sequencer : Module, BusNode {
 		configKey(this, SHIFT_PARAM, "Shift")->description = "Click: the next page of dials. Long-press or " RACK_MOD_CTRL_NAME "+click: latch it, "
 			"to pick steps for step components; then a white key puts one on them, again takes it off, and the black keys set its value. "
 			"STOP clears every component on the track";
-		configKey(this, METRONOME_PARAM, "Tempo")->description = "On and off: the dials set the tempo and swing, the black keys type a tempo, "
-			"and the white keys tap one";
+		configKey(this, PROJECT_PARAM, "Project")->description = "On and off: the black keys load projects 1 to 10, saving the one left; "
+			"a long press or " RACK_MOD_CTRL_NAME "+click saves to one. Holding STOP clears every track";
+		configKey(this, MIXER_PARAM, "Mixer")->description = "On and off: the dials set the drum and synth levels, punch and the master level; "
+			"steps 1 to 8 mute tracks (with SHIFT latched, their audio only), and the black keys pick one of 10 mute groups";
+		configKey(this, METRONOME_PARAM, "Tempo")->description = "On and off: the dials set the tempo, swing, metronome sound and metronome level, "
+			"the black keys type a tempo, the white keys tap one, and − and + nudge it";
+		configKey(this, SCREEN_PARAM, "Screen")->description = "Hold: the battery level, on the steps and the display";
 		for (int i = 0; i < STEPS; i++)
 			configKey<StepQuantity>(this, STEP_PARAM + i)->description = "Click: paste the last notes played, or clear. Long-press or " RACK_MOD_CTRL_NAME "+click: hold";
 		for (int i = 0; i < KEYS; i++)
@@ -303,8 +392,28 @@ struct Sequencer : Module, BusNode {
 		return clamp(53 + 12 * octave + key, 0, 127);
 	}
 
+	/** Whether TRACK or an index key has taken over the dials and keys. */
+	bool modal() const {
+		return trackMode || tempoMode || projectMode || mixerMode;
+	}
+
+	void toggleMode(bool Sequencer::*mode) {
+		bool on = !(this->*mode);
+		trackMode = tempoMode = projectMode = mixerMode = false;
+		this->*mode = on;
+		typed = digits = 0;
+	}
+
 	bool editingComponents() const {
-		return shifted && !trackMode && !tempoMode;
+		return shifted && !modal();
+	}
+
+	bool muted(int t) const {
+		return mutes[muteGroup] >> t & 1;
+	}
+
+	bool audioMuted(int t) const {
+		return audioMutes[muteGroup] >> t & 1;
 	}
 
 	bool anyHeld() const {
@@ -331,8 +440,13 @@ struct Sequencer : Module, BusNode {
 
 	/** The module and param a dial turns: the selected track's engine's, or in track and tempo mode, its settings. */
 	std::pair<Module*, int> dialTarget(int d) {
+		static const int tempoDials[4] = {TEMPO_PARAM, SWING_PARAM, METRONOME_SOUND_PARAM, METRONOME_LEVEL_PARAM};
 		if (tempoMode)
-			return d < 2 ? std::make_pair<Module*, int>(this, d == 0 ? TEMPO_PARAM : SWING_PARAM) : std::make_pair<Module*, int>(nullptr, -1);
+			return {this, tempoDials[d]};
+		if (mixerMode)
+			return {this, LEVEL_PARAM + d};
+		if (projectMode)
+			return {nullptr, -1};
 		if (trackMode && d % 2 == 0)
 			return {this, (d == 0 ? LENGTH_PARAM : QUANTIZE_PARAM) + track};
 		Track* e = engine(track);
@@ -343,7 +457,7 @@ struct Sequencer : Module, BusNode {
 	void restart() {
 		for (Lane& l : lanes)
 			l.player.start();
-		lastTick = -1;
+		lastTick = lastBeat = -1;
 		pulses = 0;
 		resetOut.trigger(1e-3f);
 	}
@@ -403,6 +517,92 @@ struct Sequencer : Module, BusNode {
 		pageRequests++;
 	}
 
+	/** A project as a new slot has it: empty patterns, the default settings, each track's own polyphony. */
+	static Project blankProject() {
+		Project p;
+		for (int t = 0; t < TRACKS; t++)
+			p.parts[t].channels = TRACK_CHANNELS[t];
+		return p;
+	}
+
+	/** The live project into a slot: the patterns, the settings, the mixer, and the dials of the engines playing. */
+	void storeProject(Project& p) {
+		for (int t = 0; t < TRACKS; t++) {
+			Project::Part& part = p.parts[t];
+			part.pattern = lanes[t].pattern;
+			part.stepCount = (int) params[STEP_COUNT_PARAM + t].getValue();
+			part.stepLength = (int) params[STEP_LENGTH_PARAM + t].getValue();
+			part.noteLength = (int) params[LENGTH_PARAM + t].getValue();
+			part.quantize = params[QUANTIZE_PARAM + t].getValue();
+			part.channels = lanes[t].settings.channels;
+			Track* e = engine(t);
+			part.hasSound = e;
+			for (int i = 0; e && i < SOUND_PARAMS; i++)
+				part.sound[i] = e->paramQuantities[i]->getScaledValue();
+		}
+		p.tempo = params[TEMPO_PARAM].getValue();
+		p.swing = params[SWING_PARAM].getValue();
+		for (int l = 0; l < LEVELS_LEN; l++)
+			p.levels[l] = params[LEVEL_PARAM + l].getValue();
+		p.metronomeSound = (int) params[METRONOME_SOUND_PARAM].getValue();
+		p.metronomeLevel = params[METRONOME_LEVEL_PARAM].getValue();
+		std::copy(std::begin(mutes), std::end(mutes), p.mutes);
+		std::copy(std::begin(audioMutes), std::end(audioMutes), p.audioMutes);
+		p.muteGroup = muteGroup;
+		p.used = true;
+	}
+
+	/** A slot into the live project. Engines take the dials it saved; a track saved without an engine leaves its
+	engine's dials as they are. */
+	void recallProject(const Project& p) {
+		for (int t = 0; t < TRACKS; t++) {
+			const Project::Part& part = p.parts[t];
+			lanes[t].pattern = part.pattern;
+			lanes[t].settings.channels = clamp(part.channels, 1, CHANNELS);
+			lanes[t].player.silence();
+			params[STEP_COUNT_PARAM + t].setValue(clamp(part.stepCount, 1, STEPS));
+			params[STEP_LENGTH_PARAM + t].setValue(clamp(part.stepLength, 0, 9));
+			params[LENGTH_PARAM + t].setValue(clamp(part.noteLength, 0, (int) std::size(NOTE_LENGTHS) - 1));
+			params[QUANTIZE_PARAM + t].setValue(clamp(part.quantize, 0.f, 1.f));
+			Track* e = engine(t);
+			for (int i = 0; e && part.hasSound && i < SOUND_PARAMS; i++) {
+				ParamQuantity* q = e->paramQuantities[i];
+				float v = math::rescale(clamp(part.sound[i], 0.f, 1.f), 0.f, 1.f, q->getMinValue(), q->getMaxValue());
+				e->params[i].setValue(q->snapEnabled ? std::round(v) : v);
+			}
+		}
+		params[TEMPO_PARAM].setValue(clamp(std::round(p.tempo), 40.f, 200.f));
+		params[SWING_PARAM].setValue(clamp(p.swing, 0.5f, 0.75f));
+		for (int l = 0; l < LEVELS_LEN; l++)
+			params[LEVEL_PARAM + l].setValue(clamp(p.levels[l], 0.f, 1.f));
+		params[METRONOME_SOUND_PARAM].setValue(clamp(p.metronomeSound, 0, Metronome::SOUNDS - 1));
+		params[METRONOME_LEVEL_PARAM].setValue(clamp(p.metronomeLevel, 0.f, 1.f));
+		std::copy(std::begin(p.mutes), std::end(p.mutes), mutes);
+		std::copy(std::begin(p.audioMutes), std::end(p.audioMutes), audioMutes);
+		muteGroup = clamp(p.muteGroup, 0, MUTE_GROUPS - 1);
+		held = -1;
+		selection = 0;
+		component = -1;
+	}
+
+	/** Loads a slot, saving the project left first unless saving is manual. An empty slot is a new project. */
+	void switchProject(int n) {
+		std::lock_guard<std::mutex> lock(projectsMutex);
+		if (autoSave)
+			storeProject(projects[project]);
+		project = n;
+		recallProject(projects[n].used ? projects[n] : blankProject());
+	}
+
+	/** Saves the live project to a slot, which it then belongs to. */
+	void saveProject(int n) {
+		std::lock_guard<std::mutex> lock(projectsMutex);
+		if (n != project)
+			projects[n].opz = projects[project].opz;
+		storeProject(projects[n]);
+		project = n;
+	}
+
 	void toggleHold(int i) {
 		held = held == i ? -1 : i;
 		const Step& s = lane().pattern.steps[i];
@@ -439,7 +639,9 @@ struct Sequencer : Module, BusNode {
 	}
 
 	void shift(int direction) {
-		if (trackMode)
+		if (tempoMode)
+			params[TEMPO_PARAM].setValue(clamp(params[TEMPO_PARAM].getValue() + direction, 40.f, 200.f));
+		else if (trackMode)
 			lane().pattern.rotate(direction, stepCount());
 		else if (held >= 0)
 			lane().pattern.steps[held].nudge(direction);
@@ -574,6 +776,10 @@ struct Sequencer : Module, BusNode {
 			componentKeyDown(key);
 		else if (tempoMode)
 			tempoKey(key);
+		else if (mixerMode) {
+			if (keyValue(key) >= 0)
+				muteGroup = keyValue(key);
+		}
 		else if (!trackMode)
 			noteDown(key, keyPitch(key), (keyPitch(key) - 60) / 12.f, 100);
 		else if (keyValue(key) >= 0)
@@ -591,6 +797,12 @@ struct Sequencer : Module, BusNode {
 		}
 		if (sinceTap >= 0.f)
 			sinceTap += dt;
+		int r = reload.exchange(-1);
+		if (r >= 0) {
+			std::lock_guard<std::mutex> lock(projectsMutex);
+			project = r;
+			recallProject(projects[r].used ? projects[r] : blankProject());
+		}
 
 		for (int p = TRACK_PARAM; p < PARAMS_LEN; p++) {
 			KeyGesture& g = gestures[p - TRACK_PARAM];
@@ -599,10 +811,12 @@ struct Sequencer : Module, BusNode {
 		}
 		if (clearing >= 0.f) {
 			const KeyGesture& stop = gestures[STOP_PARAM - TRACK_PARAM];
-			if (!stop.down() || !trackMode)
+			if (!stop.down() || !(trackMode || projectMode))
 				clearing = -1.f;
 			else if ((clearing = stop.held) >= CLEAR_HOLD) {
-				lane().pattern.clear();
+				for (int t = 0; t < TRACKS; t++)
+					if (projectMode || t == track)
+						lanes[t].pattern.clear();
 				clearing = -1.f;
 			}
 		}
@@ -635,14 +849,33 @@ struct Sequencer : Module, BusNode {
 				select(p - SELECT_PARAM);
 		}
 		else if (p >= KEY_PARAM) {
-			if (e == KeyGesture::PRESS)
-				keyDown(p - KEY_PARAM);
+			int key = p - KEY_PARAM;
+			if (projectMode) {
+				// A click loads a project; a long press or a Ctrl+click saves to it.
+				if (keyValue(key) < 0)
+					return;
+				if (picksUp(e, g)) {
+					saveProject(keyValue(key));
+					g.handled = true;
+				}
+				else if (e == KeyGesture::CLICK)
+					switchProject(keyValue(key));
+			}
+			else if (e == KeyGesture::PRESS)
+				keyDown(key);
 			else if (e == KeyGesture::CLICK || e == KeyGesture::RELEASE)
-				noteUp(p - KEY_PARAM);
+				noteUp(key);
 		}
 		else if (p >= STEP_PARAM) {
 			int i = p - STEP_PARAM;
-			if (trackMode) {
+			if (mixerMode) {
+				// Steps 1 to 8 mute their tracks in the mute group, or with SHIFT latched, only their sound.
+				if (e == KeyGesture::PRESS && i < TRACKS)
+					(shifted ? audioMutes : mutes)[muteGroup] ^= 1 << i;
+			}
+			else if (projectMode)
+				return;
+			else if (trackMode) {
 				if (e != KeyGesture::PRESS)
 					return;
 				if (shifted)
@@ -681,8 +914,10 @@ struct Sequencer : Module, BusNode {
 		}
 		else if (e == KeyGesture::PRESS) {
 			switch (p) {
-				case TRACK_PARAM: trackMode = !trackMode; tempoMode = false; break;
-				case METRONOME_PARAM: tempoMode = !tempoMode; trackMode = false; typed = digits = 0; break;
+				case TRACK_PARAM: toggleMode(&Sequencer::trackMode); break;
+				case PROJECT_PARAM: toggleMode(&Sequencer::projectMode); break;
+				case MIXER_PARAM: toggleMode(&Sequencer::mixerMode); break;
+				case METRONOME_PARAM: toggleMode(&Sequencer::tempoMode); break;
 				case REC_PARAM: recording = !recording; cursor = 0; break;
 				case PLAY_PARAM: play(); break;
 				case STOP_PARAM:
@@ -691,8 +926,9 @@ struct Sequencer : Module, BusNode {
 							s.clearComponents();
 						break;
 					}
-					stop();
-					clearing = trackMode ? 0.f : -1.f;
+					if (!projectMode)
+						stop();
+					clearing = trackMode || projectMode ? 0.f : -1.f;
 					break;
 				case OCTAVE_DOWN_PARAM: shift(-1); break;
 				case OCTAVE_UP_PARAM: shift(1); break;
@@ -794,6 +1030,11 @@ struct Sequencer : Module, BusNode {
 				lastTick = tick;
 				clockOut.trigger(1e-3f);
 			}
+			long beat = (long) std::floor(time.song() / 4.0 + 1e-9);
+			if (beat != lastBeat) {
+				lastBeat = beat;
+				metronome.trigger((int) params[METRONOME_SOUND_PARAM].getValue(), beat % 4 == 0);
+			}
 		}
 	}
 
@@ -805,11 +1046,14 @@ struct Sequencer : Module, BusNode {
 			int n = clamp(l.settings.channels, 1, CHANNELS);
 			bool patched = outputs[GATE_OUTPUT + t].isConnected();
 			Downstream::Lane* out = bus ? &bus->lanes[t] : nullptr;
-			if (out)
+			if (out) {
 				out->channels = patched ? 0 : n;
+				float group = params[LEVEL_PARAM + (t < DRUM_TRACKS ? DRUM_LEVEL : SYNTH_LEVEL)].getValue();
+				out->level = audioMuted(t) ? 0.f : group * group;
+			}
 			for (int c = 0; c < n; c++) {
 				Player::Channel& channel = l.player.channels[c];
-				bool gate = channel.gate && !channel.retrigger;
+				bool gate = channel.gate && !channel.retrigger && !muted(t);
 				outputs[VOCT_OUTPUT + t].setVoltage(channel.pitch, c);
 				outputs[GATE_OUTPUT + t].setVoltage(gate ? 10.f : 0.f, c);
 				if (out) {
@@ -835,8 +1079,13 @@ struct Sequencer : Module, BusNode {
 		}
 		const Upstream* up = fromRight(this);
 		engines = up ? *up : Upstream();
-		outputs[LEFT_OUTPUT].setVoltage(engines.left);
-		outputs[RIGHT_OUTPUT].setVoltage(engines.right);
+		// The mix: punch, the metronome while playing, then the master level.
+		float left = engines.left, right = engines.right;
+		punch.process(left, right, params[LEVEL_PARAM + PUNCH].getValue(), dt);
+		float level = params[METRONOME_LEVEL_PARAM].getValue(), click = metronome.process(dt) * 5.f * level * level;
+		float master = params[LEVEL_PARAM + MASTER_LEVEL].getValue();
+		outputs[LEFT_OUTPUT].setVoltage(softLimit((left + click) * master * master));
+		outputs[RIGHT_OUTPUT].setVoltage(softLimit((right + click) * master * master));
 		outputs[CLOCK_OUTPUT].setVoltage(clockOut.process(dt) ? 10.f : 0.f);
 		outputs[RUN_OUTPUT].setVoltage(playing && !armed ? 10.f : 0.f);
 		outputs[RESET_OUTPUT].setVoltage(resetOut.process(dt) ? 10.f : 0.f);
@@ -881,15 +1130,18 @@ struct Sequencer : Module, BusNode {
 
 	/** A dial's value from 0 to 1 as its LED shows it, or -1 for a dial with nothing to do. */
 	float dialValue(int d) {
-		if (tempoMode)
-			return d < 2 ? paramQuantities[d == 0 ? TEMPO_PARAM : SWING_PARAM]->getScaledValue() : -1.f;
-		if (trackMode && d % 2 == 0)
-			return paramQuantities[(d == 0 ? LENGTH_PARAM : QUANTIZE_PARAM) + track]->getScaledValue();
-		return engines.dials[d];
+		std::pair<Module*, int> target = dialTarget(d);
+		if (target.first == this)
+			return paramQuantities[target.second]->getScaledValue();
+		return projectMode ? -1.f : engines.dials[d];
 	}
 
 	void updateLights(float dt) {
 		blink = std::fmod(blink + dt, 0.5f);
+		// The battery: it runs down while playing and charges while stopped, and SCREEN shows it a moment longer than
+		// it's held.
+		battery = playing ? std::fmax(battery - dt / 18000.f, 0.05f) : std::fmin(battery + dt / 3600.f, 1.f);
+		batteryShown = gestures[SCREEN_PARAM - TRACK_PARAM].down() ? 1.f : std::fmax(batteryShown - dt, 0.f);
 		bool on = blink < 0.25f;
 		Lane& l = lane();
 		int count = stepCount(), head = l.player.running ? l.player.playing() : -1;
@@ -902,10 +1154,23 @@ struct Sequencer : Module, BusNode {
 		for (int i = 0; i < STEPS; i++) {
 			NVGcolor c = led::WHITE;
 			float b = 0.f;
-			if (clearing >= 0.f) {
+			if (batteryShown > 0.f) {
+				c = led::GREEN;
+				b = i < std::ceil(battery * STEPS);
+			}
+			else if (clearing >= 0.f) {
 				c = led::RED;
 				b = i < clearing / CLEAR_HOLD * STEPS;
 			}
+			else if (mixerMode) {
+				// Lit tracks play, dark ones are muted, red ones play with their sound muted.
+				if (i < TRACKS) {
+					c = audioMuted(i) ? led::RED : led::WHITE;
+					b = muted(i) ? 0.f : audioMuted(i) ? 0.8f : shifted ? 0.3f : 1.f;
+				}
+			}
+			else if (projectMode)
+				b = i == 0;
 			else if (trackMode && shifted)
 				b = i == count - 1 ? 1.f : i < count ? 0.15f : 0.f;
 			else if (trackMode) {
@@ -971,6 +1236,16 @@ struct Sequencer : Module, BusNode {
 			for (int v = 0; v < 10; v++)
 				level[valueKey(v)] = 0.2f;
 		}
+		else if (projectMode) {
+			keyColor = led::WHITE;
+			for (int v = 0; v < PROJECTS; v++)
+				level[valueKey(v)] = v == project ? 1.f : projects[v].used ? 0.3f : 0.05f;
+		}
+		else if (mixerMode) {
+			keyColor = led::WHITE;
+			for (int v = 0; v < MUTE_GROUPS; v++)
+				level[valueKey(v)] = v == muteGroup ? 1.f : mutes[v] || audioMutes[v] ? 0.3f : 0.08f;
+		}
 		else if (editingComponents()) {
 			// The white keys light the components on the picked steps, or on any step while none is picked, and the
 			// one picked brightest; the black keys, its value.
@@ -1014,7 +1289,7 @@ struct Sequencer : Module, BusNode {
 			bool playingNotes = sounding(lanes[t]);
 			setKeyLight(SELECT_PARAM + t, t == track ? led::WHITE : NOTE_COLOR, t == track ? 1.f : playingNotes ? 0.8f : 0.f);
 		}
-		int shown = trackMode || tempoMode ? -1 : engines.page[track];
+		int shown = modal() ? -1 : engines.page[track];
 		for (int p = 0; p < PAGES; p++)
 			setKeyLight(PAGE_PARAM + p, PAGE_COLORS[p], shown < 0 ? 0.f : p == shown ? 1.f : 0.12f);
 		for (int d = 0; d < 4; d++) {
@@ -1029,7 +1304,10 @@ struct Sequencer : Module, BusNode {
 		setKeyLight(OCTAVE_DOWN_PARAM, erasing ? led::RED : led::WHITE, erasing ? on : octave < 0 ? 0.2f - 0.2f * octave : 0.f);
 		setKeyLight(OCTAVE_UP_PARAM, led::WHITE, octave > 0 ? 0.2f + 0.2f * octave : 0.f);
 		setKeyLight(SHIFT_PARAM, led::WHITE, shifted);
+		setKeyLight(PROJECT_PARAM, led::WHITE, projectMode);
+		setKeyLight(MIXER_PARAM, led::WHITE, mixerMode);
 		setKeyLight(METRONOME_PARAM, led::WHITE, tempoMode ? 1.f : beat ? 0.3f : 0.f);
+		setKeyLight(SCREEN_PARAM, led::GREEN, batteryShown > 0.f);
 		lights[INTERNAL_LIGHT].setBrightness(!external);
 		lights[EXTERNAL_LIGHT].setBrightness(external);
 		shownTempo = !external || pulsePeriod > 0.f ? bpm() : -1.f;
@@ -1049,6 +1327,20 @@ struct Sequencer : Module, BusNode {
 		lights[light + 1].setBrightness(m.clip > 0.f);
 	}
 
+	/** What the display shows, for the UI thread: the tempo, right-aligned, or dashes while a clock is measured. */
+	std::string displayText() {
+		if (batteryShown > 0.f) {
+			int percent = (int) std::round(100.f * battery);
+			return percent >= 100 ? "FUL" : string::f("b%2d", percent);
+		}
+		if (projectMode)
+			return string::f("P%2d", project + 1);
+		if (mixerMode)
+			return string::f("G%2d", muteGroup + 1);
+		float tempo = shownTempo.load();
+		return tempo < 0.f ? "---" : string::f("%3d", std::min((int) std::round(tempo), 999));
+	}
+
 	void onReset(const ResetEvent& e) override {
 		Module::onReset(e);
 		for (int t = 0; t < TRACKS; t++) {
@@ -1062,7 +1354,16 @@ struct Sequencer : Module, BusNode {
 		memory.add(Note());
 		selection = 0;
 		component = -1;
-		playing = armed = resuming = recording = trackMode = tempoMode = shifted = erasing = chord = false;
+		playing = armed = resuming = recording = trackMode = tempoMode = projectMode = mixerMode = shifted = erasing = chord = false;
+		{
+			std::lock_guard<std::mutex> lock(projectsMutex);
+			for (Project& p : projects)
+				p = Project();
+			project = 0;
+		}
+		std::fill(std::begin(mutes), std::end(mutes), 0);
+		std::fill(std::begin(audioMutes), std::end(audioMutes), 0);
+		muteGroup = 0;
 		held = -1;
 		cursor = octave = 0;
 		track = DRUM_TRACKS;
@@ -1133,6 +1434,103 @@ struct Sequencer : Module, BusNode {
 		}
 	}
 
+	static json_t* masksToJson(const uint16_t* masks) {
+		json_t* a = json_array();
+		for (int i = 0; i < MUTE_GROUPS; i++)
+			json_array_append_new(a, json_integer(masks[i]));
+		return a;
+	}
+
+	static void masksFromJson(json_t* a, uint16_t* masks) {
+		size_t i;
+		json_t* m;
+		json_array_foreach(a, i, m)
+			if (i < MUTE_GROUPS)
+				masks[i] = (uint16_t) json_integer_value(m);
+	}
+
+	/** A project slot, or null for an empty one. Its .opz file, if it came from one, goes in the patch's storage. */
+	static json_t* projectToJson(const Project& p) {
+		if (!p.used)
+			return json_null();
+		json_t* root = json_object();
+		json_t* parts = json_array();
+		for (const Project::Part& part : p.parts) {
+			json_t* t = json_object();
+			json_object_set_new(t, "pattern", patternToJson(part.pattern));
+			json_object_set_new(t, "components", componentsToJson(part.pattern));
+			json_object_set_new(t, "settings", json_pack("[iiifi]", part.stepCount, part.stepLength, part.noteLength, part.quantize, part.channels));
+			if (part.hasSound) {
+				json_t* sound = json_array();
+				for (float v : part.sound)
+					json_array_append_new(sound, json_real(v));
+				json_object_set_new(t, "sound", sound);
+			}
+			json_array_append_new(parts, t);
+		}
+		json_object_set_new(root, "tracks", parts);
+		json_object_set_new(root, "tempo", json_real(p.tempo));
+		json_object_set_new(root, "swing", json_real(p.swing));
+		json_object_set_new(root, "levels", json_pack("[ffff]", p.levels[0], p.levels[1], p.levels[2], p.levels[3]));
+		json_object_set_new(root, "metronome", json_pack("[if]", p.metronomeSound, p.metronomeLevel));
+		json_object_set_new(root, "mutes", masksToJson(p.mutes));
+		json_object_set_new(root, "audioMutes", masksToJson(p.audioMutes));
+		json_object_set_new(root, "muteGroup", json_integer(p.muteGroup));
+		return root;
+	}
+
+	static Project projectFromJson(json_t* root) {
+		Project p = blankProject();
+		if (!json_is_object(root))
+			return p;
+		size_t i;
+		json_t* t;
+		json_array_foreach(json_object_get(root, "tracks"), i, t) {
+			if (i >= TRACKS)
+				break;
+			Project::Part& part = p.parts[i];
+			if (json_t* j = json_object_get(t, "pattern"))
+				patternFromJson(j, part.pattern);
+			if (json_t* j = json_object_get(t, "components"))
+				componentsFromJson(j, part.pattern);
+			double quantize = 0.0;
+			if (json_unpack(json_object_get(t, "settings"), "[iiiFi]", &part.stepCount, &part.stepLength, &part.noteLength, &quantize, &part.channels) == 0)
+				part.quantize = (float) quantize;
+			if (json_t* sound = json_object_get(t, "sound")) {
+				part.hasSound = true;
+				for (int k = 0; k < SOUND_PARAMS; k++)
+					part.sound[k] = (float) json_number_value(json_array_get(sound, k));
+			}
+		}
+		p.tempo = (float) json_number_value(json_object_get(root, "tempo"));
+		p.swing = (float) json_number_value(json_object_get(root, "swing"));
+		for (int l = 0; l < LEVELS_LEN; l++)
+			p.levels[l] = (float) json_number_value(json_array_get(json_object_get(root, "levels"), l));
+		json_t* metronome = json_object_get(root, "metronome");
+		p.metronomeSound = (int) json_integer_value(json_array_get(metronome, 0));
+		p.metronomeLevel = (float) json_number_value(json_array_get(metronome, 1));
+		masksFromJson(json_object_get(root, "mutes"), p.mutes);
+		masksFromJson(json_object_get(root, "audioMutes"), p.audioMutes);
+		p.muteGroup = (int) json_integer_value(json_object_get(root, "muteGroup"));
+		p.used = true;
+		return p;
+	}
+
+	/** Every slot, as the patch and the projects files keep them. */
+	json_t* projectsToJson() {
+		std::lock_guard<std::mutex> lock(projectsMutex);
+		json_t* a = json_array();
+		for (const Project& p : projects)
+			json_array_append_new(a, projectToJson(p));
+		return a;
+	}
+
+	void projectsFromJson(json_t* a) {
+		std::lock_guard<std::mutex> lock(projectsMutex);
+		for (int i = 0; i < PROJECTS; i++)
+			projects[i] = projectFromJson(json_array_get(a, i));
+	}
+
 	json_t* dataToJson() override {
 		json_t* root = json_object();
 		json_t* tracks = json_array();
@@ -1149,6 +1547,12 @@ struct Sequencer : Module, BusNode {
 		json_object_set_new(root, "ppqn", json_integer(ppqn));
 		json_object_set_new(root, "longPressHolds", json_boolean(longPressHolds));
 		json_object_set_new(root, "ctrlClickHolds", json_boolean(ctrlClickHolds));
+		json_object_set_new(root, "projects", projectsToJson());
+		json_object_set_new(root, "project", json_integer(project));
+		json_object_set_new(root, "autoSave", json_boolean(autoSave));
+		json_object_set_new(root, "mutes", masksToJson(mutes));
+		json_object_set_new(root, "audioMutes", masksToJson(audioMutes));
+		json_object_set_new(root, "muteGroup", json_integer(muteGroup));
 		return root;
 	}
 
@@ -1182,6 +1586,45 @@ struct Sequencer : Module, BusNode {
 			longPressHolds = json_boolean_value(j);
 		if (json_t* j = json_object_get(root, "ctrlClickHolds"))
 			ctrlClickHolds = json_boolean_value(j);
+		if (json_t* j = json_object_get(root, "projects"))
+			projectsFromJson(j);
+		if (json_t* j = json_object_get(root, "project"))
+			project = clamp((int) json_integer_value(j), 0, PROJECTS - 1);
+		if (json_t* j = json_object_get(root, "autoSave"))
+			autoSave = json_boolean_value(j);
+		masksFromJson(json_object_get(root, "mutes"), mutes);
+		masksFromJson(json_object_get(root, "audioMutes"), audioMutes);
+		if (json_t* j = json_object_get(root, "muteGroup"))
+			muteGroup = clamp((int) json_integer_value(j), 0, MUTE_GROUPS - 1);
+	}
+
+	static std::string opzName(int slot) {
+		return string::f("project%02d.opz", slot + 1);
+	}
+
+	/** The .opz files the slots were imported from live in the patch's storage, so an export keeps what they hold
+	beyond what a slot models. */
+	void onSave(const SaveEvent& e) override {
+		std::lock_guard<std::mutex> lock(projectsMutex);
+		bool any = std::any_of(std::begin(projects), std::end(projects), [](const Project& p) { return !p.opz.empty(); });
+		std::string dir = any ? createPatchStorageDirectory() : getPatchStorageDirectory();
+		for (int i = 0; i < PROJECTS; i++) {
+			std::string path = system::join(dir, opzName(i));
+			if (!projects[i].opz.empty())
+				system::writeFile(path, projects[i].opz);
+			else if (system::isFile(path))
+				system::remove(path);
+		}
+	}
+
+	void onAdd(const AddEvent& e) override {
+		std::lock_guard<std::mutex> lock(projectsMutex);
+		std::string dir = getPatchStorageDirectory();
+		for (int i = 0; i < PROJECTS; i++) {
+			std::string path = system::join(dir, opzName(i));
+			if (system::isFile(path))
+				projects[i].opz = system::readFile(path);
+		}
 	}
 };
 
@@ -1286,48 +1729,13 @@ struct StepKey : RoundKey {
 };
 
 
-/** Three seven-segment digits showing the tempo, or dashes while an external clock is still being measured. */
+/** Three seven-segment characters: the tempo, or whatever the mode keys show. */
 struct TempoDisplay : widget::Widget {
 	Sequencer* module = nullptr;
-	static constexpr uint8_t DIGITS[10] = {0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f}, DASH = 0x40;
 
-	/** A segment from p to q, pointed at both ends and pulled back from them a little. */
-	static void segment(NVGcontext* vg, math::Vec p, math::Vec q, float r) {
-		math::Vec u = q.minus(p).normalize(), n(-u.y, u.x);
-		float gap = 0.25f * r;
-		nvgMoveTo(vg, VEC_ARGS(p.plus(u.mult(gap))));
-		nvgLineTo(vg, VEC_ARGS(p.plus(u.mult(gap + r)).plus(n.mult(r))));
-		nvgLineTo(vg, VEC_ARGS(q.minus(u.mult(gap + r)).plus(n.mult(r))));
-		nvgLineTo(vg, VEC_ARGS(q.minus(u.mult(gap))));
-		nvgLineTo(vg, VEC_ARGS(q.minus(u.mult(gap + r)).minus(n.mult(r))));
-		nvgLineTo(vg, VEC_ARGS(p.plus(u.mult(gap + r)).minus(n.mult(r))));
-		nvgClosePath(vg);
-	}
-
-	/** The segments of every digit that are lit (or, for the ghosts behind them, unlit). */
-	void drawDigits(NVGcontext* vg, bool lit, NVGcolor color) {
-		float tempo = module ? module->shownTempo.load() : 120.f;
-		int value = std::min((int) std::round(tempo), 999);
-		float pad = mm2px(1.8f), h = box.size.y - 2 * pad, w = 0.5f * h, r = 0.06f * h;
-		float gap = (box.size.x - 2 * pad - 3 * w) / 2;
-		nvgSave(vg);
-		nvgTranslate(vg, 0, box.size.y / 2);
-		nvgSkewX(vg, -0.1f);
-		nvgTranslate(vg, 0, -box.size.y / 2);
-		nvgBeginPath(vg);
-		for (int d = 0; d < 3; d++) {
-			int place = 2 - d, digit = value / (place == 2 ? 100 : place == 1 ? 10 : 1) % 10;
-			uint8_t mask = tempo < 0.f ? DASH : value < std::pow(10, place) && place > 0 ? 0 : DIGITS[digit];
-			float x = pad + d * (w + gap), y = pad;
-			const math::Vec corners[6] = {{x, y}, {x + w, y}, {x + w, y + h / 2}, {x + w, y + h}, {x, y + h}, {x, y + h / 2}};
-			const int ends[7][2] = {{0, 1}, {1, 2}, {2, 3}, {3, 4}, {5, 4}, {0, 5}, {5, 2}};
-			for (int s = 0; s < 7; s++)
-				if (bool(mask & (1 << s)) == lit)
-					segment(vg, corners[ends[s][0]], corners[ends[s][1]], r);
-		}
-		nvgFillColor(vg, color);
-		nvgFill(vg);
-		nvgRestore(vg);
+	math::Rect digits() {
+		float pad = mm2px(1.4f);
+		return math::Rect(pad, pad, box.size.x - 2 * pad, box.size.y - 2 * pad);
 	}
 
 	void draw(const DrawArgs& args) override {
@@ -1335,12 +1743,12 @@ struct TempoDisplay : widget::Widget {
 		nvgRoundedRect(args.vg, 0, 0, box.size.x, box.size.y, mm2px(1.f));
 		nvgFillColor(args.vg, nvgRGB(0x14, 0x15, 0x17));
 		nvgFill(args.vg);
-		drawDigits(args.vg, false, nvgTransRGBAf(NOTE_COLOR, 0.08f));
+		SevenSegment::draw(args.vg, digits(), "888", false, nvgTransRGBAf(NOTE_COLOR, 0.08f));
 	}
 
 	void drawLayer(const DrawArgs& args, int layer) override {
 		if (layer == 1)
-			drawDigits(args.vg, true, NOTE_COLOR);
+			SevenSegment::draw(args.vg, digits(), module ? module->displayText() : "120", true, NOTE_COLOR);
 		Widget::drawLayer(args, layer);
 	}
 };
@@ -1361,6 +1769,120 @@ struct MasterDial : SmallDial {
 		SmallDial::step();
 	}
 };
+
+
+/** The project slots to and from files, for the context menu. Everything here runs on the UI thread. */
+namespace files {
+
+inline std::string choose(osdialog_file_action action, const char* filename = nullptr, const char* filters = nullptr) {
+	osdialog_filters* f = filters ? osdialog_filters_parse(filters) : nullptr;
+	char* path = osdialog_file(action, nullptr, filename, f);
+	if (f)
+		osdialog_filters_free(f);
+	std::string chosen = path ? path : "";
+	std::free(path);
+	return chosen;
+}
+
+inline void warn(const std::string& message) {
+	osdialog_message(OSDIALOG_WARNING, OSDIALOG_OK, message.c_str());
+}
+
+/** The live project goes into its slot first, as switching projects would save it. */
+inline void storeLive(Sequencer* m) {
+	if (m->autoSave)
+		m->saveProject(m->project);
+}
+
+inline void saveSlots(Sequencer* m) {
+	std::string path = choose(OSDIALOG_SAVE, "projects.json", "Projects:json");
+	if (path.empty())
+		return;
+	if (system::getExtension(path) != ".json")
+		path += ".json";
+	storeLive(m);
+	json_t* root = json_object();
+	json_object_set_new(root, "projects", m->projectsToJson());
+	if (json_dump_file(root, path.c_str(), JSON_INDENT(1)) != 0)
+		warn("Couldn't write " + path);
+	json_decref(root);
+}
+
+inline void loadSlots(Sequencer* m) {
+	std::string path = choose(OSDIALOG_OPEN, nullptr, "Projects:json");
+	if (path.empty())
+		return;
+	json_error_t error;
+	json_t* root = json_load_file(path.c_str(), 0, &error);
+	json_t* projects = root ? json_object_get(root, "projects") : nullptr;
+	if (!json_is_array(projects))
+		warn("Not a projects file: " + path);
+	else {
+		m->projectsFromJson(projects);
+		m->reload = m->project;
+	}
+	json_decref(root);
+}
+
+/** Every used slot as projects/projectNN.opz, for the OP-Z's disk mode. */
+inline void exportOpz(Sequencer* m) {
+	std::string dir = choose(OSDIALOG_OPEN_DIR);
+	if (dir.empty())
+		return;
+	storeLive(m);
+	std::vector<uint8_t> files[PROJECTS];
+	{
+		std::lock_guard<std::mutex> lock(m->projectsMutex);
+		for (int i = 0; i < PROJECTS; i++)
+			if (m->projects[i].used)
+				files[i] = opzfile::write(m->projects[i]);
+	}
+	for (int i = 0; i < PROJECTS; i++)
+		if (!files[i].empty())
+			system::writeFile(system::join(dir, Sequencer::opzName(i)), files[i]);
+}
+
+inline bool readOpz(const std::string& path, Project& p) {
+	std::string error;
+	p = Sequencer::blankProject();
+	if (opzfile::read(system::readFile(path), p, &error))
+		return true;
+	warn(path + ": " + error);
+	return false;
+}
+
+/** projectNN.opz from a folder, the OP-Z's projects folder say, into the slots of the same numbers. */
+inline void importOpzFolder(Sequencer* m) {
+	std::string dir = choose(OSDIALOG_OPEN_DIR);
+	if (dir.empty())
+		return;
+	int found = 0;
+	for (int i = 0; i < PROJECTS; i++) {
+		std::string path = system::join(dir, Sequencer::opzName(i));
+		Project p;
+		if (system::isFile(path) && readOpz(path, p)) {
+			std::lock_guard<std::mutex> lock(m->projectsMutex);
+			m->projects[i] = p;
+			found++;
+		}
+	}
+	if (!found)
+		warn("No project01.opz to project10.opz in " + dir);
+	else
+		m->reload = m->project;
+}
+
+inline void importOpz(Sequencer* m) {
+	std::string path = choose(OSDIALOG_OPEN, nullptr, "OP-Z project:opz");
+	Project p;
+	if (path.empty() || !readOpz(path, p))
+		return;
+	std::lock_guard<std::mutex> lock(m->projectsMutex);
+	m->projects[m->project] = p;
+	m->reload = m->project;
+}
+
+} // namespace files
 
 
 struct SequencerWidget : ModuleWidget {
@@ -1393,7 +1915,8 @@ struct SequencerWidget : ModuleWidget {
 		// Every key, with the symbol its LED lights: an icon for the function and track keys, a number for the black
 		// keys, a dot for the rest.
 		static const char* const functions[][2] = {{"TRACK", "track"}, {"REC", "rec"}, {"PLAY", "play"}, {"STOP", "stop"},
-			{"OCTAVE_DOWN", "minus"}, {"OCTAVE_UP", "plus"}, {"SHIFT", "shift"}, {"METRONOME", "metronome"}};
+			{"OCTAVE_DOWN", "minus"}, {"OCTAVE_UP", "plus"}, {"SHIFT", "shift"},
+			{"PROJECT", "project"}, {"MIXER", "mixer"}, {"METRONOME", "metronome"}, {"SCREEN", "screen"}};
 		static const char* const tracks[TRACKS] = {"kick", "snare", "perc", "sample", "bass", "lead", "arp", "chord"};
 		for (int p = Sequencer::TRACK_PARAM; p < Sequencer::PARAMS_LEN; p++) {
 			int light = Sequencer::keyLight(p);
@@ -1475,6 +1998,17 @@ struct SequencerWidget : ModuleWidget {
 			[=](size_t i) { module->lane().settings.channels = i + 1; }));
 		menu->addChild(createBoolPtrMenuItem("Long-press toggles hold", "", &module->longPressHolds));
 		menu->addChild(createBoolPtrMenuItem(RACK_MOD_CTRL_NAME "-click toggles hold", "", &module->ctrlClickHolds));
+		menu->addChild(createSubmenuItem("Projects", "", [=](Menu* menu) {
+			menu->addChild(createBoolPtrMenuItem("Save the project on switching", "", &module->autoSave));
+			menu->addChild(new MenuSeparator);
+			menu->addChild(createMenuItem("Save the slots to a file…", "", [=]() { files::saveSlots(module); }));
+			menu->addChild(createMenuItem("Load the slots from a file…", "", [=]() { files::loadSlots(module); }));
+			menu->addChild(new MenuSeparator);
+			menu->addChild(createMenuLabel("OP-Z disk mode"));
+			menu->addChild(createMenuItem("Export the slots to a projects folder…", "", [=]() { files::exportOpz(module); }));
+			menu->addChild(createMenuItem("Import a projects folder…", "", [=]() { files::importOpzFolder(module); }));
+			menu->addChild(createMenuItem(string::f("Import a project into slot %d…", module->project + 1), "", [=]() { files::importOpz(module); }));
+		}));
 	}
 };
 

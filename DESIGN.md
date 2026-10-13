@@ -18,8 +18,9 @@ How vcvopxyz is put together, and why. For what the modules do, see the [manual]
 `src/opz/Bus.hpp`. The Sequencer sits at the left end of a row as the master. Every OP-Z module is a `BusNode`,
 which owns the double buffers Rack's expander messages flip between, and passes on what it gets, a sample later:
 
-- **Downstream** (rightward): each track's lane (poly pitch, velocity, gate and the sweep offsets), the tempo, the
-  selected track, track mode, page requests, and a count of the synth engines passed so far.
+- **Downstream** (rightward): each track's lane (poly pitch, velocity, gate, the sweep offsets, and its level from
+  the mixer, 0 while its sound is muted), the tempo, the selected track, track mode, page requests, and a count of
+  the synth engines passed so far.
 - **Upstream** (leftward): the L/R mix of every engine whose own outputs are unpatched, each engine's page, and the
   selected engine's four dial values for the master's dial LEDs.
 
@@ -46,6 +47,10 @@ legend, the state published for the UI through a `TripleBuffer`. `SynthTrack<Eng
   the sound moves.
 - **After the voices:** the filter pair, level, FX sends, the soft limit (linear to ±5V, then bending towards ±10V)
   and the pan, then the outputs, the bus mix and the meters.
+
+The panel has no dials, as the hardware's tracks have none of their own: the Sequencer's turn the selected track's,
+and a Screen turns any. Its status screen (`TrackStatus`) reads the same published state as a Screen beside it,
+both on the UI thread, which is the `TripleBuffer`'s one consumer.
 
 ### Engines
 
@@ -85,6 +90,25 @@ tested on its own. `src/opz/Sequencer.cpp` is the module: the face, the modes, r
   frame and pushes a `PatternChange` when they differ. Every edit, from any source, is one undo step.
 - **Components** are a bitmask and a value per step. Most act in the player when it schedules a slot; sweeps go out
   over the bus as offsets on the lane; the gate step jump advances the tracks that wait for triggers, as **ADV** does.
+- **Modes:** TRACK and the three latching index keys (PROJECT, MIXER, TEMPO) are one mode at a time, each taking
+  over the dials, steps and value keys. The dials re-point at the mode's own params, so the mixer's levels and the
+  metronome are ordinary params with undo and MIDI mapping too.
+
+### Projects
+
+`src/opz/Project.hpp` is a project slot as plain data, and the reader and writer for the OP-Z's own project files,
+with no Rack in either. The slots live in the Sequencer and save with the patch as JSON. A slot holds the engines'
+dials as shares of each dial's range, so a project sets the same dial positions whichever engine plays a track, as
+the OP-Z's files do.
+
+Switching projects happens in the audio thread, from the keys; files are read and written in the UI thread. A mutex
+guards the slots between the two, and the UI thread hands a changed slot back by number, for the audio thread to
+load at its next control step.
+
+The .opz layout comes from the OP-Z community's reverse engineering (see the comment at the top of `Project.hpp`).
+Each imported file is kept, in the patch's storage folder, so an export writes the slot over the file it came from
+and keeps everything the Sequencer doesn't model: the other 15 patterns, chains, parameter locks, the drum and FX
+tracks.
 
 ## Panels
 
@@ -113,3 +137,12 @@ do, so the plugin can go to the VCV Library some day.
   Ramps use C major until a tonality master exists.
 - **Untuned:** engine voicing, sweep depth (half a dial's travel) and glide times (up to a beat) are first guesses,
   waiting to be tuned by ear.
+- **Index keys:** the OP-Z's are held while turning dials or pressing keys, so here three latch, like TRACK, and
+  SCREEN, which only shows the battery, works while held. The battery is pretend, running down while playing.
+- **Mixer:** levels are squared, as the engines' are, and only reach the engines over the bus; a mute stops a
+  track's gates, outputs included, while a sound mute (SHIFT) only zeroes its level. Punch is a compressor with
+  make-up gain, and the master level comes after it.
+- **Metronome:** the OP-Z counts in a voice that can't be copied, so its sounds are six synthesized clicks.
+- **Project files:** what the track settings' bytes mean is unknown, so the step count, step length, note length,
+  quantize, swing and the length of notes are written in the most likely reading and read back the same way.
+  Mutes and the mixer's mute groups aren't written.

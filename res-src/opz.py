@@ -76,6 +76,10 @@ ICONS = {
     'shift': [line('M0 0.7V-0.7M-0.5 -0.2L0 -0.7L0.5 -0.2')],
     'dot': [dot(0, 0, 0.4)],
     'metronome': [line('M-0.55 0.9L-0.22 -0.9H0.22L0.55 0.9Z'), line('M-0.4 0.45H0.4'), line('M0 0.45L0.65 -0.55')],
+    # The index keys over the display: project, mixer, tempo (the metronome) and screen, which shows the battery.
+    'project': [line('M-0.85 -0.55H-0.2L0.05 -0.8H0.85V0.75H-0.85Z'), line('M-0.85 -0.3H0.85')],
+    'mixer': [line('M-0.75 -0.25V0.25M-0.25 -0.75V0.75M0.25 -0.75V0.75M0.75 -0.25V0.25')],
+    'screen': [line('M-0.9 -0.45H0.65V0.45H-0.9Z'), solid('M0.75 -0.2H0.95V0.2H0.75Z'), solid('M-0.7 -0.25H0.2V0.25H-0.7Z')],
 }
 TRACKS = ['kick', 'snare', 'perc', 'sample', 'bass', 'lead', 'arp', 'chord',
           'fx1', 'fx2', 'tape', 'master', 'perform', 'module', 'lights', 'motion']
@@ -97,6 +101,7 @@ RING = 0.3      # its ring's line weight (mm)
 NUMERAL = 2.7   # the black keys' numbers (mm)
 # The symbols that are also LEDs, and how big each is drawn (mm).
 SYMBOLS = dict(dot=2.0, rec=2.4, track=2.2, minus=2.2, plus=2.2, play=2.0, stop=1.9, shift=2.2, metronome=2.3,
+               project=2.2, mixer=2.2, screen=2.3,
                kick=2.3, snare=2.3, perc=2.3, sample=2.3, bass=2.3, lead=2.3, arp=2.3, chord=2.3)
 
 

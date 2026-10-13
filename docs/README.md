@@ -9,9 +9,9 @@
 
 | Page | What it covers |
 | --- | --- |
-| [Sequencer](sequencer.md) | The OP-Z's front panel and the master of the modules to its right: tempo, transport, eight tracks of 16 steps, recording. |
+| [Sequencer](sequencer.md) | The OP-Z's front panel and the master of the modules to its right: tempo, transport, eight tracks of 16 steps, recording, the mixer and project slots. |
 | [Step components](step-components.md) | The Sequencer's 14 per-step modifiers: pulses, ratchets, ramps, glides, sweeps, jumps and sparks. |
-| [Synth tracks](synth-tracks.md) | What every synth engine shares (pages, note styles, LFO, jacks), then Digital, Analog, Cluster and Organ. |
+| [Synth tracks](synth-tracks.md) | What every synth engine shares (status screen, pages, note styles, LFO, jacks), then Digital, Analog, Cluster and Organ. |
 | [Breakout](breakout.md) | A synth track whose voice is made of other modules. |
 | [Screen](screen.md) | The OP-Z's phone app, as an expander. |
 
@@ -32,5 +32,7 @@
 2. Patch the Sequencer's **L** and **R** to an audio interface or mixer.
 3. Click the bass track's key under the face, play the round keys to hear it, and click steps to paste the last
    notes played into them.
-4. Click **PLAY**. Add Analog, Cluster or Organ to the right of Digital for tracks 6, 7 and 8, and a Screen beside
-   any engine to see its pages.
+4. Click **PLAY**. Turn the Sequencer's dials to shape the sound, and click **SHIFT** for the next page.
+5. Add Analog, Cluster or Organ to the right of Digital for tracks 6, 7 and 8, and a Screen beside any engine to see
+   its pages.
+6. Switch **PROJECT** on and long-press a black key to save the project to that slot.

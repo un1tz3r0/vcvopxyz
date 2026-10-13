@@ -36,7 +36,7 @@ struct Display : widget::OpaqueWidget {
 	Screen* module = nullptr;
 	const Track::Snapshot* snapshot = nullptr;
 	int focus = Track::P1_PARAM;          // the dial the readout shows and a drag changes
-	float last[Track::PAGE_PARAM] = {};   // dial values last frame, to see which one was touched
+	float last[Track::PARAMS_LEN] = {};   // dial values last frame, to see which one was touched
 	int lastPage = -1;
 	Track* lastTrack = nullptr;
 	float dragValue = 0.f, dragStart = 0.f;
@@ -85,7 +85,7 @@ struct Display : widget::OpaqueWidget {
 			if (track->snapshots.update() || !snapshot)
 				snapshot = &track->snapshots.read();
 			// The readout follows whichever dial moves, and the page when it changes.
-			for (int i = 0; i < Track::PAGE_PARAM; i++) {
+			for (int i = 0; i < Track::PARAMS_LEN; i++) {
 				float v = track->params[i].getValue();
 				if (v != last[i] && !dragging && track == lastTrack)
 					focus = i;

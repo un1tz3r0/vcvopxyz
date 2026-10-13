@@ -17,6 +17,7 @@ exactly on time. A slot is one step's turn under the playhead: pulse and pulse h
 namespace opz {
 
 constexpr int STEPS = 16, STEP_NOTES = 4, TICKS = 24, CHANNELS = 16;
+constexpr int TRACKS = 8, DRUM_TRACKS = 4, SYNTH_TRACKS = TRACKS - DRUM_TRACKS; // kick, snare, perc, sample, then bass, lead, arp, chord
 constexpr int MIN_OFFSET = 1 - TICKS, MAX_OFFSET = TICKS;
 constexpr int DRONE = std::numeric_limits<int16_t>::max();
 
@@ -155,6 +156,9 @@ struct Settings {
 inline int stepLengthOfKey(int key) {
 	return key == 9 ? 0 : key == 8 ? 16 : key + 1;
 }
+
+/** The note length dial's settings, in ticks of a ×1 step: 1/64 to a bar, dotted between, then drone. */
+constexpr int NOTE_LENGTHS[] = {6, 9, 12, 18, 24, 36, 48, 72, 96, 144, 192, 288, 384, DRONE};
 
 /** Scale degrees, counted from the note, that the ramps and random walk through: 2 to 6 notes to the octave. */
 inline const int* rampDegrees(int notes, int* size) {

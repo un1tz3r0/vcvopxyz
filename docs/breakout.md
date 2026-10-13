@@ -2,11 +2,11 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/breakout-dark.png">
-  <img alt="Breakout, with Analog patched into RET L" src="assets/breakout-light.png" width="300">
+  <img alt="Breakout, with Analog patched into RET L" src="assets/breakout-light.png" width="180">
 </picture>
 
-A [synth track](synth-tracks.md) whose voice is made of other modules. It is 20 HP and has everything an engine has,
-plus a dark box of outputs that send the track out, and **RET L** and **RET R** to take the sound back in. It takes
+A [synth track](synth-tracks.md) whose voice is made of other modules. It is 12 HP and has everything an engine has,
+plus a dark box of outputs at the top that send the track out, and **RET L** and **RET R** to take the sound back in. It takes
 its track from a Sequencer to its left like any engine.
 
 - **Out:** **V/OCT**, **GATE** and **ENV** are polyphonic, a channel per voice (one in mono and legato), with the

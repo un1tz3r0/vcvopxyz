@@ -37,9 +37,10 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | --- | --- |
 | `plugin.json` | The manifest: plugin and module metadata, and the version. |
 | `src/plugin.*` | The plugin's entry point, which registers each module's `Model`. |
-| `src/opz/` | The OP-Z synth track every engine shares (`SynthTrack.hpp`), its panel (`SynthTrackWidget.hpp`), its LFO and note handling. |
+| `src/opz/` | The OP-Z synth track every engine shares (`SynthTrack.hpp`), its panel and status screen (`SynthTrackWidget.hpp`), its LFO and note handling. |
 | `src/opz/Sequence.hpp` | The sequencer's steps, components and the player that schedules them, knowing nothing of Rack. |
 | `src/opz/Sequencer.cpp` | The Sequencer module. |
+| `src/opz/Project.hpp` | A project slot, and the reader and writer for the OP-Z's `.opz` project files, knowing nothing of Rack. |
 | `src/opz/Bus.hpp` | The bus between the Sequencer and the engines and Screens to its right. |
 | `src/dsp/` | Building blocks that know nothing of Rack: filter, envelope, band-limited saw. |
 | `src/Digital.cpp`, `Analog.cpp`, `Cluster.cpp`, `Organ.cpp` | The engines. |

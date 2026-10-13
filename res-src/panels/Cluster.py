@@ -2,4 +2,4 @@ from synth_track import synth_track_panel
 
 
 def panel():
-    return synth_track_panel('Cluster', 'TONE', 'GRAVITY')
+    return synth_track_panel('Cluster')

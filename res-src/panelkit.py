@@ -67,9 +67,8 @@ PAGE_LEDS = ['#3BE07A', '#3D8BFF', '#FFC82E', '#FF4D3D', '#FFFFFF']
 COMPONENT_COLORS = dict(PARAM='#FF0000', INPUT='#00FF00', OUTPUT='#0000FF', LIGHT='#FF00FF', WIDGET='#FFFF00')
 
 HP = 5.08
-KNOB_R, SOFT_R, BUTTON_R, DIAL_R = 5.5, 3.75, 3.6, 7.0  # radii (mm) of the components generated below
+KNOB_R, SOFT_R, BUTTON_R = 5.5, 3.75, 3.6  # radii (mm) of the components generated below
 SMALL_DIAL_R = 5.45  # the Sequencer's dials, before its face is scaled up: two of its key columns, as the OP-Z's
-PAGE_KEY = (6.4, 6.0)  # PAGE's size (mm)
 LABEL = 2.6  # label font size (mm)
 
 
@@ -108,6 +107,10 @@ class Panel:
     def title(self, slug):
         """The module's name from plugin.json at the top, the brand at the bottom between the screws."""
         name = next(m['name'] for m in MANIFEST['modules'] if m['slug'] == slug)
+        if self.width < 8 * HP:
+            # Too narrow to fit between the screws: the name goes below them, and the brand is left out.
+            self.text(name.lower(), self.width / 2, 9.0, size=4.6, fill='title')
+            return
         self.text(name.lower(), self.width / 2, 6.3, size=5.2, fill='title')
         self.text(MANIFEST['brand'], self.width / 2, self.height - 2.54, size=2.3, fill='footer')
 
@@ -161,18 +164,6 @@ def dial_pointer(r):
     """Rotating part of a dial: a small dimple near the rim."""
     c = num(r)
     return document(2 * r, 2 * r, f'  <circle cx="{c}" cy="{num(r * 0.3)}" r="{num(r * 0.09)}" fill="#000000" fill-opacity="0.35"/>')
-
-
-def key(size, face, pressed):
-    """A key with a little depth: its face sits on a darker edge, and sinks into it when pressed."""
-    w, h = size
-    edge = mix(face, '#000000', 0.25)
-    if pressed:
-        face = mix(face, '#000000', 0.06)
-    lift = 0.15 if pressed else 0.45
-    body = (f'  <rect x="0" y="0" width="{num(w)}" height="{num(h)}" rx="0.9" fill="{edge}"/>\n'
-            f'  <rect x="0" y="{num(0.45 - lift)}" width="{num(w)}" height="{num(h - 0.45)}" rx="0.9" fill="{face}"/>')
-    return document(w, h, body)
 
 
 def button(r, fill):

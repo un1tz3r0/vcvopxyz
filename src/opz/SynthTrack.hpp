@@ -117,7 +117,6 @@ struct Track : Module, BusNode {
 		LFO_AMOUNT_PARAM, LFO_SPEED_PARAM, LFO_TARGET_PARAM, LFO_SHAPE_PARAM,
 		FX1_PARAM, FX2_PARAM, PAN_PARAM, LEVEL_PARAM,
 		STYLE_PARAM, GLIDE_PARAM,
-		PAGE_PARAM, ENUMS(SELECT_PARAM, PAGES_LEN),
 		PARAMS_LEN
 	};
 	// The return and the CV outputs belong to Breakout, which hands the voice to other modules; the other engines'
@@ -131,8 +130,7 @@ struct Track : Module, BusNode {
 	};
 	static constexpr int AUDIO_OUTPUTS = CV_VOCT_OUTPUT;
 	enum LightId {
-		ENUMS(DIAL_LIGHT, 4 * PAGES_LEN), ENUMS(PAGE_LIGHT, PAGES_LEN), ENUMS(SELECT_LIGHT, PAGES_LEN),
-		ENUMS(VOICE_LIGHT, PORT_MAX_CHANNELS),
+		SELECTED_LIGHT, ACTIVE_LIGHT,
 		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * OUTPUTS_LEN),
 		LIGHTS_LEN
 	};
@@ -147,7 +145,6 @@ struct Track : Module, BusNode {
 		{-1, STYLE_PARAM, -1, GLIDE_PARAM},
 	};
 	static constexpr int PPQN[] = {1, 2, 4, 8, 12, 16, 24, 48, 96};
-	static constexpr float FLASH = 0.3f; // seconds the dial LEDs flash a new page's colour
 
 	/** The audio thread's moving parts, published for a Screen about 60 times a second. */
 	struct Snapshot {
@@ -164,7 +161,8 @@ struct Track : Module, BusNode {
 	int ppqn = 4;                // clock pulses per beat: 4 is one per sixteenth, one per step
 	int page = PAGE_SOUND;
 	bool trackMode = false;
-	float flash = 0.f;
+	int busTrack = -1;           // the Sequencer's track this engine plays, or -1 off the bus
+	bool selected = false;       // the Sequencer's keys and dials are on this engine's track
 
 	static constexpr const char* PAGE_NAMES[PAGES_LEN] = {"SOUND", "ENVELOPE", "LFO", "MIX", "TRACK"};
 
@@ -183,19 +181,16 @@ struct Track : Module, BusNode {
 	void showPage(int p) {
 		page = p;
 		trackMode = false;
-		flash = FLASH;
 	}
 
 	void setTrackMode(bool on) {
 		trackMode = on;
-		flash = FLASH;
 	}
 };
 
 
 template <class Engine>
 struct SynthTrack : Track {
-	dsp::BooleanTrigger pageButton, selectButtons[PAGES_LEN];
 
 	struct Voice {
 		typename Engine::Voice sound;
@@ -225,11 +220,9 @@ struct SynthTrack : Track {
 	int channels = 0;           // the note source's channels
 	bool lfoInside = true;      // false while the LFO goes out to other modules instead
 	float sweep[SWEEP_TARGETS] = {}; // the sequencer's sweep component, from the lane
-	// The bus, while this engine is on one: its track, the lane it plays (null while GATE is patched), and the
-	// master's requests last seen.
-	int busTrack = -1;
+	// The lane this engine plays (null while GATE is patched), and the master's requests last seen.
 	const Downstream::Lane* lane = nullptr;
-	bool selected = false, masterTrackMode = false;
+	bool masterTrackMode = false;
 	uint32_t pageRequests = 0;
 	float dialValues[4] = {-1.f, -1.f, -1.f, -1.f};
 	Lfo lfo;
@@ -271,13 +264,8 @@ struct SynthTrack : Track {
 			"Mono plays the newest held note and retriggers on every change; legato slides between held notes without retriggering";
 		configParam(GLIDE_PARAM, 0.f, 1.f, 0.f, "Portamento", "%", 0.f, 100.f)->description = "Mono and legato only";
 
-		configButton(PAGE_PARAM, "Page")->description = "Steps the dials through the sound, envelope, LFO and mix pages";
-		const char* const pages[] = {"Sound page", "Envelope page", "LFO page", "Mix page", "Track mode"};
-		for (int i = 0; i < PAGES_LEN; i++)
-			configButton(SELECT_PARAM + i, pages[i]);
-		getParamQuantity(SELECT_PARAM + PAGE_TRACK)->description = "On and off: the dials set the note style and portamento";
-		for (int i = 0; i < PORT_MAX_CHANNELS; i++)
-			configLight(VOICE_LIGHT + i, string::f("Voice %d", i + 1));
+		configLight(SELECTED_LIGHT, "Selected on the Sequencer");
+		configLight(ACTIVE_LIGHT, "Notes playing");
 
 		configInput(VOCT_INPUT, "1V/octave pitch");
 		configInput(GATE_INPUT, "Gate");
@@ -378,21 +366,6 @@ struct SynthTrack : Track {
 				default: break;
 			}
 		}
-	}
-
-	/** The page buttons, at control rate. */
-	void handleButtons(float dt) {
-		if (pageButton.process(params[PAGE_PARAM].getValue() > 0.f))
-			showPage(trackMode ? page : (page + 1) % PAGE_TRACK);
-		for (int i = 0; i < PAGES_LEN; i++) {
-			if (selectButtons[i].process(params[SELECT_PARAM + i].getValue() > 0.f)) {
-				if (i == PAGE_TRACK)
-					setTrackMode(!trackMode);
-				else
-					showPage(i);
-			}
-		}
-		flash = std::fmax(flash - dt, 0.f);
 	}
 
 	/** The selected track's engine follows the master's track mode and page keys. */
@@ -497,7 +470,7 @@ struct SynthTrack : Track {
 		float level = modulated(LEVEL_PARAM, TARGET_VOLUME, offset);
 		c.left = std::cos((pan + 1.f) * float(M_PI) / 4.f);
 		c.right = std::sin((pan + 1.f) * float(M_PI) / 4.f);
-		c.gain = 5.f * level * level;
+		c.gain = 5.f * level * level * (lane ? lane->level : 1.f);
 		c.fx1 = params[FX1_PARAM].getValue() * params[FX1_PARAM].getValue();
 		c.fx2 = params[FX2_PARAM].getValue() * params[FX2_PARAM].getValue();
 	}
@@ -509,10 +482,8 @@ struct SynthTrack : Track {
 		if (reset.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f))
 			lfo.restart();
 		bool control = controlDivider.process();
-		if (control) {
-			handleButtons(args.sampleTime * controlDivider.getDivision());
+		if (control)
 			handleMaster(bus);
-		}
 		bool fromBus = busTrack >= 0 && !inputs[GATE_INPUT].isConnected() && bus->lanes[busTrack].channels > 0;
 		handleNotes(fromBus ? &bus->lanes[busTrack] : nullptr);
 		for (int i = 0; i < SWEEP_TARGETS; i++)
@@ -583,21 +554,16 @@ struct SynthTrack : Track {
 	}
 
 	void updateLights(float dt) {
-		// The dial LEDs flash the page's colour when it changes, then show their dial's value in it.
-		int shown = shownPage();
+		// The dials' values, for the Sequencer's dial LEDs.
 		for (int d = 0; d < 4; d++) {
-			int param = DIALS[shown][d];
+			int param = DIALS[shownPage()][d];
 			dialValues[d] = param < 0 ? -1.f : paramQuantities[param]->getScaledValue();
-			float b = param < 0 ? 0.f : flash > 0.f ? 1.f : 0.15f + 0.85f * paramQuantities[param]->getScaledValue();
-			for (int p = 0; p < PAGES_LEN; p++)
-				lights[DIAL_LIGHT + PAGES_LEN * d + p].setBrightness(p == shown ? b : 0.f);
 		}
-		for (int p = 0; p < PAGES_LEN; p++) {
-			lights[PAGE_LIGHT + p].setBrightness(p == shown);
-			lights[SELECT_LIGHT + p].setBrightness(p == shown);
-		}
-		for (int i = 0; i < PORT_MAX_CHANNELS; i++)
-			lights[VOICE_LIGHT + i].setBrightnessSmooth(voices[i].envelope.level * voices[i].velocity, dt);
+		float loudest = 0.f;
+		for (Voice& v : voices)
+			loudest = std::fmax(loudest, v.envelope.level * v.velocity);
+		lights[SELECTED_LIGHT].setBrightness(selected);
+		lights[ACTIVE_LIGHT].setBrightnessSmooth(loudest, dt);
 
 		for (int i = 0; i < INPUTS_LEN; i++) {
 			float level = peak(inputs[i]);
@@ -646,13 +612,6 @@ struct SynthTrack : Track {
 		ppqn = 4;
 		page = PAGE_SOUND;
 		trackMode = false;
-	}
-
-	/** Buttons are saved like any param, so one held down while saving would come back stuck. */
-	void paramsFromJson(json_t* root) override {
-		Module::paramsFromJson(root);
-		for (int i = PAGE_PARAM; i < PARAMS_LEN; i++)
-			params[i].setValue(0.f);
 	}
 
 	/** Track mode isn't saved, so a patch always opens on the dials' pages. */

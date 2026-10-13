@@ -10,8 +10,8 @@ Needs fontTools:  python3 -m pip install fonttools
 import importlib
 
 from opz import SCALE, SYMBOLS, symbol_svg
-from panelkit import (BUTTON_R, DIAL_R, DIALS, KNOB_R, PAGE_KEY, PASTELS, ROOT, SMALL_DIAL_R, SOFT_R,
-                      THEMES, button, dial_bg, dial_pointer, key, knob_bg, knob_pointer, write)
+from panelkit import (BUTTON_R, DIALS, KNOB_R, PASTELS, ROOT, SMALL_DIAL_R, SOFT_R, THEMES, button, dial_bg,
+                      dial_pointer, knob_bg, knob_pointer, write)
 
 if __name__ == '__main__':
     for path in sorted((ROOT / 'res-src/panels').glob('*.py')):
@@ -26,11 +26,8 @@ if __name__ == '__main__':
     write(components / 'SoftKnob.svg', knob_pointer(SOFT_R, (0.25, 0.72), 0.6))
     write(components / 'PushButton_0.svg', button(BUTTON_R, '#FAFAF7'))
     write(components / 'PushButton_1.svg', button(BUTTON_R, '#CFCEC9'))
-    for kind, r in dict(Dial=DIAL_R, SmallDial=SMALL_DIAL_R * SCALE).items():
-        for name, color in DIALS.items():
-            write(components / f'{kind}_bg-{name}.svg', dial_bg(r, color))
-        write(components / f'{kind}.svg', dial_pointer(r))
+    for name, color in DIALS.items():
+        write(components / f'SmallDial_bg-{name}.svg', dial_bg(SMALL_DIAL_R * SCALE, color))
+    write(components / 'SmallDial.svg', dial_pointer(SMALL_DIAL_R * SCALE))
     for name in [*SYMBOLS, *'0123456789']:
         write(components / f'symbols/{name}.svg', symbol_svg(name))
-    for pressed in range(2):
-        write(components / f'PageKey_{pressed}.svg', key(PAGE_KEY, '#EDECE8', pressed))
