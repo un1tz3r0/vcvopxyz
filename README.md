@@ -49,8 +49,25 @@ pages, and a key per track over its jacks.
 - **Tempo mode:** click **TEMPO** to switch it on. The dials set the **tempo** (40 to 200 BPM) and **swing** (50%,
   straight, to 75%, which delays every second sixteenth). Type a tempo on the black keys, three digits as on the
   OP-Z, or tap one on the white keys. Its LED flashes on the beat.
-- **SHIFT:** a click turns the page. A long press or a Ctrl+click latches it, for track mode's step count now and
-  the step components later.
+- **SHIFT:** a click turns the page. A long press or a Ctrl+click latches it, for track mode's step count and the
+  step components.
+- **Step components:** with SHIFT latched, click steps to pick them (they blink green; steps with components glow
+  green). A white key puts the component above it on them, at a value that does something, and pressing it again
+  takes it off. The black keys set its value, lit green; pressing a spark's value again cycles which passes it
+  fires on. **STOP** clears every component on the track, and clicking SHIFT ends the editing. Tooltips name each
+  key's component or value, and a step's tooltip lists its components.
+
+  | Component | Keys 1 to 9, 0 |
+  | --- | --- |
+  | Pulse, pulse hold | The step plays, or holds its note, for 1 to 9 slots before the playhead moves on, or a random number. |
+  | Multiply | ×1 to ×8 ratchets within the step, a broken chord, or quantize (no micro timing). |
+  | Velocity | −4 to +3 (in sixteenths of the range, 5 is unchanged), mute, random. |
+  | Ramp up, ramp down, random | Walk C major from the note, one degree per trigger: 2 to 6 notes over 1 octave (1 to 5) or 3 octaves (6 to 0). |
+  | Portamento | Glide 1 to 8 into the note (up to a beat), direct, random. |
+  | Sweep | An out-and-back of the engine's filter (up, down), sound (up, down) or pan over a bar; the first four over two bars; random. |
+  | Jump | To the start, 2/4, 3/4 or 4/4; skip forward or back a step; random; stay; align with where the track would be; gate step (advances the tracks waiting for triggers). |
+  | Component spark, trigger spark | Fire the step's components, or its notes, on pass N of every N (1 to 8), random, or reset the count. Again: the first of N, all but the Nth, all but the first. |
+  | Tonality, parameter spark | Saved, but waiting for a tonality master and parameter locks. |
 - **Recording:** click **REC** to switch it on. While playing, notes from the keys and inputs go into the nearest
   step with their micro timing and length. Hold notes on the inputs and click **−** to erase them from the steps
   they pass instead, until they're released. While stopped, REC records a step at a time: each note or chord goes
@@ -153,7 +170,7 @@ Below that, every dial of every page is an arc in its colour, with the page the 
 select it and jump to its page (the track row switches track mode on), then drag up or down anywhere on the screen to
 turn it, finely with Ctrl, like the app's touch pad. Each drag is one undo step.
 
-Coming next: the sequencer's step components, then parameter locks over the bus, and drum engines.
+Coming next: parameter locks over the bus, and drum engines.
 
 ## Building
 

@@ -224,6 +224,7 @@ struct SynthTrack : Track {
 	int style = POLY;
 	int channels = 0;           // the note source's channels
 	bool lfoInside = true;      // false while the LFO goes out to other modules instead
+	float sweep[SWEEP_TARGETS] = {}; // the sequencer's sweep component, from the lane
 	// The bus, while this engine is on one: its track, the lane it plays (null while GATE is patched), and the
 	// master's requests last seen.
 	int busTrack = -1;
@@ -458,13 +459,14 @@ struct SynthTrack : Track {
 		}
 	}
 
-	/** A dial's value, moved by the LFO when the LFO targets it. Its range is the LFO's full swing. */
-	float modulated(int param, int target, float lfoOffset) {
+	/** A dial's value, moved by the LFO when the LFO targets it, and by a sweep. Both are shares of its travel. */
+	float modulated(int param, int target, float lfoOffset, float sweep = 0.f) {
 		float v = params[param].getValue();
-		if ((int) params[LFO_TARGET_PARAM].getValue() != target)
+		float offset = sweep + ((int) params[LFO_TARGET_PARAM].getValue() == target ? lfoOffset : 0.f);
+		if (offset == 0.f)
 			return v;
 		ParamQuantity* q = paramQuantities[param];
-		v = clamp(v + lfoOffset * (q->maxValue - q->minValue), q->minValue, q->maxValue);
+		v = clamp(v + offset * (q->maxValue - q->minValue), q->minValue, q->maxValue);
 		return q->snapEnabled ? std::round(v) : v;
 	}
 
@@ -474,12 +476,12 @@ struct SynthTrack : Track {
 		Controls& c = controls;
 		c.lfo = amount * std::fabs(amount) * lfoValue;
 		float offset = lfoInside ? c.lfo : 0.f;
-		c.p1 = modulated(P1_PARAM, TARGET_P1, offset);
+		c.p1 = modulated(P1_PARAM, TARGET_P1, offset, sweep[SWEEP_SYNTH]);
 		c.p2 = modulated(P2_PARAM, TARGET_P2, offset);
 		c.pitch = (int) params[LFO_TARGET_PARAM].getValue() == TARGET_PITCH ? 2.f * offset : 0.f;
 
 		// The resonance belongs to whichever filter the dial is moving; the other one stays flat.
-		c.filter = modulated(FILTER_PARAM, TARGET_FILTER, offset);
+		c.filter = modulated(FILTER_PARAM, TARGET_FILTER, offset, sweep[SWEEP_FILTER]);
 		c.resonance = modulated(RESONANCE_PARAM, TARGET_RESONANCE, offset);
 		float damping = 2.f - 1.9f * c.resonance; // Q from 0.5 to 10
 		lowpass.tune(lowpassHz(c.filter) * sampleTime, c.filter < 0.5f ? damping : float(M_SQRT2));
@@ -491,7 +493,7 @@ struct SynthTrack : Track {
 		c.glide = glide > 0.f ? xyz::Adsr::Shape::coefficient(glide * glide, sampleTime) : 1.f;
 		c.lfoCycles = sampleTime / Lfo::period(params[LFO_SPEED_PARAM].getValue(), secondsPerBeat);
 
-		float pan = modulated(PAN_PARAM, TARGET_PAN, offset);
+		float pan = modulated(PAN_PARAM, TARGET_PAN, offset, sweep[SWEEP_PAN]);
 		float level = modulated(LEVEL_PARAM, TARGET_VOLUME, offset);
 		c.left = std::cos((pan + 1.f) * float(M_PI) / 4.f);
 		c.right = std::sin((pan + 1.f) * float(M_PI) / 4.f);
@@ -513,6 +515,8 @@ struct SynthTrack : Track {
 		}
 		bool fromBus = busTrack >= 0 && !inputs[GATE_INPUT].isConnected() && bus->lanes[busTrack].channels > 0;
 		handleNotes(fromBus ? &bus->lanes[busTrack] : nullptr);
+		for (int i = 0; i < SWEEP_TARGETS; i++)
+			sweep[i] = lane ? lane->sweep[i] : 0.f;
 		lfoValue = lfo.process((int) params[LFO_SHAPE_PARAM].getValue(), controls.lfoCycles, inputs[EXT_INPUT].getVoltage() / 5.f);
 		if (control)
 			updateControls(args.sampleTime);

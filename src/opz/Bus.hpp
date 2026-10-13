@@ -24,6 +24,7 @@ struct Downstream {
 		int channels = 0;             // 0 while the lane's GATE output is patched, which takes its engine off the bus
 		float pitch[CHANNELS] = {}, velocity[CHANNELS] = {};
 		bool gate[CHANNELS] = {};
+		float sweep[SWEEP_TARGETS] = {}; // how far the track's sweep moves its engine's dials, as a share of their travel
 	};
 	Lane lanes[TRACKS];
 	float secondsPerBeat = 0.5f;
