@@ -2,8 +2,8 @@
 
 The engines have no dials of their own: the Sequencer's four turn them, and a Screen beside one shows every page.
 So a track is a slim strip: a status screen (the Sequencer track it plays, its icon, a scope, its voices and level),
-an LED for when the Sequencer has it selected and one for when it plays, then its jacks. Breakout is wider, for the
-jacks that take its voice out to other modules and back."""
+an LED for when the Sequencer has it selected and one for when it plays, then its jacks. Breakout and Drum Breakout
+are wider, for the jacks that take their voice out to other modules and back."""
 from panelkit import HP, LABEL, Panel
 
 HEIGHT = 128.5
@@ -12,7 +12,8 @@ LED_ROW = 47.2
 PITCH = 12.5                  # between the jacks' columns
 LABELS = dict(VOCT='V/OCT', VELOCITY='VEL', LEFT='L', RIGHT='R', FX1='FX 1', FX2='FX 2', RETURN_L='RET L',
               RETURN_R='RET R', CV_VOCT='V/OCT', CV_GATE='GATE', CV_ENV='ENV', CV_LFO='LFO', CV_FILTER='FILTER',
-              CV_RESONANCE='RESO', CV_FX1='FX 1', CV_FX2='FX 2', CV_P1='CV 1', CV_P2='CV 2')
+              CV_RESONANCE='RESO', CV_FX1='FX 1', CV_FX2='FX 2', CV_P1='CV 1', CV_P2='CV 2', CV_TRIGGER='TRIG',
+              CV_SOUND='SOUND', CV_VELOCITY='VEL')
 
 
 def status(slug, hp):
@@ -29,14 +30,14 @@ def status(slug, hp):
     return p
 
 
-def jacks(p, rows, columns):
+def jacks(p, rows, columns, labels={}):
     """Rows of (y, [(name, kind) or None per column]). Each jack has a level LED; outputs print their labels light,
-    for the dark boxes behind them."""
+    for the dark boxes behind them. `labels` overrides LABELS."""
     for y, row in rows:
         for x, jack in zip(columns, row):
             if jack:
                 name, kind = jack
-                label = LABELS.get(name, name)
+                label = labels.get(name, LABELS.get(name, name))
                 p.text(label, x, y - 6.2, size=LABEL if len(label) < 5 else 2.2, fill='box_ink' if kind == 'OUTPUT' else 'ink')
                 p.place(f'{name}_{kind}', x, y)
                 p.place(f'{name}_LIGHT', x + 3.9, y - 3.9)
@@ -73,4 +74,20 @@ def breakout_panel():
               (rows[2], [(n, 'INPUT') for n in ['VOCT', 'GATE', 'VELOCITY', 'CLOCK', 'RESET']]),
               (rows[3], [('EXT', 'INPUT'), ('RETURN_L', 'INPUT'), ('RETURN_R', 'INPUT')]),
               (rows[4], [None] + out('LEFT', 'RIGHT', 'FX1', 'FX2'))], columns)
+    return p
+
+
+def drum_breakout_panel():
+    """14 HP: Breakout's layout, six jacks wide for the drum track's extra outputs."""
+    p = status('DrumBreakout', 14)
+    columns = [7 * HP + 10.8 * (i - 2.5) for i in range(6)]
+    rows = [59.5, 72.5, 89.5, 107.0]
+    box(p, columns, 0, 5, rows[0], rows[1])
+    box(p, columns, 2, 5, rows[3])
+    out = lambda *names: [(n, 'OUTPUT') for n in names]
+    jacks(p, [(rows[0], out('CV_TRIGGER', 'CV_GATE', 'CV_SOUND', 'CV_VELOCITY', 'CV_ENV', 'CV_LFO')),
+              (rows[1], out('CV_P1', 'CV_P2', 'CV_FILTER', 'CV_RESONANCE', 'CV_FX1', 'CV_FX2')),
+              (rows[2], [(n, 'INPUT') for n in ['VOCT', 'GATE', 'VELOCITY', 'CLOCK', 'RESET', 'EXT']]),
+              (rows[3], [('RETURN_L', 'INPUT'), ('RETURN_R', 'INPUT')] + out('LEFT', 'RIGHT', 'FX1', 'FX2'))],
+          columns, labels=dict(CV_P1='PITCH', CV_P2='REV'))
     return p

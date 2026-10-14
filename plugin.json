@@ -1,7 +1,7 @@
 {
   "slug": "vcvopxyz",
   "name": "vcvopxyz",
-  "version": "2.0.10",
+  "version": "2.0.11",
   "license": "MIT",
   "brand": "un1tz3r0",
   "author": "Victor Condino",
@@ -108,6 +108,21 @@
       "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/breakout.md",
       "tags": [
         "Synth voice",
+        "Hardware clone",
+        "Utility",
+        "Polyphonic",
+        "Filter",
+        "Envelope generator",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "DrumBreakout",
+      "name": "Drum Breakout",
+      "description": "An OP-Z drum track for sounds made of other modules: trigger, gate, sound, velocity, envelope, LFO and dials out, the sound back in through its filter and envelope",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/breakout.md#drum-breakout",
+      "tags": [
+        "Drum",
         "Hardware clone",
         "Utility",
         "Polyphonic",

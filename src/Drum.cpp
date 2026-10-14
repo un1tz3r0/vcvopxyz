@@ -9,6 +9,7 @@ sound to its end, so a sound's tail rings under the next, as many at once as the
 OP-Z); mono cuts the last sound off; gate stops each sound with its note; loop repeats it while its note is held,
 then plays it out. A kit sound that plays gated or loops does so whatever the style.
 */
+#include "opz/DrumTrack.hpp"
 #include "opz/TrackWidget.hpp"
 #include "opz/Kit.hpp"
 #include <mutex>
@@ -16,9 +17,9 @@ then plays it out. A kit sound that plays gated or loops does so whatever the st
 
 namespace opz {
 
-struct Drum : Track {
+struct Drum : DrumTrack {
 	static constexpr const char* SLUG = "Drum";
-	enum NoteStyle { RETRIG, MONO, GATE, LOOP };
+	static_assert(SOUNDS == Kit::SLICES, "a kit has a sound for each key");
 	static constexpr float CHOKE = 0.003f; // seconds a cut-off sound takes to fade
 
 	struct Voice {
@@ -54,15 +55,6 @@ struct Drum : Track {
 	json_t* savedKit = nullptr;    // a patch's kit, from dataFromJson until onAdd reads its samples
 
 	Drum() {
-		drum = true;
-		configParam(P1_PARAM, -12.f, 12.f, 0.f, "Pitch", " semitones")->description = "Tunes every sound, up to an octave either way";
-		configSwitch(P2_PARAM, 0.f, 1.f, 0.f, "Reverse", {"Off", "On"})->description = "Plays each sound from its end, as it starts";
-		configTrack({"Retrig", "Mono", "Gate", "Loop"},
-			"Retrig plays each sound to its end, and mono cuts the last one off; gate stops it with its note, and loop repeats it while the note is held",
-			{"Pitch", "Reverse", "Filter", "Resonance", "Attack", "Pitch, 2 octaves", "Pan", "Volume"});
-		configDefault(SUSTAIN_PARAM, 1.f);
-		configDefault(RELEASE_PARAM, 0.4f);
-		getParamQuantity(GLIDE_PARAM)->description = "Synth tracks only";
 		// Made here, on the UI thread, rather than when the audio thread first wants one.
 		for (int t = 0; t < DRUM_TRACKS; t++)
 			builtinKit(t);
@@ -70,17 +62,6 @@ struct Drum : Track {
 
 	~Drum() {
 		json_decref(savedKit);
-	}
-
-	/** Drum tracks have no portamento. */
-	int dial(int page, int d) const override {
-		return page == PAGE_TRACK && d == 3 ? -1 : DIALS[page][d];
-	}
-
-	/** The sound a note plays: the keys F3 to E5 play the 24 in turn, and the octaves either side play them again. */
-	static int sliceOf(float pitch) {
-		int key = (int) std::round(12.f * pitch) + 7;
-		return (key % Kit::SLICES + Kit::SLICES) % Kit::SLICES;
 	}
 
 	const Kit& builtinFor() const {
@@ -126,7 +107,7 @@ struct Drum : Track {
 	std::string soundName(int pitch) override {
 		std::lock_guard<std::mutex> lock(kitMutex);
 		const Kit* k = fileKit();
-		int i = sliceOf((pitch - 60) / 12.f);
+		int i = soundOf((pitch - 60) / 12.f);
 		const Kit::Slice& s = (k ? *k : builtinFor()).slices[i];
 		return s.empty() ? "no sound" : !s.name.empty() ? s.name : string::f("sound %d", i + 1);
 	}
@@ -151,7 +132,7 @@ struct Drum : Track {
 	}
 
 	void noteOn(int c) override {
-		const Kit::Slice& s = playing->slices[sliceOf(notePitch(c))];
+		const Kit::Slice& s = playing->slices[soundOf(notePitch(c))];
 		if (s.empty())
 			return;
 		int limit = style == MONO ? 1 : std::max(2, channels), sounding = 0;

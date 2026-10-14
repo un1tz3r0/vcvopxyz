@@ -40,7 +40,7 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | --- | --- |
 | `plugin.json` | The manifest: plugin and module metadata, and the version. |
 | `src/plugin.*` | The plugin's entry point, which registers each module's `Model`. |
-| `src/opz/` | The OP-Z track every engine shares (`Track.hpp`), its panel and status screen (`TrackWidget.hpp`), and the synth track's voices around an engine (`SynthTrack.hpp`). |
+| `src/opz/` | The OP-Z track every engine shares (`Track.hpp`), its panel and status screen (`TrackWidget.hpp`), the synth track's voices around an engine (`SynthTrack.hpp`), and the drum track's dials and keys (`DrumTrack.hpp`). |
 | `src/opz/Kit.*`, `BuiltinKits.cpp` | Drum kits: the OP-1/OP-Z kit, AIFF and WAV readers, and the synthesized built-in kits. |
 | `src/opz/Sequence.hpp` | The sequencer's steps, components and the player that schedules them, knowing nothing of Rack. |
 | `src/opz/Sequencer.cpp` | The Sequencer module. |
@@ -49,7 +49,7 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | `src/dsp/` | Building blocks that know nothing of Rack: filter, envelope, band-limited saw. |
 | `src/Digital.cpp`, `Analog.cpp`, `Cluster.cpp`, `Organ.cpp` | The engines. |
 | `src/Drum.cpp` | Drum, the drum track. |
-| `src/Breakout.cpp` | Breakout, the synth track for a voice made of other modules. |
+| `src/Breakout.cpp`, `DrumBreakout.cpp` | Breakout and Drum Breakout, the synth and drum tracks for sounds made of other modules. |
 | `src/opz/Screen.cpp` | The Screen expander. |
 | `src/Screen.*` | A reusable display widget whose readouts line up with the controls around it. |
 | `src/ui.hpp` | Panel layout lookup, plus the custom dials, keys, buttons and lights. |

@@ -2,9 +2,6 @@
 
 ## Next
 
-- [ ] **Drum Breakout:** a drum track's trigger, velocity, sound number, envelope and dials out as CV, and a voice
-      back in at RET L/R, as Breakout does for synth tracks. The README's "drum breakout"; tracks 1 to 4 have no
-      other way out to other modules since the Sequencer's track outputs went.
 - [ ] **Tonality:** the scale detected from the bass, lead and chord tracks' notes, used to harmonize in key
       wherever notes are generated: the ramp and random step components (C major until then, as a placeholder),
       the arpeggiator, and transposing in scale. With it, **a ninth track, the master track,** which transposes

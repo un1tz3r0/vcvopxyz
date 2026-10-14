@@ -26,8 +26,6 @@ struct BreakoutSound {
 
 
 struct Breakout : opz::SynthTrack<BreakoutSound> {
-	xyz::Svf lowpasses[2], highpasses[2];
-
 	void process(const ProcessArgs& args) override {
 		lfoInside = !outputs[CV_LFO_OUTPUT].isConnected();
 		prepare(args);
@@ -49,31 +47,10 @@ struct Breakout : opz::SynthTrack<BreakoutSound> {
 		}
 		for (int o : {CV_VOCT_OUTPUT, CV_GATE_OUTPUT, CV_ENV_OUTPUT})
 			outputs[o].setChannels(notes);
-		outputs[CV_LFO_OUTPUT].setVoltage(5.f * controls.lfo);
-		const std::pair<int, float> cvs[] = {{CV_P1_OUTPUT, controls.p1}, {CV_P2_OUTPUT, controls.p2}, {CV_FILTER_OUTPUT, controls.filter},
-			{CV_RESONANCE_OUTPUT, controls.resonance}, {CV_FX1_OUTPUT, controls.fx1}, {CV_FX2_OUTPUT, controls.fx2}};
-		for (auto [output, value] : cvs)
-			outputs[output].setVoltage(10.f * value);
-
-		bool enveloped = !outputs[CV_ENV_OUTPUT].isConnected();
-		bool filtered = !outputs[CV_FILTER_OUTPUT].isConnected() && !outputs[CV_RESONANCE_OUTPUT].isConnected();
-		float sides[2];
-		for (int s = 0; s < 2; s++) {
-			// RIGHT is normalled to LEFT, as on a stereo pair.
-			Input& in = inputs[s && inputs[RETURN_R_INPUT].isConnected() ? RETURN_R_INPUT : RETURN_L_INPUT];
-			int n = in.getChannels();
-			float x = 0.f;
-			for (int c = 0; c < n; c++)
-				x += in.getVoltage(c) / 5.f * (!enveloped ? 1.f : n > 1 ? levels[c] : loudest);
-			if (filtered) {
-				lowpasses[s].tuneLike(lowpass);
-				highpasses[s].tuneLike(highpass);
-				x = highpasses[s].process(lowpasses[s].process(x).lp).hp;
-			}
-			sides[s] = x * controls.gain;
-		}
-		emit(sides[0], sides[1], outputs[CV_FX1_OUTPUT].isConnected() ? 1.f : controls.fx1,
-			outputs[CV_FX2_OUTPUT].isConnected() ? 1.f : controls.fx2, args.sampleTime);
+		outputs[CV_P1_OUTPUT].setVoltage(10.f * controls.p1);
+		outputs[CV_P2_OUTPUT].setVoltage(10.f * controls.p2);
+		emitDialCVs();
+		emitReturn(levels, loudest, args.sampleTime);
 	}
 };
 

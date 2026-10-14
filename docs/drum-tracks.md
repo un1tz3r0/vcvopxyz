@@ -8,7 +8,8 @@
 **Drum** is the OP-Z's drum track: a kit of 24 sounds, one per key. The first Drum to the right of a
 [Sequencer](sequencer.md) plays track 1 (kick), the next track 2 (snare), then 3 (perc) and 4 (sample), whatever
 synth engines sit between them. It is the same track as a [synth track](synth-tracks.md), with the same status screen,
-pages, LFO and jacks; this page covers only where it differs.
+pages, LFO and jacks; this page covers only where it differs. To play a drum track on other modules instead, use a
+[Drum Breakout](breakout.md#drum-breakout).
 
 ## Kits
 

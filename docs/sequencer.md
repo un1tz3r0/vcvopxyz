@@ -16,7 +16,8 @@ Place engines to its right, Screens beside them if you like, and they need no ca
 track 5 (bass), the next track 6, and so on, and the first [Drum](drum-tracks.md) track 1 (kick), the next track 2,
 and so on to track 4, wherever they sit in the row. Each track's notes, velocity and the tempo go to its engine over
 the bus, and engines with their own outputs unpatched are mixed into **L** and **R**. To play other modules from a
-synth track, use a [Breakout](breakout.md) for its engine: it sends the track's notes out as CV. A module from another
+synth track, use a [Breakout](breakout.md) for its engine, or a [Drum Breakout](breakout.md#drum-breakout) for a drum
+track: it sends the track's notes out as CV. A module from another
 plugin ends the chain. The engines have no dials of their own: the Sequencer's four turn them, and a Screen beside
 one shows every page.
 

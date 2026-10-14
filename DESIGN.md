@@ -26,7 +26,7 @@ which owns the double buffers Rack's expander messages flip between, and passes 
 
 An engine takes its track from its kind's count: the first drum engine plays track 1, the next track 2, and so on to
 track 4, and the first synth engine track 5, and so on to track 8, so the two kinds can mix in any order. The master
-has no CV outputs of its own for the tracks: a Breakout engine is the way out to other modules. A module from
+has no CV outputs of its own for the tracks: a Breakout or Drum Breakout engine is the way out to other modules. A module from
 another plugin ends the bus, since `onBus` checks the plugin before casting. A Screen only relays.
 
 Expander messages are the only safe way to share state between modules that Rack may run on different threads, and
@@ -74,7 +74,8 @@ Model* modelAnalog = createModel<opz::SynthTrack<Analog>, opz::SynthTrackWidget<
 
 Breakout is the exception that proves the split: it derives from `SynthTrack<BreakoutSound>` and overrides
 `process` to send each stage out as CV and skip the stages whose outputs are patched, with `lfoInside` turning the
-LFO's inside targets off.
+LFO's inside targets off. Drum and Drum Breakout share `DrumTrack` (src/opz/DrumTrack.hpp): the drum dials, note
+styles and keys. The two breakouts share `Track::emitReturn`, the return through whatever isn't patched out.
 
 ### Drum kits
 

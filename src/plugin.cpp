@@ -12,6 +12,7 @@ void init(Plugin* p) {
 	p->addModel(modelCluster);
 	p->addModel(modelOrgan);
 	p->addModel(modelBreakout);
+	p->addModel(modelDrumBreakout);
 	p->addModel(modelScreen);
 	p->addModel(modelSequencer);
 }
