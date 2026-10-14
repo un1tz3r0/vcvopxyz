@@ -4,8 +4,8 @@ transport, and sequences the first eight tracks: four drum tracks (kick, snare, 
 arp and chord. Each track has a lane of sixteen steps of up to four notes, filled from the keys or from poly V/OCT,
 GATE and VEL inputs.
 
-Every lane has poly V/OCT and GATE outputs. Unpatched, they play the track's engine over the bus instead (Bus.hpp),
-and the engines' sound comes back to the L and R outputs. The four dials are the selected track's: whichever engine
+Each lane plays its track's engine over the bus (Bus.hpp), and the engines' sound comes back to the L and R
+outputs; a Breakout engine sends a synth track's notes out as CV. The four dials are the selected track's: whichever engine
 plays it, they turn its own parameters.
 
 Its keys are laid out as on the OP-Z: TRACK, REC and −, PLAY and +, STOP and SHIFT, then the 16 steps along the top,
@@ -186,14 +186,16 @@ struct Sequencer : Module, BusNode {
 	enum InputId { CLOCK_INPUT, RUN_INPUT, RESET_INPUT, CONT_INPUT, ADVANCE_INPUT, VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, INPUTS_LEN };
 	enum OutputId {
 		CLOCK_OUTPUT, RUN_OUTPUT, RESET_OUTPUT, CONT_OUTPUT, LEFT_OUTPUT, RIGHT_OUTPUT,
-		ENUMS(VOCT_OUTPUT, TRACKS), ENUMS(GATE_OUTPUT, TRACKS),
+		// The tracks' V/OCT and GATE until 2.0.9. Rack adds a patch's cables before it looks for their jacks, so an
+		// older patch's cables to them need ports to land on; with no jacks on the panel, Rack then drops them.
+		ENUMS(OLD_TRACK_OUTPUT, 2 * TRACKS),
 		OUTPUTS_LEN
 	};
-	static constexpr int METERED_OUTPUTS = VOCT_OUTPUT; // the lanes' outputs show on the track keys instead
+	static constexpr int JACKS = OLD_TRACK_OUTPUT; // the outputs on the panel
 	enum LightId {
 		ENUMS(KEY_LIGHT, 3 * (LOCK_PARAM - TRACK_PARAM)), ENUMS(DIAL_LIGHT, 3 * 4),
 		ENUMS(CHANNEL_LIGHT, CHANNELS), INTERNAL_LIGHT, EXTERNAL_LIGHT,
-		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * METERED_OUTPUTS),
+		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * JACKS),
 		LIGHTS_LEN
 	};
 	static constexpr float LONG_PRESS = 0.4f, CLEAR_HOLD = 1.f; // seconds
@@ -376,7 +378,7 @@ struct Sequencer : Module, BusNode {
 	float sincePulse = 0.f, pulsePeriod = 0.f; // seconds; a period of 0 is unknown
 	Upstream engines;            // the last the engines sent back, read at light rate
 	dsp::ClockDivider controlDivider, lightDivider;
-	Meter inputMeters[INPUTS_LEN], outputMeters[METERED_OUTPUTS];
+	Meter inputMeters[INPUTS_LEN], outputMeters[JACKS];
 	float blink = 0.f;
 
 	Sequencer() {
@@ -404,8 +406,6 @@ struct Sequencer : Module, BusNode {
 			getParamQuantity(STEP_COUNT_PARAM + t)->randomizeEnabled = false;
 			getParamQuantity(STEP_LENGTH_PARAM + t)->randomizeEnabled = false;
 			configKey(this, SELECT_PARAM + t, string::f("Track %d, %s", t + 1, TRACK_NAMES[t]))->description = "Selects it for the keys, the steps and the dials";
-			configOutput(VOCT_OUTPUT + t, name + "1V/octave pitch");
-			configOutput(GATE_OUTPUT + t, name + "gate")->description = "Unpatched, the track plays its engine to the right";
 			lanes[t].settings.channels = TRACK_CHANNELS[t];
 		}
 		configKey(this, TRACK_PARAM, "Track")->description = "On and off: steps 1 to 8 select a track and the dials set its note length, style, "
@@ -1125,42 +1125,34 @@ struct Sequencer : Module, BusNode {
 		}
 	}
 
-	/** Each lane to its jacks, and to the bus for its engine while its GATE output is unpatched. */
+	/** Each lane to the bus for its engine, then the mix and the transport to the jacks. */
 	void writeOutputs(float dt) {
 		Downstream* bus = toRight(this);
 		for (int t = 0; t < TRACKS; t++) {
 			Lane& l = lanes[t];
 			int n = clamp(l.settings.channels, 1, CHANNELS);
-			bool patched = outputs[GATE_OUTPUT + t].isConnected();
-			Downstream::Lane* out = bus ? &bus->lanes[t] : nullptr;
-			if (out) {
-				out->channels = patched ? 0 : n;
+			if (bus) {
+				Downstream::Lane& out = bus->lanes[t];
+				out.channels = n;
 				float group = params[LEVEL_PARAM + (t < DRUM_TRACKS ? DRUM_LEVEL : SYNTH_LEVEL)].getValue();
-				out->level = audioMuted(t) ? 0.f : group * group;
+				out.level = audioMuted(t) ? 0.f : group * group;
 				// The playhead's step locks the engine's dials; while stopped, a held step does, to hear it.
 				int s = l.player.running ? l.player.locking() : t == track && !modal() ? held : -1;
 				const Step* step = s >= 0 ? &l.pattern.steps[s] : nullptr;
-				out->locks = step ? step->locks : 0;
+				out.locks = step ? step->locks : 0;
 				if (step)
-					std::copy(std::begin(step->lockValues), std::end(step->lockValues), out->lockValues);
-			}
-			for (int c = 0; c < n; c++) {
-				Player::Channel& channel = l.player.channels[c];
-				bool gate = channel.gate && !channel.retrigger && !muted(t);
-				outputs[VOCT_OUTPUT + t].setVoltage(channel.pitch, c);
-				outputs[GATE_OUTPUT + t].setVoltage(gate ? 10.f : 0.f, c);
-				if (out) {
-					out->pitch[c] = channel.pitch;
-					out->velocity[c] = channel.velocity;
-					out->gate[c] = gate;
+					std::copy(std::begin(step->lockValues), std::end(step->lockValues), out.lockValues);
+				for (int c = 0; c < n; c++) {
+					const Player::Channel& channel = l.player.channels[c];
+					out.pitch[c] = channel.pitch;
+					out.velocity[c] = channel.velocity;
+					out.gate[c] = channel.gate && !channel.retrigger && !muted(t);
 				}
-				channel.retrigger = false;
-			}
-			outputs[VOCT_OUTPUT + t].setChannels(n);
-			outputs[GATE_OUTPUT + t].setChannels(n);
-			if (out)
 				for (int k = 0; k < SWEEP_TARGETS; k++)
-					out->sweep[k] = l.player.sweep(k);
+					out.sweep[k] = l.player.sweep(k);
+			}
+			for (int c = 0; c < n; c++)
+				l.player.channels[c].retrigger = false;
 		}
 		if (bus) {
 			bus->secondsPerBeat = 60.f / bpm();
@@ -1408,7 +1400,7 @@ struct Sequencer : Module, BusNode {
 
 		for (int i = 0; i < INPUTS_LEN; i++)
 			meter(inputMeters[i], inputs[i], INPUT_LIGHT + 2 * i, dt);
-		for (int i = 0; i < METERED_OUTPUTS; i++)
+		for (int i = 0; i < JACKS; i++)
 			meter(outputMeters[i], outputs[i], OUTPUT_LIGHT + 2 * i, dt);
 	}
 
@@ -2113,13 +2105,9 @@ struct SequencerWidget : ModuleWidget {
 			addInput(createInputCentered<ThemedPJ301MPort>(layout.center(string::f("%s_INPUT", inputs[i])), module, i));
 			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(string::f("%s_INPUT_LIGHT", inputs[i])), module, Sequencer::INPUT_LIGHT + 2 * i));
 		}
-		for (int i = 0; i < Sequencer::METERED_OUTPUTS; i++) {
+		for (int i = 0; i < Sequencer::JACKS; i++) {
 			addOutput(createOutputCentered<ThemedPJ301MPort>(layout.center(string::f("%s_OUTPUT", outputs[i])), module, i));
 			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(string::f("%s_OUTPUT_LIGHT", outputs[i])), module, Sequencer::OUTPUT_LIGHT + 2 * i));
-		}
-		for (int t = 0; t < TRACKS; t++) {
-			addOutput(createOutputCentered<ThemedPJ301MPort>(layout.center(string::f("VOCT%d_OUTPUT", t)), module, Sequencer::VOCT_OUTPUT + t));
-			addOutput(createOutputCentered<ThemedPJ301MPort>(layout.center(string::f("GATE%d_OUTPUT", t)), module, Sequencer::GATE_OUTPUT + t));
 		}
 #undef AT
 	}

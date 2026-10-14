@@ -20,7 +20,7 @@ constexpr int NEXT_PAGE = -1;         // a page request that steps on to the nex
 /** What the master sends rightward. */
 struct Downstream {
 	struct Lane {
-		int channels = 0;             // 0 while the lane's GATE output is patched, which takes its engine off the bus
+		int channels = 0;             // the track's polyphony; 0 until the master first writes it
 		float pitch[CHANNELS] = {}, velocity[CHANNELS] = {};
 		bool gate[CHANNELS] = {};
 		float sweep[SWEEP_TARGETS] = {}; // how far the track's sweep moves its engine's dials, as a share of their travel

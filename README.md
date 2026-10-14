@@ -15,7 +15,7 @@ Not affiliated with or endorsed by teenage engineering. OP-Z and OP-XY are their
 
 ## Modules
 
-The Sequencer module is the master, and controls up to eight expanders to its right (up to four drum kits and four synth engines), which pick up the tracks in the order they appear, showing the assigned track number, symbol and name on each attached engine's status panel. The main sequencer module has cv/gate and clock and transport control inputs and outputs with pass-through, and clocks itself internally if no clock signal is patched. The tempo of the internal clock can be adjusted exactly as on the real OP-Z, using the tempo-mode button along the top of the device.
+The Sequencer module is the master, and controls up to eight expanders to its right (up to four drum kits and four synth engines), which pick up the tracks in the order they appear, showing the assigned track number, symbol and name on each attached engine's status panel. The main sequencer module has V/OCT, GATE and velocity inputs for recording notes, and clock and transport control inputs and outputs with pass-through, and clocks itself internally if no clock signal is patched. The tracks reach other modules through a Breakout, not through cables from the Sequencer. The tempo of the internal clock can be adjusted exactly as on the real OP-Z, using the tempo-mode button along the top of the device.
 
 ## Button Combos/Holding Buttons
 
