@@ -1,20 +1,28 @@
 # vcvopxyz
 
-VCV Rack 2 modules that recreate the synth engines and sequencers of teenage engineering's OP-Z and OP-XY. The aim
-is their workflow and feel: the same parameters, ranges and quirks, tuned by ear rather than matched sample for
-sample.
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/rack-dark.png">
   <img alt="A Sequencer playing four Drums, Digital, Analog, Cluster and Organ, with a Screen beside Digital" src="docs/assets/rack-light.png">
 </picture>
 
+VCV Rack 2 plugin sequencer module and a set of expanders that work with it, acting as the drum and synth engines played by the eight sequencer tracks. It is an unashamed imitation of the [Teenage Engineering OP-Z](https://teenage.engineering/products/op-z), as fans will immediately recognize from the identical button layout and markings and familiar behavior as far as editing patterns and playing them back is concerned.
+
+The goal of this project was to recreate the magic and expressiveness of the OP-Z's sequencing workflow, bringing to the software modular world something similar enough to be instantly usable by anyone who is proficient at playing the original. This project is likewise less about faithfully or exactly replicating the sound of the synth engines, filters and effects, as it's most interesting configuration revolves around using the `drum breakout` and `synth breakout` expanders to patch arbitrary third party module chains in to be driven by the drum and synth parts of the sequence, while routing their audio output back into the track's amplitude-envelope VCA, filter, send-effects buses and mixer. Used in this way, you can combine the ultimate flexibility, customizability and infinite possibilities of eurorack modular synthesis with the OP-Z's uniqely fluid, beautifully rich and deeply complex compositional and live performance features. Doesn't that sound pretty neat? I sure think so.
+
+For those unfamiliar, this will likely be, as is the real thing upon unboxing, slightly confusing and frustrating, until one has learned TE's screenless, lightly modal and mostly easy-to-remember multi-button-combination-based interface. This may sound daunting, but be patient and trust that once you're comfortable with how it works, this little guy is so much fun to use that it can be hard to put down even after hours of playing.
+
 Not affiliated with or endorsed by teenage engineering. OP-Z and OP-XY are their trademarks.
 
 ## Modules
 
-A Sequencer on the left is the master; engines to its right pick up its tracks with no cables, and its dials turn
-theirs.
+The Sequencer module is the master, and controls up to eight expanders to its right (up to four drum kits and four synth engines), which pick up the tracks in the order they appear, showing the assigned track number, symbol and name on each attached engine's status panel. The main sequencer module has cv/gate and clock and transport control inputs and outputs with pass-through, and clocks itself internally if no clock signal is patched. The tempo of the internal clock can be adjusted exactly as on the real OP-Z, using the tempo-mode button along the top of the device.
+
+## Button Combos/Holding Buttons
+
+One caveat of the virtual rack vs real hardware is that it is not possible to press and hold multiple buttons using multiple fingers and both hands. Therefore, a workaround was needed since much of the OP-Z's advanced features are accessible only while holding certain button combinations to temporarily switch the rest of the buttons (or some subset of them at least) into an alternate mode where the indicators and short- and long-presses have different meanings. The workaround takes several forms, depending on the button in question's other behaviors:
+1. buttons which have no short-press or momentary behavior but that do something when held are always toggle-on-click instead of normally-off momentary-push
+2. buttons which have a short-press action but no special long-press action will toggle on and stay on when long-pressed, with an additional short-press toggling them off again
+3. buttons which have both a short-press and a long-press action that also do something when held can be toggled by control-clicking, which will also work for the other two types of button which can be held, described above. 
 
 | Module | |
 | --- | --- |
