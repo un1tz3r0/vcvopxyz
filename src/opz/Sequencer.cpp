@@ -361,8 +361,17 @@ struct Sequencer : Module, BusNode {
 	Project projects[PROJECTS];
 	int project = 0;             // the slot the live project came from, and goes back to
 	bool autoSave = true;        // as the OP-Z: switching projects saves the one left
-	std::mutex projectsMutex;    // the slots, between the audio thread's switches and the UI thread's files
-	std::atomic<int> reload{-1}; // a slot the UI thread changed, to load as the live project
+	// The slots, and the projects and recall below, belong to the audio and UI threads both, under this lock. The UI
+	// thread can hold it a while, writing files, so the audio thread only tries it, and project work waits till it's free.
+	std::mutex projectsMutex;
+	std::atomic<int> reload{-1};    // a slot the UI thread changed, to load as the live project
+	std::atomic<int> restoring{-1}; // the slot of a project the undo history puts back: restored
+	int keyed = -1;                 // a slot a project key picked, to switch to, or with keyedSave to save to
+	bool keyedSave = false;
+	Project restored;
+	Project left, entered;          // the live project either side of the last switch, for the undo history
+	int leftSlot = 0;
+	enum { SETTLED, RESTORED, SWITCHED } recall = SETTLED; // a change of live project the widget has yet to see
 	uint16_t mutes[MUTE_GROUPS] = {}, audioMutes[MUTE_GROUPS] = {};
 	int muteGroup = 0;
 	float battery = 0.87f, batteryShown = 0.f; // a pretend charge, and how long SCREEN shows it after a press
@@ -640,50 +649,58 @@ struct Sequencer : Module, BusNode {
 	}
 
 	/** A slot into the live project. Engines take the dials it saved; a track saved without an engine leaves its
-	engine's dials as they are. */
+	engine's dials as they are. A slot's values are always in range, since projectFromJson and opzfile::read clamp
+	what they read. */
 	void recallProject(const Project& p) {
 		for (int t = 0; t < TRACKS; t++) {
 			const Project::Part& part = p.parts[t];
 			lanes[t].pattern = part.pattern;
-			lanes[t].settings.channels = clamp(part.channels, 1, CHANNELS);
+			lanes[t].settings.channels = part.channels;
 			lanes[t].player.silence();
-			params[STEP_COUNT_PARAM + t].setValue(clamp(part.stepCount, 1, STEPS));
-			params[STEP_LENGTH_PARAM + t].setValue(clamp(part.stepLength, 0, 9));
-			params[LENGTH_PARAM + t].setValue(clamp(part.noteLength, 0, (int) std::size(NOTE_LENGTHS) - 1));
-			params[QUANTIZE_PARAM + t].setValue(clamp(part.quantize, 0.f, 1.f));
+			params[STEP_COUNT_PARAM + t].setValue(part.stepCount);
+			params[STEP_LENGTH_PARAM + t].setValue(part.stepLength);
+			params[LENGTH_PARAM + t].setValue(part.noteLength);
+			params[QUANTIZE_PARAM + t].setValue(part.quantize);
 			Track* e = engine(t);
 			for (int i = 0; e && part.hasSound && i < SOUND_PARAMS; i++) {
 				ParamQuantity* q = e->paramQuantities[i];
-				float v = math::rescale(clamp(part.sound[i], 0.f, 1.f), 0.f, 1.f, q->getMinValue(), q->getMaxValue());
+				float v = math::rescale(part.sound[i], 0.f, 1.f, q->getMinValue(), q->getMaxValue());
 				e->params[i].setValue(q->snapEnabled ? std::round(v) : v);
 			}
 		}
-		params[TEMPO_PARAM].setValue(clamp(std::round(p.tempo), 40.f, 200.f));
-		params[SWING_PARAM].setValue(clamp(p.swing, 0.5f, 0.75f));
+		params[TEMPO_PARAM].setValue(std::round(p.tempo));
+		params[SWING_PARAM].setValue(p.swing);
 		for (int l = 0; l < LEVELS_LEN; l++)
-			params[LEVEL_PARAM + l].setValue(clamp(p.levels[l], 0.f, 1.f));
-		params[METRONOME_SOUND_PARAM].setValue(clamp(p.metronomeSound, 0, Metronome::SOUNDS - 1));
-		params[METRONOME_LEVEL_PARAM].setValue(clamp(p.metronomeLevel, 0.f, 1.f));
+			params[LEVEL_PARAM + l].setValue(p.levels[l]);
+		params[METRONOME_SOUND_PARAM].setValue(p.metronomeSound);
+		params[METRONOME_LEVEL_PARAM].setValue(p.metronomeLevel);
 		std::copy(std::begin(p.mutes), std::end(p.mutes), mutes);
 		std::copy(std::begin(p.audioMutes), std::end(p.audioMutes), audioMutes);
-		muteGroup = clamp(p.muteGroup, 0, MUTE_GROUPS - 1);
+		muteGroup = p.muteGroup;
 		held = -1;
 		selection = 0;
 		component = -1;
 	}
 
-	/** Loads a slot, saving the project left first unless saving is manual. An empty slot is a new project. */
-	void switchProject(int n) {
-		std::lock_guard<std::mutex> lock(projectsMutex);
-		if (autoSave)
-			storeProject(projects[project]);
+	/** Loads a slot as one step of the undo history. An empty slot is a new project. With the slots locked. */
+	void enterProject(int n) {
+		storeProject(left);
+		leftSlot = project;
 		project = n;
 		recallProject(projects[n].used ? projects[n] : blankProject());
+		storeProject(entered);
+		recall = SWITCHED;
 	}
 
-	/** Saves the live project to a slot, which it then belongs to. */
+	/** Loads a slot, saving the project left first unless saving is manual. With the slots locked. */
+	void switchProject(int n) {
+		if (autoSave)
+			storeProject(projects[project]);
+		enterProject(n);
+	}
+
+	/** Saves the live project to a slot, which it then belongs to. With the slots locked. */
 	void saveProject(int n) {
-		std::lock_guard<std::mutex> lock(projectsMutex);
 		if (n != project)
 			projects[n].opz = projects[project].opz;
 		storeProject(projects[n]);
@@ -884,11 +901,18 @@ struct Sequencer : Module, BusNode {
 		}
 		if (sinceTap >= 0.f)
 			sinceTap += dt;
-		int r = reload.exchange(-1);
-		if (r >= 0) {
-			std::lock_guard<std::mutex> lock(projectsMutex);
-			project = r;
-			recallProject(projects[r].used ? projects[r] : blankProject());
+		if ((reload >= 0 || restoring >= 0 || keyed >= 0) && projectsMutex.try_lock()) {
+			std::lock_guard<std::mutex> lock(projectsMutex, std::adopt_lock);
+			if (int r = reload.exchange(-1); r >= 0)
+				enterProject(r);
+			if (int r = restoring.exchange(-1); r >= 0) {
+				project = r;
+				recallProject(restored);
+				recall = std::max(recall, RESTORED);
+			}
+			if (keyed >= 0)
+				keyedSave ? saveProject(keyed) : switchProject(keyed);
+			keyed = -1;
 		}
 
 		for (int p = TRACK_PARAM; p < LOCK_PARAM; p++) {
@@ -942,11 +966,14 @@ struct Sequencer : Module, BusNode {
 				if (keyValue(key) < 0)
 					return;
 				if (picksUp(e, g)) {
-					saveProject(keyValue(key));
+					keyed = keyValue(key);
+					keyedSave = true;
 					g.handled = true;
 				}
-				else if (e == KeyGesture::CLICK)
-					switchProject(keyValue(key));
+				else if (e == KeyGesture::CLICK) {
+					keyed = keyValue(key);
+					keyedSave = false;
+				}
 			}
 			else if (e == KeyGesture::PRESS)
 				keyDown(key);
@@ -1456,6 +1483,17 @@ struct Sequencer : Module, BusNode {
 		ppqn = 4;
 	}
 
+	/** A patch from 2.0.5 or earlier had keys where the mixer's and the metronome's params are now, so they'd load as
+	0, silent: they go back to their defaults. Rack keeps each module's plugin version in the patch; none is older
+	still. */
+	void fromJson(json_t* root) override {
+		Module::fromJson(root);
+		const char* version = json_string_value(json_object_get(root, "version"));
+		if (!version || string::Version(version) < string::Version("2.0.6"))
+			for (int p = LEVEL_PARAM; p <= METRONOME_LEVEL_PARAM; p++)
+				paramQuantities[p]->reset();
+	}
+
 	/** Buttons are saved like any param, so one held down while saving would come back stuck. */
 	void paramsFromJson(json_t* root) override {
 		Module::paramsFromJson(root);
@@ -1514,8 +1552,10 @@ struct Sequencer : Module, BusNode {
 				break;
 			json_array_foreach(components, j, c) {
 				int component, value;
-				if (json_unpack(c, "[ii]", &component, &value) == 0 && component >= 0 && component < COMPONENTS_LEN)
-					pattern.steps[i].set(component, clamp(value, 0, 63));
+				if (json_unpack(c, "[ii]", &component, &value) == 0 && component >= 0 && component < COMPONENTS_LEN) {
+					value = clamp(value, 0, 63);
+					pattern.steps[i].set(component, std::min(value & 15, 9) | (isSpark(component) ? value & 0x30 : 0));
+				}
 			}
 		}
 	}
@@ -1613,22 +1653,27 @@ struct Sequencer : Module, BusNode {
 			double quantize = 0.0;
 			if (json_unpack(json_object_get(t, "settings"), "[iiiFi]", &part.stepCount, &part.stepLength, &part.noteLength, &quantize, &part.channels) == 0)
 				part.quantize = (float) quantize;
+			part.stepCount = clamp(part.stepCount, 1, STEPS);
+			part.stepLength = clamp(part.stepLength, 0, 9);
+			part.noteLength = clamp(part.noteLength, 0, (int) std::size(NOTE_LENGTHS) - 1);
+			part.quantize = clamp(part.quantize, 0.f, 1.f);
+			part.channels = clamp(part.channels, 1, CHANNELS);
 			if (json_t* sound = json_object_get(t, "sound")) {
 				part.hasSound = true;
 				for (int k = 0; k < SOUND_PARAMS; k++)
-					part.sound[k] = (float) json_number_value(json_array_get(sound, k));
+					part.sound[k] = clamp((float) json_number_value(json_array_get(sound, k)), 0.f, 1.f);
 			}
 		}
-		p.tempo = (float) json_number_value(json_object_get(root, "tempo"));
-		p.swing = (float) json_number_value(json_object_get(root, "swing"));
+		p.tempo = clamp((float) json_number_value(json_object_get(root, "tempo")), 40.f, 200.f);
+		p.swing = clamp((float) json_number_value(json_object_get(root, "swing")), 0.5f, 0.75f);
 		for (int l = 0; l < LEVELS_LEN; l++)
-			p.levels[l] = (float) json_number_value(json_array_get(json_object_get(root, "levels"), l));
+			p.levels[l] = clamp((float) json_number_value(json_array_get(json_object_get(root, "levels"), l)), 0.f, 1.f);
 		json_t* metronome = json_object_get(root, "metronome");
-		p.metronomeSound = (int) json_integer_value(json_array_get(metronome, 0));
-		p.metronomeLevel = (float) json_number_value(json_array_get(metronome, 1));
+		p.metronomeSound = clamp((int) json_integer_value(json_array_get(metronome, 0)), 0, Metronome::SOUNDS - 1);
+		p.metronomeLevel = clamp((float) json_number_value(json_array_get(metronome, 1)), 0.f, 1.f);
 		masksFromJson(json_object_get(root, "mutes"), p.mutes);
 		masksFromJson(json_object_get(root, "audioMutes"), p.audioMutes);
-		p.muteGroup = (int) json_integer_value(json_object_get(root, "muteGroup"));
+		p.muteGroup = clamp((int) json_integer_value(json_object_get(root, "muteGroup")), 0, MUTE_GROUPS - 1);
 		p.used = true;
 		return p;
 	}
@@ -1701,7 +1746,8 @@ struct Sequencer : Module, BusNode {
 		if (json_t* j = json_object_get(root, "octave"))
 			octave = clamp((int) json_integer_value(j), -3, 3);
 		if (json_t* j = json_object_get(root, "ppqn"))
-			ppqn = std::max((int) json_integer_value(j), 1);
+			if (std::count(std::begin(Track::PPQN), std::end(Track::PPQN), json_integer_value(j)))
+				ppqn = (int) json_integer_value(j);
 		if (json_t* j = json_object_get(root, "longPressHolds"))
 			longPressHolds = json_boolean_value(j);
 		if (json_t* j = json_object_get(root, "ctrlClickHolds"))
@@ -1748,6 +1794,27 @@ struct Sequencer : Module, BusNode {
 	}
 };
 
+
+/** A project switch, or a slot loaded after a file changed it, as one step: it puts back the whole live project, with
+its settings, dials and mixer. */
+struct ProjectSwitch : history::ModuleAction {
+	int from, to;
+	Project before, after;
+
+	void enter(int slot, const Project& p) {
+		if (Sequencer* m = dynamic_cast<Sequencer*>(APP->engine->getModule(moduleId))) {
+			std::lock_guard<std::mutex> lock(m->projectsMutex);
+			m->restored = p;
+			m->restoring = slot;
+		}
+	}
+	void undo() override {
+		enter(from, before);
+	}
+	void redo() override {
+		enter(to, after);
+	}
+};
 
 /** A pattern changes in the audio thread, from the keys and inputs, so the widget notices each change and saves it
 here for undo, rather than being told. */
@@ -1941,6 +2008,7 @@ inline void warn(const std::string& message) {
 
 /** The live project goes into its slot first, as switching projects would save it. */
 inline void storeLive(Sequencer* m) {
+	std::lock_guard<std::mutex> lock(m->projectsMutex);
 	if (m->autoSave)
 		m->saveProject(m->project);
 }
@@ -2113,8 +2181,31 @@ struct SequencerWidget : ModuleWidget {
 	}
 
 	void step() override {
-		Sequencer* m = getModule<Sequencer>();
-		for (int t = 0; m && !m->turningLock && t < TRACKS; t++) {
+		if (Sequencer* m = getModule<Sequencer>())
+			recordChanges(m);
+		ModuleWidget::step();
+	}
+
+	/** Each lane's edits as a step of the undo history, and a change of live project as one step for them all. Under
+	the slots' lock, so the audio thread can't be half way through a switch. */
+	void recordChanges(Sequencer* m) {
+		std::lock_guard<std::mutex> lock(m->projectsMutex);
+		if (m->recall != Sequencer::SETTLED) {
+			for (Sequencer::Lane& l : m->lanes)
+				l.recorded = l.pattern;
+			if (m->recall == Sequencer::SWITCHED) {
+				ProjectSwitch* h = new ProjectSwitch;
+				h->name = string::f("switch to project %d", m->project + 1);
+				h->moduleId = m->id;
+				h->from = m->leftSlot;
+				h->to = m->project;
+				h->before = m->left;
+				h->after = m->entered;
+				APP->history->push(h);
+			}
+			m->recall = Sequencer::SETTLED;
+		}
+		for (int t = 0; !m->turningLock && t < TRACKS; t++) {
 			Sequencer::Lane& l = m->lanes[t];
 			if (l.pattern == l.recorded)
 				continue;
@@ -2126,7 +2217,6 @@ struct SequencerWidget : ModuleWidget {
 			h->after = l.recorded = l.pattern;
 			APP->history->push(h);
 		}
-		ModuleWidget::step();
 	}
 
 	void appendContextMenu(Menu* menu) override {

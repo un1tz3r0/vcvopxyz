@@ -94,7 +94,8 @@ off. Switching one on switches the others, and track mode, off.
 A slot keeps everything that makes a song: each track's pattern, step components, parameter locks, step count and
 length, note length, quantize and polyphony, every dial of the engine playing it (the note style and portamento too),
 the tempo, swing and metronome, and the mixer's levels and ten mute groups. Loading one sets the engines' dials too, so each
-engine plays the sound it had. The slots save with the patch.
+engine plays the sound it had. The slots save with the patch, and a switch is one step of Rack's undo, which puts
+the project left back as it was.
 
 The context menu's **Projects** moves them in and out of files:
 
@@ -106,7 +107,8 @@ The context menu's **Projects** moves them in and out of files:
 
 The OP-Z's project files hold far more than a slot does: 16 patterns per track, chains, the drum tracks' samples and
 the FX, master and module tracks. An imported file is kept with the patch, and its export writes the slot over it, so
-whatever the Sequencer doesn't model goes back unchanged. Only the first pattern is read and written. The file
+whatever the Sequencer doesn't model goes back unchanged. Only the first pattern is read and written, and micro
+timing is written from −12 to +11 ticks, as far as the OP-Z's files go. The file
 format comes from the OP-Z community's reverse engineering, not from teenage engineering, and has not been tried on
 a real OP-Z yet, so copy your OP-Z's projects somewhere safe before you put exported files on it.
 

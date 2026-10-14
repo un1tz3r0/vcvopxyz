@@ -21,6 +21,7 @@ struct Cluster {
 	struct Voice {
 		float phases[SAWS];
 		float low1 = 0.f, low2 = 0.f;
+		float toneSeen = -1.f, cutoff = 0.f; // the low-passes' cutoff over the note's frequency, at the tone last seen
 
 		Voice() {
 			// Free-running saws don't start in step.
@@ -32,13 +33,18 @@ struct Cluster {
 			float spread = (1.f - gravity) * (1.f - gravity);
 			float x = 0.f;
 			for (int i = 0; i < SAWS; i++) {
-				float increment = std::fmin(frequency * (1.f + SPREAD[i] * spread) * sampleTime, 0.5f);
+				float increment = std::min(frequency * (1.f + SPREAD[i] * spread) * sampleTime, 0.5f);
 				phases[i] += increment;
-				phases[i] -= std::floor(phases[i]);
+				if (phases[i] >= 1.f)
+					phases[i] -= 1.f;
 				x += LEVEL[i] * xyz::blepSaw(phases[i], increment);
 			}
 			// Two one-pole low-passes, from twice the note's frequency up to 256 times.
-			float a = std::fmin(2.f * float(M_PI) * frequency * std::exp2(1.f + 7.f * tone) * sampleTime, 1.f);
+			if (tone != toneSeen) {
+				toneSeen = tone;
+				cutoff = 2.f * float(M_PI) * std::exp2(1.f + 7.f * tone);
+			}
+			float a = std::min(frequency * cutoff * sampleTime, 1.f);
 			low1 += a * (x - low1);
 			low2 += a * (low1 - low2);
 			return 0.25f * low2;

@@ -60,9 +60,9 @@ struct BusNode {
 		m->rightExpander.consumerMessage = &up[1];
 	}
 
-	static bool onBus(Module* m) {
-		return m && m->model->plugin == pluginInstance && dynamic_cast<BusNode*>(m);
-	}
+	/** Whether a neighbour is on the bus. Every module in this plugin is a BusNode, so the plugin is enough: a
+	dynamic_cast here, dozens of times a sample, cost more than the rest of the bus. */
+	static bool onBus(Module* m) { return m && m->model->plugin == pluginInstance; }
 
 	/** What came from the left, or null off the bus. */
 	static const Downstream* fromLeft(Module* m) {

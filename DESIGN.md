@@ -49,7 +49,8 @@ and legato voices with portamento around an engine; `Drum` (`src/Drum.cpp`) play
   targets a dial, and the sweep component's offset, both as shares of the dial's travel, so the knob stays put while
   the sound moves.
 - **After the voices:** the filter pair, level, FX sends, the soft limit (linear to ±5V, then bending towards ±10V)
-  and the pan, then the outputs, the bus mix and the meters.
+  and the pan, then the outputs, the bus mix and the meters. A filter whose state goes NaN or infinite, from a bad
+  input on Breakout's RET say, clears it, so the track recovers on the next sample.
 
 The panel has no dials, as the hardware's tracks have none of their own: the Sequencer's turn the selected track's,
 and a Screen turns any. Its status screen (`TrackStatus`) reads the same published state as a Screen beside it,
@@ -80,7 +81,10 @@ LFO's inside targets off.
 `src/opz/Kit.hpp` is a kit as the OP-1 and OP-Z keep one: one buffer of mono samples and 24 slices into it, each
 with its tuning, gain, direction and play mode. `Kit.cpp` reads OP-1 and OP-Z kit AIFFs (the slices are JSON in
 an "op-1" application chunk), plain AIFF, AIFC and WAV, and folders of sounds, all at 44.1 kHz mono. A loaded kit
-is saved in the patch's storage folder as a float WAV, with its slices in the module's JSON.
+is saved in the patch's storage folder as a float WAV, with its slices in the module's JSON. Files are taken as
+untrusted: rates outside 1 to 384 kHz are refused, samples that aren't finite become 0 and the rest are held to
+±4, slice speeds to four octaves either way, and names that aren't UTF-8, which JSON can't hold, lose their other
+bytes to '?'.
 
 The built-in kits (`BuiltinKits.cpp`) are synthesized from short recipes, a tone with a pitch sweep, FM and a
 partial, noise and 808-style metal through a filter, a click and drive, so the plugin ships no samples. All four
@@ -104,7 +108,8 @@ tested on its own. `src/opz/Sequencer.cpp` is the module: the face, the modes, r
 - **Channels:** each track's poly outputs have a fixed number of channels. A new note takes the channel silent
   longest, or failing that the one playing longest, and drops its gate for a sample so the engine retriggers.
 - **Undo:** the pattern changes in the audio thread, so the widget compares it with the last recorded copy every
-  frame and pushes a `PatternChange` when they differ. Every edit, from any source, is one undo step.
+  frame and pushes a `PatternChange` when they differ. Every edit, from any source, is one undo step, and so is a
+  project switch (below).
 - **Components** are a bitmask and a value per step. Most act in the player when it schedules a slot; sweeps go out
   over the bus as offsets on the lane; the gate step jump advances the tracks that wait for triggers, as **ADV** does.
 - **Parameter locks** are a mask and a value per step over a track's 18 params, each a share of the
@@ -125,8 +130,14 @@ dials as shares of each dial's range, so a project sets the same dial positions 
 the OP-Z's files do.
 
 Switching projects happens in the audio thread, from the keys; files are read and written in the UI thread. A mutex
-guards the slots between the two, and the UI thread hands a changed slot back by number, for the audio thread to
-load at its next control step.
+guards the slots between the two, which the audio thread only `try_lock`s: a key's switch or save, or a slot the UI
+thread hands back by number, waits for a control step when the lock is free. A switch keeps the live project either
+side of it, and the widget pushes them as one `ProjectSwitch` undo step, which puts back the patterns, settings,
+dials and mixer together; it takes the same lock, so it never sees a switch half done.
+
+Patches from 2.0.5 and earlier had keys where the mixer's and the metronome's params now are. Rack keeps each
+module's plugin version in the patch, so a Sequencer from before 2.0.6 resets those six to their defaults on loading.
+Param and port ids are append-only from 2.0.6 on.
 
 The .opz layout comes from the OP-Z community's reverse engineering (see the comment at the top of `Project.hpp`).
 Each imported file is kept, in the patch's storage folder, so an export writes the slot over the file it came from
@@ -163,7 +174,7 @@ do, so the plugin can go to the VCV Library some day.
   and a high-pass up across its right.
 - **Step components:** values follow the guide's chart where its text survives; where it doesn't (multiply's broken
   chord and quantize, sweep's long versions, the sparks' modes), the closest reading of the hardware's behaviour.
-  Ramps use C major until a tonality master exists.
+  Ramps use C major until the Sequencer has tonality.
 - **Untuned:** engine voicing, the built-in kits and the drums' level against the synths, sweep depth (half a dial's travel) and glide times (up to a beat) are first guesses,
   waiting to be tuned by ear.
 - **Index keys:** the OP-Z's are held while turning dials or pressing keys, so here three latch, like TRACK, and
