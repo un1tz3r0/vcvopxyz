@@ -14,9 +14,9 @@ that save it all.
 
 Place engines to its right, Screens beside them if you like, and they need no cables. The first synth engine plays
 track 5 (bass), the next track 6, and so on, and the first [Drum](drum-tracks.md) track 1 (kick), the next track 2,
-and so on to track 4, wherever they sit in the row. Each track has poly
-**V/OCT** and **GATE** outputs. While a track's GATE is unpatched, its notes, velocity and the tempo go to its engine
-over the bus instead. Engines with their own outputs unpatched are mixed into **L** and **R**. A module from another
+and so on to track 4, wherever they sit in the row. Each track's notes, velocity and the tempo go to its engine over
+the bus, and engines with their own outputs unpatched are mixed into **L** and **R**. To play other modules from a
+synth track, use a [Breakout](breakout.md) for its engine: it sends the track's notes out as CV. A module from another
 plugin ends the chain. The engines have no dials of their own: the Sequencer's four turn them, and a Screen beside
 one shows every page.
 
@@ -27,12 +27,12 @@ of round keys. **TRACK**, **REC** and **−**, **PLAY** and **+**, **STOP** and 
 the top under the track icons, the black keys numbered 1 to 0 on the column lines, and the white keys along the
 bottom under the step component icons. Each key has an RGB LED that lights up its symbol. Top left are the OP-Z's
 four index keys, **PROJECT**, **MIXER**, **TEMPO** and **SCREEN**, and under them, where the OP-Z's speaker is, the
-display and the selected track's channel dots. Under the face, a row of keys: the four pages, and a key per track
-over its jacks.
+display and the selected track's channel dots. Under the face, the four page keys over the jacks, and a key per
+track, named.
 
 ## Tracks and dials
 
-- **Selecting a track:** click its key over its jacks (white while selected, orange while it plays), or switch
+- **Selecting a track:** click its key under the face (white while selected, orange while it plays), or switch
   **TRACK** on and click one of steps 1 to 8. The keys, steps, dials and recording all work on the selected track.
 - **Dials:** they are the selected track's engine's dials, so turning one turns that parameter on the engine, with
   its own tooltip, undo and MIDI mapping. Click **SHIFT**, or one of the four page keys, to change the page; the

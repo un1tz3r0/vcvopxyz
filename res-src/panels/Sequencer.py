@@ -1,6 +1,6 @@
-"""The sequencer: the OP-Z's face, and the master of the engines to its right. Under the face, the keys that select a
-track and a page, then two rows of jacks: the transport in and out, the notes to record, each
-track's V/OCT and GATE, and the engines' mix.
+"""The sequencer: the OP-Z's face, and the master of the engines to its right. Under the face, the keys that turn the
+page over two rows of jacks, the transport in and out and the notes to record; a named key per track; and the
+engines' mix.
 
 The face copies the OP-Z's: four dials over 17 columns of round keys. TRACK, REC and −, PLAY and +, STOP and SHIFT
 on the left; the steps along the top under the track icons; the numbered black keys on the column lines; the white
@@ -105,7 +105,7 @@ def panel():
     with Scaled(p, (WIDTH - SCALE * FACE_WIDTH) / 2, 10.5) as f:
         face(f)
 
-    # The jacks' columns, in four groups: the transport, the notes to record, the tracks, and the mix.
+    # Four groups of columns: the transport's jacks, the notes to record, the track keys, and the mix.
     groups = [4, 2, 8, 1]
     left = (WIDTH - sum(groups) * PITCH - GAP * (len(groups) - 1)) / 2
     columns = []
@@ -115,24 +115,24 @@ def panel():
     transport, notes, tracks, mix = columns
     top, bottom = JACK_ROWS
 
-    # The keys over them: the four pages over the transport and the notes, and a key per track over its jacks.
+    # The four page keys over the transport and the notes, and the track keys level with the top row of jacks, named.
     span = notes[-1] - transport[0]
     for i in range(4):
         key(p, f'PAGE{i}_PARAM', transport[0] + span * (i + 0.5) / 4, KEY_ROW)
     for t, cx in enumerate(tracks):
-        key(p, f'SELECT{t}_PARAM', cx, KEY_ROW, TRACKS[t])
+        key(p, f'SELECT{t}_PARAM', cx, top, TRACKS[t])
+        p.text(TRACKS[t].upper(), cx, bottom - 6.2, size=LABEL if len(TRACKS[t]) < 5 else 2.3)
 
-    # Outputs sit in dark boxes: the transport's along the bottom row, the tracks' and the mix in both.
+    # Outputs sit in dark boxes: the transport's along the bottom row, and the mix in both.
     def box(x1, x2, y1, y2):
         p.rect(x1 - PITCH / 2 + 0.6, y1 - 8.6, x2 - x1 + PITCH - 1.2, y2 - y1 + 15.0, 2.0, 'box')
     box(transport[0], transport[-1], bottom, bottom)
-    box(tracks[0], mix[0], top, bottom)
+    box(mix[0], mix[0], top, bottom)
 
-    def jack(name, kind, cx, y, label, metered=True):
+    def jack(name, kind, cx, y, label):
         p.text(label, cx, y - 6.2, size=LABEL if len(label) < 5 else 2.3, fill='box_ink' if kind == 'OUTPUT' else 'ink')
         p.place(f'{name}_{kind}', cx, y)
-        if metered:
-            p.place(f'{name}_{kind}_LIGHT', cx + 3.9, y - 3.9)
+        p.place(f'{name}_{kind}_LIGHT', cx + 3.9, y - 3.9)
 
     for cx, name in zip(transport, ['CLOCK', 'RUN', 'RESET', 'CONT']):
         jack(name, 'INPUT', cx, top, name)
@@ -140,9 +140,6 @@ def panel():
     for (cx, y), name, label in zip([(notes[0], top), (notes[1], top), (notes[0], bottom), (notes[1], bottom)],
                                     ['VOCT', 'GATE', 'VELOCITY', 'ADVANCE'], ['V/OCT', 'GATE', 'VEL', 'ADV']):
         jack(name, 'INPUT', cx, y, label)
-    for t, cx in enumerate(tracks):
-        jack(f'VOCT{t}', 'OUTPUT', cx, top, 'V/OCT', metered=False)
-        jack(f'GATE{t}', 'OUTPUT', cx, bottom, 'GATE', metered=False)
     jack('LEFT', 'OUTPUT', mix[0], top, 'L')
     jack('RIGHT', 'OUTPUT', mix[0], bottom, 'R')
     return p

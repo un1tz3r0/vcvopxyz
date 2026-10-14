@@ -41,6 +41,6 @@ the patch and can be undone like any other edit.
   pattern; jumps move the playhead without changing the step count.
 - Ramps and random use C major until a tonality master exists to supply the key.
 - Sweeps travel over the bus, so they move the dials of the engine playing the track, not the dials themselves:
-  the knobs stay put while the sound moves. A track with its GATE output patched has no engine to sweep.
+  the knobs stay put while the sound moves. A track with no engine has nothing to sweep.
 - The gate step jump pairs with step length 0 (one step per trigger on **ADV**): it advances every track waiting
   for triggers, so one track can clock others.

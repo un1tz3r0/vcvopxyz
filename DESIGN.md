@@ -18,16 +18,16 @@ How vcvopxyz is put together, and why. For what the modules do, see the [manual]
 `src/opz/Bus.hpp`. The Sequencer sits at the left end of a row as the master. Every OP-Z module is a `BusNode`,
 which owns the double buffers Rack's expander messages flip between, and passes on what it gets, a sample later:
 
-- **Downstream** (rightward): each track's lane (poly pitch, velocity, gate, the sweep offsets, the parameter
-  locks of the step playing, and its level from the mixer, 0 while its sound is muted), the tempo, the selected track, track mode, page requests, and counts of
-  the drum and synth engines passed so far.
+- **Downstream** (rightward): each track's lane (poly pitch, velocity, gate, the sweep offsets, the parameter locks
+  of the step playing, and its level from the mixer, 0 while its sound is muted), the tempo, the selected track,
+  track mode, page requests, and counts of the drum and synth engines passed so far.
 - **Upstream** (leftward): the L/R mix of every engine whose own outputs are unpatched, each engine's page, and the
   selected engine's four dial values for the master's dial LEDs.
 
-An engine takes its track from its kind's count: the first drum engine plays track 1, the next track 2, and so on
-to track 4, and the first synth engine track 5, and so on to track 8, so the two kinds can mix in any order. A track whose GATE output is patched sends an empty lane, which
-takes its engine off the bus without moving the others. A module from another plugin ends the bus, since
-`onBus` checks the plugin before casting. A Screen only relays.
+An engine takes its track from its kind's count: the first drum engine plays track 1, the next track 2, and so on to
+track 4, and the first synth engine track 5, and so on to track 8, so the two kinds can mix in any order. The master
+has no CV outputs of its own for the tracks: a Breakout engine is the way out to other modules. A module from
+another plugin ends the bus, since `onBus` checks the plugin before casting. A Screen only relays.
 
 Expander messages are the only safe way to share state between modules that Rack may run on different threads, and
 the one-sample delay per module is inaudible for notes and dials. The master's dials carry no state of their own:
@@ -169,7 +169,7 @@ do, so the plugin can go to the VCV Library some day.
 - **Index keys:** the OP-Z's are held while turning dials or pressing keys, so here three latch, like TRACK, and
   SCREEN, which only shows the battery, works while held. The battery is pretend, running down while playing.
 - **Mixer:** levels are squared, as the engines' are, and only reach the engines over the bus; a mute stops a
-  track's gates, outputs included, while a sound mute (SHIFT) only zeroes its level. Punch is a compressor with
+  track's gates, while a sound mute (SHIFT) only zeroes its level. Punch is a compressor with
   make-up gain, and the master level comes after it.
 - **Parameter locks** hold for the step's slots, from its slot's start until the next step's, rather than for its
   notes' lengths, so a lock on an empty step changes the notes still sounding from earlier ones. A held step plays
