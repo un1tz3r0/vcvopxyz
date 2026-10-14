@@ -186,12 +186,16 @@ struct Sequencer : Module, BusNode {
 	enum InputId { CLOCK_INPUT, RUN_INPUT, RESET_INPUT, CONT_INPUT, ADVANCE_INPUT, VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, INPUTS_LEN };
 	enum OutputId {
 		CLOCK_OUTPUT, RUN_OUTPUT, RESET_OUTPUT, CONT_OUTPUT, LEFT_OUTPUT, RIGHT_OUTPUT,
+		// The tracks' V/OCT and GATE until 2.0.9. Rack adds a patch's cables before it looks for their jacks, so an
+		// older patch's cables to them need ports to land on; with no jacks on the panel, Rack then drops them.
+		ENUMS(OLD_TRACK_OUTPUT, 2 * TRACKS),
 		OUTPUTS_LEN
 	};
+	static constexpr int JACKS = OLD_TRACK_OUTPUT; // the outputs on the panel
 	enum LightId {
 		ENUMS(KEY_LIGHT, 3 * (LOCK_PARAM - TRACK_PARAM)), ENUMS(DIAL_LIGHT, 3 * 4),
 		ENUMS(CHANNEL_LIGHT, CHANNELS), INTERNAL_LIGHT, EXTERNAL_LIGHT,
-		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * OUTPUTS_LEN),
+		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * JACKS),
 		LIGHTS_LEN
 	};
 	static constexpr float LONG_PRESS = 0.4f, CLEAR_HOLD = 1.f; // seconds
@@ -374,7 +378,7 @@ struct Sequencer : Module, BusNode {
 	float sincePulse = 0.f, pulsePeriod = 0.f; // seconds; a period of 0 is unknown
 	Upstream engines;            // the last the engines sent back, read at light rate
 	dsp::ClockDivider controlDivider, lightDivider;
-	Meter inputMeters[INPUTS_LEN], outputMeters[OUTPUTS_LEN];
+	Meter inputMeters[INPUTS_LEN], outputMeters[JACKS];
 	float blink = 0.f;
 
 	Sequencer() {
@@ -1396,7 +1400,7 @@ struct Sequencer : Module, BusNode {
 
 		for (int i = 0; i < INPUTS_LEN; i++)
 			meter(inputMeters[i], inputs[i], INPUT_LIGHT + 2 * i, dt);
-		for (int i = 0; i < OUTPUTS_LEN; i++)
+		for (int i = 0; i < JACKS; i++)
 			meter(outputMeters[i], outputs[i], OUTPUT_LIGHT + 2 * i, dt);
 	}
 
@@ -2101,7 +2105,7 @@ struct SequencerWidget : ModuleWidget {
 			addInput(createInputCentered<ThemedPJ301MPort>(layout.center(string::f("%s_INPUT", inputs[i])), module, i));
 			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(string::f("%s_INPUT_LIGHT", inputs[i])), module, Sequencer::INPUT_LIGHT + 2 * i));
 		}
-		for (int i = 0; i < Sequencer::OUTPUTS_LEN; i++) {
+		for (int i = 0; i < Sequencer::JACKS; i++) {
 			addOutput(createOutputCentered<ThemedPJ301MPort>(layout.center(string::f("%s_OUTPUT", outputs[i])), module, i));
 			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(string::f("%s_OUTPUT_LIGHT", outputs[i])), module, Sequencer::OUTPUT_LIGHT + 2 * i));
 		}

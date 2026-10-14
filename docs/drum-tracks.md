@@ -14,8 +14,8 @@ pages, LFO and jacks; this page covers only where it differs.
 
 - **Keys:** F3 to E5, the Sequencer's keys at their home octave, play the 24 sounds in turn, and the octaves either
   side play them again. A key's tooltip on the Sequencer names its sound.
-- **Built in:** each track starts on a kit of its own, synthesized when the plugin loads, so nothing ships as
-  samples. The context menu's **Built-in kit** plays another track's instead.
+- **Built in:** each track starts on a kit of its own, synthesized when the first Drum is added, so nothing ships
+  as samples. The context menu's **Built-in kit** plays another track's instead.
 
 | Track | Sounds |
 | --- | --- |
@@ -26,9 +26,10 @@ pages, LFO and jacks; this page covers only where it differs.
 
 - **Loading:** the context menu's **Load a kit file…** takes an OP-1 or OP-Z kit (an AIFF with the kit's slices in
   it), or any other AIFF or WAV, cut into 24 equal slices. **Load a folder of sounds…** takes up to 24 AIFF and WAV
-  files, one per key in order of their names. Stereo files are mixed to mono, and everything is resampled to 44.1 kHz.
+  files, one per key in order of their names, resampled to 44.1 kHz. Stereo files are mixed to mono.
 - **Saving:** a loaded kit saves with the patch, in its storage folder, so the patch plays it on any computer.
-  Built-in kits are made again on loading.
+  Built-in kits are made again on loading. A Drum pasted with Ctrl+V plays the built-in kit, since only a patch or
+  Ctrl+D (duplicate) carries the kit's sound.
 - **Kit settings:** a kit file's own slices keep their tuning, volume, direction and play mode: a slice set to gate
   or loop plays that way whatever the note style.
 

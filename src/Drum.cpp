@@ -111,6 +111,13 @@ struct Drum : Track {
 		handing = true;
 	}
 
+	/** For the UI thread: plays a kit from a file, and keeps its sound in the patch's storage at once, so that an
+	autosave, which saves the kit's JSON without an onSave, has it too. */
+	void useKit(std::unique_ptr<Kit> kit) {
+		system::writeFile(system::join(createPatchStorageDirectory(), "kit.wav"), kit->toWav());
+		setKit(std::move(kit));
+	}
+
 	/** For the UI thread: the kit from a file that plays, or will once handed over, or null. */
 	const Kit* fileKit() {
 		return handing ? incoming.get() : loaded.get();
@@ -239,13 +246,22 @@ struct Drum : Track {
 			setKit(nullptr);
 	}
 
-	/** A file's kit lives in the patch's storage, as kit.wav, beside the slices in its JSON. */
+	/** A file's kit lives in the patch's storage, as kit.wav, beside the slices in its JSON. A pasted Drum has no
+	storage of its own yet, and a patch can lose the file, so without it the built-in kit plays. */
 	void onAdd(const AddEvent& e) override {
 		if (!savedKit)
 			return;
-		std::vector<uint8_t> wav = system::readFile(system::join(getPatchStorageDirectory(), "kit.wav"));
-		if (std::unique_ptr<Kit> k = Kit::fromSaved(wav, savedKit))
+		std::string path = system::join(getPatchStorageDirectory(), "kit.wav");
+		std::unique_ptr<Kit> k;
+		try {
+			if (system::isFile(path))
+				k = Kit::fromSaved(system::readFile(path), savedKit);
+		}
+		catch (const Exception&) {}
+		if (k)
 			setKit(std::move(k));
+		else
+			WARN("Drum: can't read %s, so the built-in kit plays", path.c_str());
 		json_decref(savedKit);
 		savedKit = nullptr;
 	}
@@ -274,11 +290,14 @@ struct DrumWidget : TrackWidget {
 			return;
 		std::string path = chosen, error;
 		std::free(chosen);
-		std::unique_ptr<Kit> kit = folder ? Kit::loadFolder(path, &error) : Kit::load(path, &error);
-		if (kit)
-			m->setKit(std::move(kit));
-		else
-			osdialog_message(OSDIALOG_WARNING, OSDIALOG_OK, ("Couldn't load " + path + ": " + error).c_str());
+		try {
+			if (std::unique_ptr<Kit> kit = folder ? Kit::loadFolder(path, &error) : Kit::load(path, &error))
+				return m->useKit(std::move(kit));
+		}
+		catch (const Exception& e) {
+			error = e.what();
+		}
+		osdialog_message(OSDIALOG_WARNING, OSDIALOG_OK, ("Couldn't load " + path + ": " + error).c_str());
 	}
 
 	void appendContextMenu(Menu* menu) override {
