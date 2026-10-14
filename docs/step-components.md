@@ -33,13 +33,13 @@ the patch and can be undone like any other edit.
 | Sweep | An out-and-back of the engine's filter (up, down), sound (up, down) or pan over a bar; the first four over two bars; random. |
 | Jump | To the start, 2/4, 3/4 or 4/4; skip forward or back a step; random; stay; align with where the track would be; gate step (advances the tracks waiting for triggers). |
 | Parameter spark, component spark, trigger spark | Fire the step's [parameter locks](sequencer.md#steps), its components, or its notes, on pass N of every N (1 to 8), random, or reset the count. Again: the first of N, all but the Nth, all but the first. |
-| Tonality | Saved, but waiting for a tonality master. |
+| Tonality | Saved, but waiting for the Sequencer to have tonality. |
 
 ## Notes
 
 - A slot is one turn of a step under the playhead. Pulse and pulse hold give a step several, so they lengthen the
   pattern; jumps move the playhead without changing the step count.
-- Ramps and random use C major until a tonality master exists to supply the key.
+- Ramps and random use C major until the Sequencer has tonality to supply the key.
 - Sweeps travel over the bus, so they move the dials of the engine playing the track, not the dials themselves:
   the knobs stay put while the sound moves. A track with no engine has nothing to sweep.
 - The gate step jump pairs with step length 0 (one step per trigger on **ADV**): it advances every track waiting

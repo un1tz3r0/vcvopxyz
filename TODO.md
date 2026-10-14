@@ -2,19 +2,25 @@
 
 ## Next
 
+- [ ] **Drum Breakout:** a drum track's trigger, velocity, sound number, envelope and dials out as CV, and a voice
+      back in at RET L/R, as Breakout does for synth tracks. The README's "drum breakout"; tracks 1 to 4 have no
+      other way out to other modules since the Sequencer's track outputs went.
 - [ ] **FX modules** for the **FX 1** and **FX 2** sends, the OP-Z's tracks 13 and 14.
 - [ ] **The arp track's page:** the OP-Z swaps track 7's LFO page for arp speed, pattern, style and range.
 
 ## Later
 
-- [ ] **A master module** that owns the tempo, 16 patterns per track and pattern chaining, and tonality. The
-      Sequencer's tempo display, INT/EXT and transport move there.
-- [ ] **Tonality:** a chord progression and key from the master, for the **tonality** component and for ramps and
+- [ ] **16 patterns per track and pattern chaining** in the Sequencer, read and written in project files: only
+      the pattern playing is now. The Sequencer is the master, so these go in it rather than in a module of their
+      own, as do tonality and the tempo.
+- [ ] **Tonality:** a chord progression and key in the Sequencer, for the **tonality** component and for ramps and
       random, which use C major until then.
 - [ ] **A ninth track,** the master track, beside the four drum and four synth tracks.
 - [ ] **More OP-Z synth engines,** each a `Voice` and two dials on the shared synth track.
 - [ ] **The OP-XY:** its sequencer and engines, once the OP-Z's are complete.
-- [ ] **VCV Library** submission.
+- [ ] **VCV Library:** releases go on GitHub for now, since VCV's guidelines bar copying a product's layout without
+      its maker's permission. Next would be asking teenage engineering; a redesign under another name is the last
+      resort.
 
 ## Loose ends
 
@@ -36,11 +42,14 @@
 - [ ] **Recording dial moves as parameter locks** while recording live, if the OP-Z does: the dials only lock a
       held step now.
 - [ ] A Screen shows the dials' own values, not the locks of the step playing.
-- [ ] **16 patterns and chains** per project, read and written in project files, once the master module has them.
-      Only the pattern playing is read and written now.
+- [ ] Exported project files hold micro timing from −12 to +11 ticks, as the OP-Z's own do, so notes further off the
+      step than that are pulled in.
+- [ ] **CI:** `actions/checkout@v4` and `upload-artifact@v4` warn about Node 20, and the Linux build runs in an
+      end-of-life `ubuntu:20.04` container, kept for its old glibc.
+- [ ] **Dead code:** `src/Screen.{hpp,cpp}` and the unused widgets in `src/ui.hpp`, with their SVGs.
 
 ## Waiting on Vic
 
-- [ ] Rename the Sequencer, now that it is the master and not just a sequencer?
+- [ ] Rename the Sequencer, now that it is the master and will hold the patterns, chains and tonality too?
 - [ ] What do Digital's **octave** and **feedback** dials do on the hardware? Assumed: the modulator's octave, and
       FM depth.

@@ -48,7 +48,9 @@ struct Organ {
 	static float sine(float x) {
 		float f = (x - std::floor(x)) * TABLE;
 		int i = int(f);
-		return SINE[i] + (SINE[i + 1] - SINE[i]) * (f - i);
+		float fraction = f - i;
+		i &= TABLE - 1; // an x a hair under a whole number rounds up to f = TABLE
+		return SINE[i] + (SINE[i + 1] - SINE[i]) * fraction;
 	}
 
 	struct Voice {

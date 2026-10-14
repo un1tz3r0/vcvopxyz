@@ -22,7 +22,7 @@ uint64_t littleEndian(const uint8_t* p, int bytes) {
 /** A decoded file: its channels mixed to mono, and an OP-1 application chunk's text, if it has one. */
 struct Audio {
 	std::vector<float> samples;
-	float rate = 44100.f;
+	double rate = 44100.0;
 	std::string op1;
 };
 
@@ -61,7 +61,7 @@ struct Format {
 			float sum = 0.f;
 			for (int c = 0; c < channels; c++)
 				sum += sample(data + i * frameBytes + c * bytes);
-			out[i] = sum / channels;
+			out[i] = std::isfinite(sum) ? clamp(sum / channels, -4.f, 4.f) : 0.f;
 		}
 	}
 };
@@ -71,6 +71,20 @@ double extended(const uint8_t* p) {
 	int exponent = int(bigEndian(p, 2) & 0x7fff);
 	double v = std::ldexp((double) bigEndian(p + 2, 8), exponent - 16446);
 	return p[0] & 0x80 ? -v : v;
+}
+
+/** Checks what a decoder found, then decodes it. */
+bool finish(const Format& format, const uint8_t* data, size_t size, size_t frames, Audio* a, std::string* error) {
+	if (!format.valid() || !data) {
+		*error = "no audio in it that can be read";
+		return false;
+	}
+	if (!(a->rate >= 1000.0 && a->rate <= 384000.0)) {
+		*error = "its sample rate isn't between 1 and 384 kHz";
+		return false;
+	}
+	format.decode(data, size, frames, a->samples);
+	return true;
 }
 
 bool decodeAiff(const std::vector<uint8_t>& f, Audio* a, std::string* error) {
@@ -84,7 +98,7 @@ bool decodeAiff(const std::vector<uint8_t>& f, Audio* a, std::string* error) {
 			format.channels = (int) bigEndian(c + 8, 2);
 			frames = bigEndian(c + 10, 4);
 			format.bytes = int(bigEndian(c + 14, 2) + 7) / 8;
-			a->rate = (float) extended(c + 16);
+			a->rate = extended(c + 16);
 			if (size >= 22) {
 				std::string type((const char*) c + 26, 4);
 				format.little = type == "sowt";
@@ -104,12 +118,7 @@ bool decodeAiff(const std::vector<uint8_t>& f, Audio* a, std::string* error) {
 			a->op1.assign((const char*) c + 12, size - 4);
 		at += 8 + size + (size & 1);
 	}
-	if (!format.valid() || !data || !(a->rate > 0.f)) {
-		*error = "no audio in it that can be read";
-		return false;
-	}
-	format.decode(data, dataSize, frames, a->samples);
-	return true;
+	return finish(format, data, dataSize, frames, a, error);
 }
 
 bool decodeWav(const std::vector<uint8_t>& f, Audio* a, std::string* error) {
@@ -125,7 +134,7 @@ bool decodeWav(const std::vector<uint8_t>& f, Audio* a, std::string* error) {
 			if (tag == 0xfffe && size >= 26)
 				tag = (int) littleEndian(c + 32, 2);
 			format.channels = (int) littleEndian(c + 10, 2);
-			a->rate = (float) littleEndian(c + 12, 4);
+			a->rate = (double) littleEndian(c + 12, 4);
 			format.bytes = int(littleEndian(c + 22, 2) + 7) / 8;
 			format.real = tag == 3;
 			format.offsetBinary = format.bytes == 1;
@@ -140,12 +149,7 @@ bool decodeWav(const std::vector<uint8_t>& f, Audio* a, std::string* error) {
 		}
 		at += 8 + size + (size & 1);
 	}
-	if (!format.valid() || !data || !(a->rate > 0.f)) {
-		*error = "no audio in it that can be read";
-		return false;
-	}
-	format.decode(data, dataSize, SIZE_MAX, a->samples);
-	return true;
+	return finish(format, data, dataSize, SIZE_MAX, a, error);
 }
 
 bool decode(const std::string& path, Audio* a, std::string* error) {
@@ -168,21 +172,21 @@ bool readMarkers(Kit& kit, const std::string& text) {
 	json_t* root = json_loadb(text.data() + from, to - from + 1, 0, &e);
 	const char* type = json_string_value(json_object_get(root, "type"));
 	bool drum = type && std::string(type) == "drum" && json_is_array(json_object_get(root, "start")) && json_is_array(json_object_get(root, "end"));
+	double frames = (double) kit.samples.size();
 	for (int i = 0; drum && i < Kit::SLICES; i++) {
 		auto field = [&](const char* key, double otherwise) {
 			json_t* v = json_array_get(json_object_get(root, key), i);
 			return json_is_number(v) ? json_number_value(v) : otherwise;
 		};
-		int frames = (int) kit.samples.size();
-		int a = clamp((int) std::lround(field("start", 0.0) / 4058.0), 0, frames);
-		int b = clamp((int) std::lround(field("end", 0.0) / 4058.0), 0, frames);
+		auto marker = [&](const char* key) { return (int) std::lround(std::clamp(field(key, 0.0) / 4058.0, 0.0, frames)); };
+		int a = marker("start"), b = marker("end");
 		Kit::Slice& s = kit.slices[i];
 		s.start = std::min(a, b);
 		s.end = std::max(a, b);
 		double mode = field("playmode", 8192.0);
 		s.mode = mode < 8192.0 ? Kit::GATE : mode > 16384.0 ? Kit::LOOP : Kit::ONESHOT;
 		s.reverse = field("reverse", 8192.0) > 12288.0;
-		s.speed = (float) std::exp2(field("pitch", 0.0) / 512.0 / 12.0);
+		s.speed = (float) std::exp2(std::clamp(field("pitch", 0.0) / 512.0, -48.0, 48.0) / 12.0);
 		s.gain = (float) std::clamp(field("volume", 8192.0) / 8192.0, 0.0, 4.0);
 	}
 	json_decref(root);
@@ -192,6 +196,20 @@ bool readMarkers(Kit& kit, const std::string& text) {
 std::string lowercase(std::string s) {
 	std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
 	return s;
+}
+
+/** A name as JSON can hold it: if it isn't UTF-8, a file name from another system perhaps, its bytes past ASCII
+become '?'. */
+std::string jsonSafe(const std::string& s) {
+	if (json_t* j = json_string(s.c_str())) {
+		json_decref(j);
+		return s;
+	}
+	std::string out = s;
+	for (char& c : out)
+		if ((unsigned char) c >= 0x80)
+			c = '?';
+	return out;
 }
 
 bool isAudio(const std::string& path) {
@@ -207,7 +225,7 @@ void Kit::append(const std::vector<float>& sound, float soundRate, const std::st
 		return;
 	Slice& s = slices[used++];
 	s = Slice();
-	s.name = sliceName;
+	s.name = jsonSafe(sliceName);
 	s.start = (int) samples.size();
 	double step = soundRate / rate;
 	for (double t = 0.0; t <= sound.size() - 1; t += step) {
@@ -223,8 +241,8 @@ std::unique_ptr<Kit> Kit::load(const std::string& path, std::string* error) {
 	if (!decode(path, &a, error))
 		return nullptr;
 	auto kit = std::make_unique<Kit>();
-	kit->name = system::getStem(path);
-	kit->rate = a.rate;
+	kit->name = jsonSafe(system::getStem(path));
+	kit->rate = (float) a.rate;
 	kit->samples = std::move(a.samples);
 	kit->used = SLICES;
 	if (!readMarkers(*kit, a.op1)) {
@@ -246,12 +264,12 @@ std::unique_ptr<Kit> Kit::loadFolder(const std::string& dir, std::string* error)
 		return lowercase(system::getFilename(a)) < lowercase(system::getFilename(b));
 	});
 	auto kit = std::make_unique<Kit>();
-	kit->name = system::getFilename(dir);
+	kit->name = jsonSafe(system::getFilename(dir));
 	for (const std::string& path : files) {
 		Audio a;
 		std::string skipped;
 		if (kit->used < SLICES && decode(path, &a, &skipped))
-			kit->append(a.samples, a.rate, system::getStem(path));
+			kit->append(a.samples, (float) a.rate, system::getStem(path));
 	}
 	if (!kit->used) {
 		*error = "no AIFF or WAV files in it that can be read";
@@ -301,7 +319,7 @@ std::unique_ptr<Kit> Kit::fromSaved(const std::vector<uint8_t>& wav, json_t* roo
 	auto kit = std::make_unique<Kit>();
 	const char* name = json_string_value(json_object_get(root, "name"));
 	kit->name = name ? name : "";
-	kit->rate = a.rate;
+	kit->rate = (float) a.rate;
 	kit->samples = std::move(a.samples);
 	kit->used = SLICES;
 	int frames = (int) kit->samples.size();
@@ -313,8 +331,8 @@ std::unique_ptr<Kit> Kit::fromSaved(const std::vector<uint8_t>& wav, json_t* roo
 		json_unpack(json_array_get(json_object_get(root, "slices"), i), "[iiFFibs]", &s.start, &s.end, &speed, &gain, &s.mode, &reverse, &sliceName);
 		s.start = clamp(s.start, 0, frames);
 		s.end = clamp(s.end, s.start, frames);
-		s.speed = (float) speed;
-		s.gain = (float) gain;
+		s.speed = (float) std::clamp(speed, 1.0 / 16.0, 16.0);
+		s.gain = (float) std::clamp(gain, 0.0, 4.0);
 		s.mode = clamp(s.mode, 0, (int) LOOP);
 		s.reverse = reverse;
 		s.name = sliceName;

@@ -38,6 +38,9 @@ struct Svf {
 		float v2 = s2 + a2 * s1 + a3 * v3;
 		s1 = 2.f * v1 - s1;
 		s2 = 2.f * v2 - s2;
+		// A NaN or infinity in, from a cable or a bad sample, would otherwise stay in the state for good.
+		if (!std::isfinite(s1 + s2))
+			reset();
 		return {v2, v1, x - k * v1 - v2};
 	}
 

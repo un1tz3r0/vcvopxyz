@@ -331,12 +331,12 @@ struct Track : Module, BusNode {
 	void handleMaster(const Downstream* bus) {
 		bool was = selected;
 		selected = bus && busTrack == bus->selected;
+		if (was && !selected && trackMode)
+			setTrackMode(false);
 		if (!bus)
 			return;
 		if (selected && (!was || bus->trackMode != masterTrackMode))
 			setTrackMode(bus->trackMode);
-		else if (was && !selected && trackMode)
-			setTrackMode(false);
 		if (selected && bus->pageRequests != pageRequests)
 			showPage(bus->page == NEXT_PAGE ? (page + 1) % PAGE_TRACK : bus->page);
 		masterTrackMode = bus->trackMode;

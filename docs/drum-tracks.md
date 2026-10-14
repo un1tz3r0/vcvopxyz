@@ -26,7 +26,8 @@ pages, LFO and jacks; this page covers only where it differs.
 
 - **Loading:** the context menu's **Load a kit file…** takes an OP-1 or OP-Z kit (an AIFF with the kit's slices in
   it), or any other AIFF or WAV, cut into 24 equal slices. **Load a folder of sounds…** takes up to 24 AIFF and WAV
-  files, one per key in order of their names, resampled to 44.1 kHz. Stereo files are mixed to mono.
+  files, one per key in order of their names, resampled to 44.1 kHz. Stereo files are mixed to mono. A file's sample
+  rate must be between 1 and 384 kHz, and samples that aren't numbers play as silence.
 - **Saving:** a loaded kit saves with the patch, in its storage folder, so the patch plays it on any computer.
   Built-in kits are made again on loading. A Drum pasted with Ctrl+V plays the built-in kit, since only a patch or
   Ctrl+D (duplicate) carries the kit's sound.
