@@ -25,7 +25,7 @@
 ## Behind it
 
 - [DESIGN.md](../DESIGN.md): how the modules fit together, and the choices made where the OP-Z guide is silent.
-- [TODO.md](../TODO.md): what's next, and what's still waiting on an answer.
+- [TODO.md](../TODO.md): what's next, and the loose ends.
 
 ## A first patch
 

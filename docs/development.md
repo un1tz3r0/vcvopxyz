@@ -28,6 +28,9 @@ git push origin v2.0.5
 ```
 
 The release job checks that the tag matches `plugin.json`, then attaches all four packages to a GitHub release.
+Without pushing a tag, run the **Build** workflow by hand on `main` (Actions, Build, Run workflow) with **release**
+ticked: it tags `main`'s head `v<version>` from `plugin.json` and publishes the same way, and refuses a version that
+is already tagged.
 Linux builds run in an Ubuntu 20.04 container so the plugin also loads on older distributions. The SDK version is
 set once, as `RACK_SDK_VERSION` at the top of the workflow.
 

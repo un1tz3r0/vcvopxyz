@@ -166,7 +166,8 @@ do, so the plugin can go to the VCV Library some day.
 - **OP-1 kit encodings:** markers at 4058 to a sample and the play mode and reverse values are well established;
   pitch as 512ths of a semitone and volume with 8192 as unity are guesses.
 - **Digital's dials:** octave steps the modulator from −2 to +3 octaves from the note, and feedback is FM depth, up
-  to two cycles of phase deviation. Unconfirmed against the hardware.
+  to two cycles of phase deviation. Vic hears the hardware differently: a sine that wraps around as it's driven,
+  octave setting how many times it wraps and feedback some kind of phase self-modulation. TODO has the rework.
 - **LFO:** synced speeds run 1/64 at the far left to 2/1 just left of centre, in the order the guide lists them, so
   the dial is slowest in the middle. Depth is squared, for fine vibrato; at full depth the LFO sweeps a target's
   whole range, or ±2 octaves of pitch. Free shapes are bipolar; note-triggered shapes are unipolar.
