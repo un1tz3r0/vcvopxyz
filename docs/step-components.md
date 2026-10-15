@@ -28,18 +28,19 @@ the patch and can be undone like any other edit.
 | Pulse, pulse hold | The step plays, or holds its note, for 1 to 9 slots before the playhead moves on, or a random number. |
 | Multiply | ×1 to ×8 ratchets within the step, a broken chord, or quantize (no micro timing). |
 | Velocity | −4 to +3 (in sixteenths of the range, 5 is unchanged), mute, random. |
-| Ramp up, ramp down, random | Walk C major from the note, one degree per trigger: 2 to 6 notes over 1 octave (1 to 5) or 3 octaves (6 to 0). |
+| Ramp up, ramp down, random | Walk the [key](sequencer.md#master-track) from the note, one degree per trigger: 2 to 6 notes over 1 octave (1 to 5) or 3 octaves (6 to 0). |
 | Portamento | Glide 1 to 8 into the note (up to a beat), direct, random. |
 | Sweep | An out-and-back of the engine's filter (up, down), sound (up, down) or pan over a bar; the first four over two bars; random. |
 | Jump | To the start, 2/4, 3/4 or 4/4; skip forward or back a step; random; stay; align with where the track would be; gate step (advances the tracks waiting for triggers). |
 | Parameter spark, component spark, trigger spark | Fire the step's [parameter locks](sequencer.md#steps), its components, or its notes, on pass N of every N (1 to 8), random, or reset the count. Again: the first of N, all but the Nth, all but the first. |
-| Tonality | Saved, but waiting for the Sequencer to have tonality. |
+| Tonality | How the step follows the [master track](sequencer.md#master-track): ignore it; follow the root by semitones only; as usual plus an octave, a fifth or a third; a semitone up or down; or snap to the moved key's scale, its triad, or its root and fifth. |
 
 ## Notes
 
 - A slot is one turn of a step under the playhead. Pulse and pulse hold give a step several, so they lengthen the
   pattern; jumps move the playhead without changing the step count.
-- Ramps and random use C major until the Sequencer has tonality to supply the key.
+- Ramps and random walk the key the Sequencer finds in the synth tracks, and then follow the master track.
+- The tonality component acts on each note as it starts, so it follows a master note starting at the same moment.
 - Sweeps travel over the bus, so they move the dials of the engine playing the track, not the dials themselves:
   the knobs stay put while the sound moves. A track with no engine has nothing to sweep.
 - The gate step jump pairs with step length 0 (one step per trigger on **ADV**): it advances every track waiting

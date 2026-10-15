@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <iterator>
 #include <limits>
+#include <tuple>
 
 /*
 An OP-Z track's sequence and the player that runs it, knowing nothing of Rack.
@@ -14,11 +15,15 @@ step is split into 24 ticks for micro timing and note lengths, so those stretch 
 schedules each step slot one slot ahead, which covers micro timing from -23 to +24 ticks and still starts every note
 exactly on time. A slot is one step's turn under the playhead: pulse and pulse hold give a step several. A step's
 parameter locks hold its engine's dials for as long as its slots are under the playhead.
+
+Notes are in the key the Sequencer finds in the synth tracks (Scale), and a note is moved as the master track says
+when it starts rather than when it's scheduled, so it follows a master note starting with it (Tonality).
 */
 namespace opz {
 
 constexpr int STEPS = 16, STEP_NOTES = 4, TICKS = 24, CHANNELS = 16;
 constexpr int TRACKS = 8, DRUM_TRACKS = 4, SYNTH_TRACKS = TRACKS - DRUM_TRACKS; // kick, snare, perc, sample, then bass, lead, arp, chord
+constexpr int MASTER = TRACKS, LANES = TRACKS + 1; // the master track, sequenced after the eight it transposes
 constexpr int MIN_OFFSET = 1 - TICKS, MAX_OFFSET = TICKS;
 constexpr int DRONE = std::numeric_limits<int16_t>::max();
 constexpr int SOUND_PARAMS = 18; // a synth track's dials, every page's and the track settings', which a step can lock
@@ -199,15 +204,120 @@ inline int floorDiv(int a, int b) {
 	return a / b - (a % b != 0 && (a < 0) != (b < 0));
 }
 
-/** Moves a pitch by whole degrees of C major, the master track's key until there is one. Notes outside the scale
-keep their distance from the degree below them. */
-inline int diatonic(int pitch, int degrees) {
-	static const int major[7] = {0, 2, 4, 5, 7, 9, 11};
-	int octave = floorDiv(pitch, 12), pc = pitch - 12 * octave, d = 6;
-	while (major[d] > pc)
-		d--;
-	int t = d + degrees, o = floorDiv(t, 7);
-	return 12 * (octave + o) + major[t - 7 * o] + pc - major[d];
+inline int mod(int a, int b) {
+	return a - b * floorDiv(a, b);
+}
+
+/** The major scale, in semitones above its key. */
+constexpr int MAJOR[7] = {0, 2, 4, 5, 7, 9, 11};
+
+/** A key and mode, as the master track has them: the major scale on `key`, a pitch class from 0 for C, played from
+its degree `mode`, 0 for Ionian (major) to 6 for Locrian, as the tonic. The modes share the major scale's notes, so
+only the tonic tells them apart. */
+struct Scale {
+	int key = 0, mode = 0;
+
+	int tonic() const {
+		return (key + MAJOR[mode]) % 12;
+	}
+
+	/** Where a pitch is on the scale, in degrees up from its key's lowest octave; a pitch outside it, the degree below. */
+	int degree(int pitch) const {
+		int p = pitch - key, octave = floorDiv(p, 12), d = 6;
+		while (MAJOR[d] > p - 12 * octave)
+			d--;
+		return 7 * octave + d;
+	}
+
+	int pitch(int degree) const {
+		int octave = floorDiv(degree, 7);
+		return key + 12 * octave + MAJOR[degree - 7 * octave];
+	}
+
+	bool contains(int p) const {
+		return pitch(degree(p)) == p;
+	}
+
+	/** Moves a pitch by whole degrees. One outside the scale keeps its distance from the degree below it. */
+	int shift(int p, int degrees) const {
+		int d = degree(p);
+		return pitch(d + degrees) + p - pitch(d);
+	}
+
+	/** The nearest pitch, the lower of two, on the degrees of the bit mask `chord`, counted from the tonic: 0x7f is
+	the whole scale, 0x15 its triad, 0x11 its root and fifth. */
+	int snap(int p, int chord) const {
+		for (int distance = 0; distance < 12; distance++)
+			for (int q : {p - distance, p + distance})
+				if (contains(q) && chord >> mod(degree(q) - mode, 7) & 1)
+					return q;
+		return p;
+	}
+};
+
+/** The key and mode that fit some notes best, given by pitch class as weights for the scale and for the tonic: the
+scale holding the most weight, on the tonic with the most, then major, minor and the other modes in turn. No notes
+at all is C major. */
+inline Scale detect(const int notes[12], const int tonics[12]) {
+	static const int preference[7] = {6, 3, 1, 2, 4, 5, 0}; // by mode: Ionian, Aeolian, Mixolydian, Dorian, Lydian, Phrygian, Locrian
+	Scale best;
+	std::tuple<int, int, int> top(-1, -1, -1);
+	for (int tonic = 0; tonic < 12; tonic++)
+		for (int mode = 0; mode < 7; mode++) {
+			Scale s{mod(tonic - MAJOR[mode], 12), mode};
+			int fit = 0;
+			for (int d : MAJOR)
+				fit += notes[(s.key + d) % 12];
+			std::tuple<int, int, int> score(fit, tonics[tonic], preference[mode]);
+			if (score > top) {
+				top = score;
+				best = s;
+			}
+		}
+	return best;
+}
+
+/** How a track's notes play in key: the scale, and the master track's move from it, by degrees of the scale and then
+by semitones. */
+struct Tonality {
+	Scale scale;
+	int degrees = 0, semitones = 0;
+
+	/** The key and mode after the move. */
+	Scale moved() const {
+		return {mod(scale.key + semitones, 12), mod(scale.mode + degrees, 7)};
+	}
+
+	/** A sequenced note's pitch as it starts: moved, then as its step's tonality component says (its value key, or -1
+	for none): ignore the master track, follow its root in semitones alone, an octave, fifth or third up, a semitone
+	up or down, or pulled onto the scale, the chord, or the chord's root and fifth. */
+	int apply(int pitch, int component) const {
+		int d = degrees, s = semitones, tonic = 60 + scale.tonic();
+		switch (component) {
+			case 0: return pitch;
+			case 1: return pitch + scale.shift(tonic, d) - tonic + s;
+			case 2: s += 12; break;
+			case 3: d += 4; break;
+			case 4: d += 2; break;
+			case 5: s++; break;
+			case 6: s--; break;
+		}
+		static const int chords[3] = {0x7f, 0x15, 0x11};
+		int p = scale.shift(pitch, d) + s;
+		return component >= 7 ? moved().snap(p, chords[component - 7]) : p;
+	}
+};
+
+/** The move a note on the master track makes, from the tonic nearest middle C: a note in the scale moves by its
+degrees, which changes the mode, and one outside it by its semitones, which changes the key. */
+inline Tonality masterMove(Scale scale, int pitch) {
+	int home = 54 + mod(scale.tonic() - 6, 12); // F#3 to F4
+	Tonality t{scale};
+	if (scale.contains(pitch))
+		t.degrees = scale.degree(pitch) - scale.degree(home);
+	else
+		t.semitones = pitch - home;
+	return t;
 }
 
 
@@ -226,8 +336,10 @@ struct Player {
 
 	struct Event {
 		double time;
-		float pitch, velocity, glide;
+		int pitch;                 // MIDI note number, before the master track moves it
+		float velocity, glide;
 		double length;
+		int tonality;              // the step's tonality component, or -1
 	};
 
 	struct Slot {
@@ -247,6 +359,7 @@ struct Player {
 	Event queue[QUEUE];
 	int queued = 0;
 	Channel channels[CHANNELS];
+	int used = 0;              // how many channels, from the first, notes have played on: the rest stay idle
 	uint32_t notes = 0;
 
 	bool running = false;
@@ -270,6 +383,7 @@ struct Player {
 	bool gateStep = false;     // a gate step fired: the master advances the tracks that wait for triggers
 	Sweep sweeps[2];           // the sweep running, and the one after it
 	uint32_t seed = 0x9e3779b9;
+	Tonality tonality;         // the key, and the master track's move, which the Sequencer keeps up to date
 
 	double song() const {
 		return now - offset;
@@ -353,9 +467,10 @@ struct Player {
 			Event e = queue[0];
 			std::copy(queue + 1, queue + queued, queue);
 			queued--;
-			noteOn(e.pitch, e.velocity, e.length, false, s, e.glide);
+			noteOn((std::clamp(tonality.apply(e.pitch, e.tonality), 0, 127) - 60) / 12.f, e.velocity, e.time + e.length, false, s, e.glide);
 		}
-		for (Channel& c : channels) {
+		for (int i = 0; i < used; i++) {
+			Channel& c = channels[i];
 			if (c.gate && now >= c.off)
 				c.gate = false;
 			c.pitch += (c.target - c.pitch) * (c.glide > 0.f ? float(std::min(sixteenths / c.glide, 1.0)) : 1.f);
@@ -509,7 +624,7 @@ struct Player {
 		}
 
 		for (int r = 0; r < multiply; r++) {
-			// Each trigger walks the ramps one degree on; ramp down walks ramp up's degrees back from the top.
+			// Each trigger walks the ramps one degree of the key on; ramp down walks ramp up's degrees back from the top.
 			int shift = 0;
 			for (int c : {RAMP_UP, RAMP_DOWN, RANDOM}) {
 				if (!on(c))
@@ -528,9 +643,9 @@ struct Player {
 				double noteLength = holdSlots ? holdSlots * length : lengthTicks == DRONE ? INFINITY : ticks(lengthTicks, length);
 				if (multiply > 1)
 					noteLength = std::min(noteLength, length / multiply);
-				int pitch = std::clamp(shift ? diatonic(note.pitch, shift) : int(note.pitch), 0, 127);
+				int pitch = std::clamp(tonality.scale.shift(note.pitch, shift), 0, 127);
 				double time = offset + (s.stepLength > 0 ? swung(at, s.swing) : at) + micro;
-				queueNote({std::max(time, now), (pitch - 60) / 12.f, velocity(step, note.velocity), glide, noteLength});
+				queueNote({std::max(time, now), pitch, velocity(step, note.velocity), glide, noteLength, on(TONALITY) ? step.key(TONALITY) : -1});
 			}
 		}
 	}
@@ -549,7 +664,7 @@ struct Player {
 		for (int i = 0; i < step.count; i++) {
 			const Note& note = step.notes[i];
 			int ticks = note.length ? note.length : s.noteLength;
-			queueNote({now, (note.pitch - 60) / 12.f, note.velocity / 127.f, 0.f, ticks == DRONE ? INFINITY : Player::ticks(ticks, std::max(s.stepLength, 1))});
+			queueNote({now, note.pitch, note.velocity / 127.f, 0.f, ticks == DRONE ? INFINITY : Player::ticks(ticks, std::max(s.stepLength, 1)), -1});
 		}
 	}
 
@@ -575,9 +690,13 @@ struct Player {
 		return best;
 	}
 
-	/** Starts a note now for `length` sixteenths and returns its id. Live notes pass INFINITY and end with release(). */
-	uint32_t noteOn(float pitch, float velocity, double length, bool live, const Settings& s, float glide = 0.f) {
-		Channel& c = channels[channelFor(glide > 0.f, s)];
+	/** Starts a note now, to end at `off` by now's clock, and returns its id. A sequenced note ends its length after its
+	time, not after the sample it started in, so one a step long is over as the next step's notes start. Live notes
+	pass INFINITY and end with release(). */
+	uint32_t noteOn(float pitch, float velocity, double off, bool live, const Settings& s, float glide = 0.f) {
+		int i = channelFor(glide > 0.f, s);
+		used = std::max(used, i + 1);
+		Channel& c = channels[i];
 		c.retrigger = c.gate;
 		c.gate = true;
 		c.target = pitch;
@@ -586,7 +705,7 @@ struct Player {
 		c.glide = glide;
 		c.velocity = velocity;
 		c.live = live;
-		c.off = now + length;
+		c.off = off;
 		c.id = ++notes;
 		return c.id;
 	}
