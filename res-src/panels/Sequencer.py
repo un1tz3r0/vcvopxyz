@@ -1,6 +1,6 @@
 """The sequencer: the OP-Z's face, and the master of the engines to its right. Under the face, the keys that turn the
-page over two rows of jacks, the transport in and out and the notes to record; a named key per track; and the
-engines' mix.
+page over two rows of jacks, the transport in and out and the notes to record; a named key per track, and one for the
+master track; and the engines' mix.
 
 The face copies the OP-Z's: four dials over 17 columns of round keys. TRACK, REC and −, PLAY and +, STOP and SHIFT
 on the left; the steps along the top under the track icons; the numbered black keys on the column lines; the white
@@ -20,6 +20,7 @@ WHITE = [0, 2, 4, 6, 7, 9, 11]
 
 KEY_ROW, JACK_ROWS = 91.0, (104.5, 117.5)
 PITCH, GAP = 11.6, 4.0                       # between the jacks' columns, and between their groups
+KEY_PITCH = 10.4                             # between the track keys
 
 
 class Scaled:
@@ -105,23 +106,25 @@ def panel():
     with Scaled(p, (WIDTH - SCALE * FACE_WIDTH) / 2, 10.5) as f:
         face(f)
 
-    # Four groups of columns: the transport's jacks, the notes to record, the track keys, and the mix.
-    groups = [4, 2, 8, 1]
-    left = (WIDTH - sum(groups) * PITCH - GAP * (len(groups) - 1)) / 2
+    # Four groups of columns: the transport's jacks, the notes to record, the track keys and the master's, and the mix.
+    groups = [(4, PITCH), (2, PITCH), (9, KEY_PITCH), (1, PITCH)]
+    left = (WIDTH - sum(n * pitch for n, pitch in groups) - GAP * (len(groups) - 1)) / 2
     columns = []
-    for n in groups:
-        columns.append([left + PITCH * (i + 0.5) for i in range(n)])
-        left += n * PITCH + GAP
+    for n, pitch in groups:
+        columns.append([left + pitch * (i + 0.5) for i in range(n)])
+        left += n * pitch + GAP
     transport, notes, tracks, mix = columns
     top, bottom = JACK_ROWS
 
-    # The four page keys over the transport and the notes, and the track keys level with the top row of jacks, named.
+    # The four page keys over the transport and the notes, and the track keys level with the top row of jacks, named,
+    # the master track's last.
     span = notes[-1] - transport[0]
     for i in range(4):
         key(p, f'PAGE{i}_PARAM', transport[0] + span * (i + 0.5) / 4, KEY_ROW)
     for t, cx in enumerate(tracks):
-        key(p, f'SELECT{t}_PARAM', cx, top, TRACKS[t])
-        p.text(TRACKS[t].upper(), cx, bottom - 6.2, size=LABEL if len(TRACKS[t]) < 5 else 2.3)
+        track = TRACKS[t] if t < 8 else 'master'
+        key(p, f'SELECT{t}_PARAM' if t < 8 else 'MASTER_PARAM', cx, top, track)
+        p.text(track.upper(), cx, bottom - 6.2, size=LABEL if len(track) < 5 else 2.3)
 
     # Outputs sit in dark boxes: the transport's along the bottom row, and the mix in both.
     def box(x1, x2, y1, y2):

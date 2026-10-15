@@ -11,8 +11,8 @@ project file (projects/project01.opz to project10.opz on its disk), knowing noth
 The file's layout comes from reverse engineering: lrk's z-po-project wiki (firmware 1.1.17) and kmorrill's
 op-z-sysex (1.2.45 on, tested on the device). Both agree on the offsets. It is little-endian, uncompressed and
 always 342844 bytes: a 4-byte header, a 568-byte block of project settings, then 16 patterns of 21392 bytes. Only
-the first pattern of the chain playing is read and written, since the Sequencer has one. Nobody has decoded the
-track settings' bytes, so those encodings are guesses, marked below. Everything else a file holds (the other
+the first pattern of the chain playing is read and written, since the Sequencer has one, for the eight tracks and
+the master track. Nobody has decoded the track settings' bytes, so those encodings are guesses, marked below. Everything else a file holds (the other
 patterns, mutes, the drum tracks' plugs) is kept from the file a project was imported from, so a round trip changes
 only what a project models.
 */
@@ -32,7 +32,9 @@ struct Project {
 		bool hasSound = false;          // whether it holds an engine's dials
 		float sound[SOUND_PARAMS] = {}; // the synth track's dials in its own param order, 0 to 1 over each one's range
 	};
-	Part parts[TRACKS];
+	Part parts[LANES];                  // the eight tracks', then the master track's, which has no sound
+	int masterStyle = 0;                // the master track's note style: 0 latch, 1 free
+	uint16_t transposed = 0xf0;         // the tracks it moves, a bit each: the synth tracks to begin with
 	float tempo = 120.f, swing = 0.5f;
 	float levels[LEVELS_LEN] = {1.f, 1.f, 0.f, 1.f};
 	int metronomeSound = 0;
@@ -51,8 +53,10 @@ constexpr size_t LIVE_CHAIN = 484, LEVELS = 516, TEMPO = 520, SWING = 565, METRO
 constexpr size_t TRACK_CHUNKS = 0, NOTES = 192, STEP_CHUNKS = 7232, SOUNDS = 21056;
 constexpr int SLOTS = 55, UNITS = 6200;      // note slots per step; note duration units per step
 constexpr int HEADER = 0x49;
-/** Where each track's note slots start among a step's 55, and how many it has. */
-constexpr int SLOT_OFFSET[TRACKS] = {0, 2, 4, 6, 8, 12, 16, 24}, SLOT_COUNT[TRACKS] = {2, 2, 2, 2, 4, 4, 8, 4};
+/** Each lane's track among a file's 16: the eight in order, then the master track, the OP-Z's 12th. */
+constexpr int FILE_TRACK[LANES] = {0, 1, 2, 3, 4, 5, 6, 7, 11};
+/** Where each lane's note slots start among a step's 55, and how many it has. */
+constexpr int SLOT_OFFSET[LANES] = {0, 2, 4, 6, 8, 12, 16, 24, 31}, SLOT_COUNT[LANES] = {2, 2, 2, 2, 4, 4, 8, 4, 4};
 /** The components of the step chunk's bits, from the lowest. */
 constexpr int COMPONENT_BITS[COMPONENTS_LEN] = {PULSE, PARAMETER_SPARK, JUMP, VELOCITY, RAMP_UP, RAMP_DOWN, RANDOM,
 	PORTAMENTO, MULTIPLY, SWEEP, PULSE_HOLD, TONALITY, TRIGGER_SPARK, COMPONENT_SPARK};
@@ -123,18 +127,19 @@ inline bool read(const std::vector<uint8_t>& f, Project& p, std::string* error) 
 	p.swing = 0.5f + 0.25f * f[SWING] / 255.f;             // a guess: 0 straight, 255 the most
 	p.metronomeLevel = f[METRONOME_LEVEL] / 255.f;
 	p.metronomeSound = f[METRONOME_SOUND] * 6 / 256;
-	for (int t = 0; t < TRACKS; t++) {
+	for (int t = 0; t < LANES; t++) {
 		Project::Part& part = p.parts[t];
-		const uint8_t* track = &f[at + TRACK_CHUNKS + 12 * t];
+		int ft = FILE_TRACK[t];
+		const uint8_t* track = &f[at + TRACK_CHUNKS + 12 * ft];
 		// Guesses: the step count as is, the step length as its value key 1 to 0 (10), quantize and the note length
 		// as their dials' positions.
 		part.stepCount = track[4] >= 1 && track[4] <= STEPS ? track[4] : STEPS;
 		part.stepLength = track[6] >= 1 && track[6] <= 10 ? track[6] - 1 : 0;
 		part.quantize = track[7] / 255.f;
 		part.noteLength = std::min<int>(track[9], std::size(NOTE_LENGTHS) - 1);
-		part.hasSound = true;
-		for (int i = 0; i < SOUND_PARAMS; i++)
-			part.sound[SOUND_ORDER[i]] = f[at + SOUNDS + 18 * t + i] / 255.f;
+		part.hasSound = t < TRACKS;
+		for (int i = 0; part.hasSound && i < SOUND_PARAMS; i++)
+			part.sound[SOUND_ORDER[i]] = f[at + SOUNDS + 18 * ft + i] / 255.f;
 
 		part.pattern.clear();
 		for (int s = 0; s < STEPS; s++) {
@@ -152,7 +157,7 @@ inline bool read(const std::vector<uint8_t>& f, Project& p, std::string* error) 
 				n.length = ticks == NOTE_LENGTHS[part.noteLength] ? 0 : ticks;
 				step.add(n);
 			}
-			const uint8_t* chunk = &f[at + STEP_CHUNKS + 54 * (16 * t + s)];
+			const uint8_t* chunk = &f[at + STEP_CHUNKS + 54 * (16 * ft + s)];
 			uint16_t mask = chunk[0] | chunk[1] << 8;
 			for (int b = 0; b < COMPONENTS_LEN; b++) {
 				if (!(mask >> b & 1))
@@ -181,16 +186,17 @@ inline std::vector<uint8_t> write(const Project& p) {
 	f[SWING] = byte((p.swing - 0.5f) / 0.25f);
 	f[METRONOME_LEVEL] = byte(p.metronomeLevel);
 	f[METRONOME_SOUND] = (uint8_t) std::clamp(p.metronomeSound * 256 / 6 + 21, 0, 255);
-	for (int t = 0; t < TRACKS; t++) {
+	for (int t = 0; t < LANES; t++) {
 		const Project::Part& part = p.parts[t];
-		uint8_t* track = &f[at + TRACK_CHUNKS + 12 * t];
+		int ft = FILE_TRACK[t];
+		uint8_t* track = &f[at + TRACK_CHUNKS + 12 * ft];
 		track[4] = (uint8_t) std::clamp(part.stepCount, 1, STEPS);
 		track[6] = (uint8_t) (part.stepLength + 1);
 		track[7] = byte(part.quantize);
 		track[9] = (uint8_t) part.noteLength;
 		if (part.hasSound)
 			for (int i = 0; i < SOUND_PARAMS; i++)
-				f[at + SOUNDS + 18 * t + i] = byte(part.sound[SOUND_ORDER[i]]);
+				f[at + SOUNDS + 18 * ft + i] = byte(part.sound[SOUND_ORDER[i]]);
 
 		for (int s = 0; s < STEPS; s++) {
 			const Step& step = part.pattern.steps[s];
@@ -208,7 +214,7 @@ inline std::vector<uint8_t> write(const Project& p) {
 				f[note + 6] = (uint8_t) int8_t(8 * std::clamp<int>(n.offset, -12, 11));
 				f[note + 7] = 0;
 			}
-			uint8_t* chunk = &f[at + STEP_CHUNKS + 54 * (16 * t + s)];
+			uint8_t* chunk = &f[at + STEP_CHUNKS + 54 * (16 * ft + s)];
 			uint16_t mask = 0;
 			for (int b = 0; b < COMPONENTS_LEN; b++) {
 				int c = COMPONENT_BITS[b];

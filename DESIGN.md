@@ -176,7 +176,14 @@ do, so the plugin can go to the VCV Library some day.
   and a high-pass up across its right.
 - **Step components:** values follow the guide's chart where its text survives; where it doesn't (multiply's broken
   chord and quantize, sweep's long versions, the sparks' modes), the closest reading of the hardware's behaviour.
-  Ramps use C major until the Sequencer has tonality.
+- **Key detection:** the guide says only that the OP-Z finds the key from the synth tracks. Here each candidate key
+  and mode scores by how much of the notes' weight it holds (the bass counted twice), then by how much of each step's
+  lowest note falls on its root, then by mode, most common first: Ionian, Aeolian, Mixolydian, Dorian, Lydian,
+  Phrygian, Locrian. It's found every 256 samples and when the sequencer starts.
+- **Master track:** home is the key's root nearest middle C. A note in the key moves the tracks by scale degrees (so
+  the mode follows), and one outside it by semitones (so the key changes). Latch lets go at the pattern's start
+  rather than the bar's. The tonality component's values follow the guide's names; the three quantize values snap
+  to the moved scale, triad, and root and fifth, the lower note winning a tie.
 - **Untuned:** engine voicing, the built-in kits and the drums' level against the synths, sweep depth (half a dial's travel) and glide times (up to a beat) are first guesses,
   waiting to be tuned by ear.
 - **Index keys:** the OP-Z's are held while turning dials or pressing keys, so here three latch, like TRACK, and

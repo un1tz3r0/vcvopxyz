@@ -6,9 +6,9 @@
 </picture>
 
 The OP-Z's front panel, and the master of the OP-Z modules to its right. It keeps the tempo and the transport and
-sequences the OP-Z's first eight tracks: kick, snare, perc and sample, then bass, lead, arp and chord. Each track has
-16 steps of up to four notes, with micro timing, note lengths, step count and step length, and ten project slots
-that save it all.
+sequences the OP-Z's first eight tracks: kick, snare, perc and sample, then bass, lead, arp and chord, and the
+[master track](#master-track) that transposes them in key. Each track has 16 steps of up to four notes, with micro
+timing, note lengths, step count and step length, and ten project slots that save it all.
 
 ## The chain
 
@@ -29,12 +29,12 @@ the top under the track icons, the black keys numbered 1 to 0 on the column line
 bottom under the step component icons. Each key has an RGB LED that lights up its symbol. Top left are the OP-Z's
 four index keys, **PROJECT**, **MIXER**, **TEMPO** and **SCREEN**, and under them, where the OP-Z's speaker is, the
 display and the selected track's channel dots. Under the face, the four page keys over the jacks, and a key per
-track, named.
+track, named, with **MASTER** last.
 
 ## Tracks and dials
 
 - **Selecting a track:** click its key under the face (white while selected, orange while it plays), or switch
-  **TRACK** on and click one of steps 1 to 8. The keys, steps, dials and recording all work on the selected track.
+  **TRACK** on and click one of steps 1 to 8, or step 12 for the master track. The keys, steps, dials and recording all work on the selected track.
 - **Dials:** they are the selected track's engine's dials, so turning one turns that parameter on the engine, with
   its own tooltip, undo and MIDI mapping. Click **SHIFT**, or one of the four page keys, to change the page; the
   page keys and the dials' LEDs show it in its colour. In track, tempo and mixer mode they set those modes' own
@@ -60,7 +60,8 @@ track, named.
 
 ## Modes
 
-- **Track mode:** click **TRACK** to switch it on, and again to switch it off. Steps 1 to 8 select a track. The dials
+- **Track mode:** click **TRACK** to switch it on, and again to switch it off. Steps 1 to 8 select a track, and
+  step 12 the master track. The dials
   set its **note length** (1/64 to a bar with the dotted values between, then drone), the engine's **note style**,
   **quantize** (pulls micro timing towards the grid as it plays) and the engine's **portamento**. The black keys set
   the step length in blue (1 to 8 for ×1 to ×8, 9 for ×16, 0 for one step per trigger on **ADV**), and **−** and
@@ -79,7 +80,8 @@ off. Switching one on switches the others, and track mode, off.
   key's LED flashes on the beat.
 - **Mixer:** the dials set the **drum level** (tracks 1 to 4), the **synth level** (tracks 5 to 8), **punch** (a
   compressor on **L** and **R** that gets louder as it squashes) and the **master level** of **L** and **R**. Steps
-  1 to 8 light for the tracks that play; click one to mute its track, which stops its gates. With SHIFT latched, a
+  1 to 8 light for the tracks that play, and step 12 while the master track moves them; click one to mute its
+  track, which stops its gates (a muted master track stops transposing). With SHIFT latched, a
   click mutes only its sound, and the step lights red. The black keys pick one of ten mute groups, each its own set
   of mutes, and the display shows which.
 - **Project:** the black keys are ten project slots, lit dimly for the ones in use and brightly for the one
@@ -90,11 +92,35 @@ off. Switching one on switches the others, and track mode, off.
 - **Screen:** hold it to see the battery, on the display and on the steps in green. There is no battery, so it runs
   down slowly while playing and charges while stopped.
 
+## Master track
+
+The OP-Z's track 12. It has no engine: its notes move the tracks it transposes, in key, so a bassline and chords
+written once can follow a chord progression. Select it with **MASTER** or step 12 in track mode, and sequence it like
+any other track, or play it on the keys.
+
+- **The key:** the Sequencer works out the key and mode from the notes of the bass, lead, arp and chord tracks,
+  counting the bass twice and each step's lowest note towards the root, and the display shows it while the master
+  track is selected: the root and the mode's number, 1 for Ionian (major) to 7 for Locrian, so `A6` is A minor. With
+  no notes yet it's C major. The master track's keys light the key's notes, its root brighter and the note moving
+  the tracks brighter still, and each key's tooltip says where it moves them.
+- **Moving:** the note nearest middle C that is the key's root (A3 in A minor, say) leaves the tracks where they
+  are. Other notes in the key move them by degrees of the scale, so the tracks stay in the key and its mode changes
+  with the root, as in a chord progression: D4 in A minor moves every note up three degrees, into D Dorian. A note
+  outside the key moves them by semitones instead, changing key: C♯4 moves them up four semitones, into C♯ minor.
+- **Note style** (the blue dial in track mode): **latch**, the default, holds each new note until the next, and lets
+  go when the pattern starts over or the sequencer stops, unless a key is still held. **Free** moves the tracks only
+  while a note plays. Of several notes at once, the lowest moves them.
+- **Which tracks:** the synth tracks, to start with. With the master track selected and SHIFT latched, the track
+  keys under the face light green for the tracks it moves; click one to add or remove it.
+- **The tonality component:** on a step of a track it moves, it changes how that step's notes follow the master
+  track. See [Step components](step-components.md).
+
 ## Projects
 
 A slot keeps everything that makes a song: each track's pattern, step components, parameter locks, step count and
 length, note length, quantize and polyphony, every dial of the engine playing it (the note style and portamento too),
-the tempo, swing and metronome, and the mixer's levels and ten mute groups. Loading one sets the engines' dials too, so each
+the tempo, swing and metronome, the mixer's levels and ten mute groups, and the master track with the tracks it
+moves. Loading one sets the engines' dials too, so each
 engine plays the sound it had. The slots save with the patch, and a switch is one step of Rack's undo, which puts
 the project left back as it was.
 
@@ -107,7 +133,7 @@ The context menu's **Projects** moves them in and out of files:
   slots of the same numbers, and **Import a project** reads one file into the current slot.
 
 The OP-Z's project files hold far more than a slot does: 16 patterns per track, chains, the drum tracks' samples and
-the FX, master and module tracks. An imported file is kept with the patch, and its export writes the slot over it, so
+the FX and module tracks. The master track is written to and read from the file's track 12. An imported file is kept with the patch, and its export writes the slot over it, so
 whatever the Sequencer doesn't model goes back unchanged. Only the first pattern is read and written, and micro
 timing is written from −12 to +11 ticks, as far as the OP-Z's files go. The file
 format comes from the OP-Z community's reverse engineering, not from teenage engineering, and has not been tried on

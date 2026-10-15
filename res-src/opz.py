@@ -102,7 +102,7 @@ NUMERAL = 2.7   # the black keys' numbers (mm)
 # The symbols that are also LEDs, and how big each is drawn (mm).
 SYMBOLS = dict(dot=2.0, rec=2.4, track=2.2, minus=2.2, plus=2.2, play=2.0, stop=1.9, shift=2.2, metronome=2.3,
                project=2.2, mixer=2.2, screen=2.3,
-               kick=2.3, snare=2.3, perc=2.3, sample=2.3, bass=2.3, lead=2.3, arp=2.3, chord=2.3)
+               kick=2.3, snare=2.3, perc=2.3, sample=2.3, bass=2.3, lead=2.3, arp=2.3, chord=2.3, master=2.3)
 
 
 def symbol(name, x, y, color):

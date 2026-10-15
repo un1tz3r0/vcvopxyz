@@ -2,11 +2,8 @@
 
 ## Next
 
-- [ ] **Tonality:** the scale detected from the bass, lead and chord tracks' notes, used to harmonize in key
-      wherever notes are generated: the ramp and random step components (C major until then, as a placeholder),
-      the arpeggiator, and transposing in scale. With it, **a ninth track, the master track,** which transposes
-      every track in scale.
-- [ ] **The arp track's page:** the OP-Z swaps track 7's LFO page for arp speed, pattern, style and range.
+- [ ] **The arp track's page:** the OP-Z swaps track 7's LFO page for arp speed, pattern, style and range. Its
+      notes should play in the key the Sequencer finds, as the ramps do.
 - [ ] **FX modules** for the **FX 1** and **FX 2** sends, the OP-Z's tracks 13 and 14.
 
 ## Later
@@ -47,4 +44,9 @@
 - [ ] **Digital's dials:** on the hardware the main wave is a sine that wraps around as it's driven, P1 setting how
       many times it wraps and P2 some kind of phase self-modulation (Vic, 2026-10-14). Digital's P1 is the
       modulator's octave and P2 the FM depth now; rework them to match, and tune by ear.
+- [ ] **Key detection and the master track** follow a reading of the guide. Check against the hardware: which keys
+      it finds for ambiguous patterns, where home is, whether latch lets go at the pattern's start or the bar's, and
+      what the tonality component's quantize values snap to.
+- [ ] The master track's own sound dials (the OP-Z's master filter and the like) aren't there: outside track mode its
+      dials do nothing.
 - [ ] **Dead code:** `src/Screen.{hpp,cpp}` and the unused widgets in `src/ui.hpp`, with their SVGs.
