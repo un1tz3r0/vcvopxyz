@@ -2,9 +2,7 @@
 
 ## Next
 
-- [ ] **16 patterns per track and pattern chaining** in the Sequencer, read and written in project files: only
-      the pattern playing is now. The Sequencer is the master, so these go in it rather than in a module of their
-      own.
+Nothing queued: the next pick comes from **Later** or the loose ends.
 
 ## Later
 
@@ -55,4 +53,9 @@
       LFO targets the FX tracks really have is a guess (time and send stand in for attack and pitch).
 - [ ] The FX modules' plug ids aren't written to exported project files, so the OP-Z keeps whatever effects the
       imported file had, or its defaults.
+- [ ] **Patterns and chains:** check against the hardware where a chain's pattern ends (the longest track here),
+      whether a pattern never played keeps the sound before it, and what PROJECT with the white keys does beyond
+      the saved chains.
+- [ ] A project switch's undo step holds the project either side, about 800 KB now that a slot has 16 patterns;
+      a long session of switches adds up.
 - [ ] **Dead code:** `src/Screen.{hpp,cpp}` and the unused widgets in `src/ui.hpp`, with their SVGs.

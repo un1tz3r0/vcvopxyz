@@ -164,7 +164,17 @@ Param and port ids are append-only from 2.0.6 on.
 
 The .opz layout comes from the OP-Z community's reverse engineering (see the comment at the top of `Project.hpp`).
 Each imported file is kept, in the patch's storage folder, so an export writes the slot over the file it came from
-and keeps everything the Sequencer doesn't model: the other 15 patterns, chains, and the drum and FX plugs.
+and keeps everything the Sequencer doesn't model, such as the drum and FX plugs and any pattern never played.
+
+A project's 16 patterns are `Project::Scene`s. The one playing lives where a single pattern always did, in the lanes,
+the params and the engines' dials, and the other 15 wait in the Sequencer's `scenes`; a switch stores the one
+playing into its scene and recalls the next, in the audio thread under the slots' lock. A chain moves on in
+`followChain`, every sample: since each `Player` schedules a slot one ahead, it sets `Player::hold` to the
+pattern's end, so no track schedules a slot from there on, and once the end is reached it switches and calls
+`restartPattern` on every lane, which starts them all on their first step at that moment, whatever their step
+lengths. If the UI thread has the lock, the switch waits for it rather than the audio thread, a few samples late at
+worst. A slot is about 400 KB, too big for an audio thread's stack, so a blank one is kept rather than built when an
+empty slot loads.
 
 ## Panels
 
@@ -228,6 +238,13 @@ do, so the plugin can go to the VCV Library some day.
   notes' lengths, so a lock on an empty step changes the notes still sounding from earlier ones. A held step plays
   its locks only while stopped; while playing, the playhead's step does.
 - **Metronome:** the OP-Z counts in a voice that can't be copied, so its sounds are six synthesized clicks.
+- **Patterns and chains:** a pattern's end, for a chain, is its longest track's (step count times step length),
+  or a bar if every track waits for triggers. Each pattern has its own sound, as the OP-Z's files store it, but a
+  pattern never played leaves the engines' dials as they are. The mute group is per pattern; the groups themselves
+  are the project's. Chains are picked and saved on the keys of project mode rather than with PROJECT held, since
+  the index keys latch: PLAY builds one, the white keys keep 14 of the file's 15 saved chains, and SHIFT copies. A
+  note with negative micro timing on the first step of a chain's next pattern plays on the step, since that pattern
+  isn't in until its start.
 - **Project files:** what the track settings' bytes mean is unknown, so the step count, step length, note length,
   quantize, swing and the length of notes are written in the most likely reading and read back the same way.
   Mutes and the mixer's mute groups aren't written.
