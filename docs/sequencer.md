@@ -166,5 +166,6 @@ which moves on when they're released. Click a step to move it there.
   and **+** move the keyboard an octave.
 - **Polyphony:** as the OP-Z's, two channels for each drum track, so a step can hold two sounds, three for the
   lead, four for the chords, and one for bass and arp. Change the selected
-  track's in the context menu. A new note takes the channel silent longest, or failing that the one playing longest,
+  track's in the context menu. With the [arp](synth-tracks.md#arp) on, the arp track holds every note for the arp,
+  and its polyphony counts the arp's notes. A new note takes the channel silent longest, or failing that the one playing longest,
   and its gate drops for a sample so the engine retriggers.

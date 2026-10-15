@@ -62,7 +62,15 @@ constexpr int COMPONENT_BITS[COMPONENTS_LEN] = {PULSE, PARAMETER_SPARK, JUMP, VE
 	PORTAMENTO, MULTIPLY, SWEEP, PULSE_HOLD, TONALITY, TRIGGER_SPARK, COMPONENT_SPARK};
 /** The file's 18 sound parameters, as a synth track's params: P1, P2, the envelope, the sends, the filter and
 resonance, pan, level, portamento, the LFO's depth, speed, target and shape, and the note style. */
-constexpr int SOUND_ORDER[SOUND_PARAMS] = {0, 1, 4, 5, 6, 7, 12, 13, 2, 3, 14, 15, 17, 8, 9, 10, 11, 16};
+constexpr int FILE_SOUNDS = 18;
+constexpr int SOUND_ORDER[FILE_SOUNDS] = {0, 1, 4, 5, 6, 7, 12, 13, 2, 3, 14, 15, 17, 8, 9, 10, 11, 16};
+constexpr int LFO_DIALS = 8;  // the synth track's first LFO param
+
+/** A file sound parameter's param on lane `t`. The arp track has no LFO: its file keeps the arp's dials there. */
+inline int soundParam(int t, int i) {
+	int p = SOUND_ORDER[i];
+	return t == ARP_TRACK && p >= LFO_DIALS && p < LFO_DIALS + 4 ? p - LFO_DIALS + ARP_PARAMS : p;
+}
 /** The default engines' plugs on a new file's synth tracks (lrk's table), and the 0x05 nobody has explained. */
 constexpr uint32_t PLUGS[TRACKS] = {0, 0, 0, 0, 26, 65, 26, 31};
 
@@ -138,8 +146,9 @@ inline bool read(const std::vector<uint8_t>& f, Project& p, std::string* error) 
 		part.quantize = track[7] / 255.f;
 		part.noteLength = std::min<int>(track[9], std::size(NOTE_LENGTHS) - 1);
 		part.hasSound = t < TRACKS;
-		for (int i = 0; part.hasSound && i < SOUND_PARAMS; i++)
-			part.sound[SOUND_ORDER[i]] = f[at + SOUNDS + 18 * ft + i] / 255.f;
+		std::fill(part.sound + LFO_DIALS, part.sound + LFO_DIALS + 4, 0x80 / 255.f); // the arp track's LFO, as a blank file's
+		for (int i = 0; part.hasSound && i < FILE_SOUNDS; i++)
+			part.sound[soundParam(t, i)] = f[at + SOUNDS + 18 * ft + i] / 255.f;
 
 		part.pattern.clear();
 		for (int s = 0; s < STEPS; s++) {
@@ -166,9 +175,9 @@ inline bool read(const std::vector<uint8_t>& f, Project& p, std::string* error) 
 				int key = std::clamp((raw & 15) - 1, 0, 9);
 				step.set(c, c >= PARAMETER_SPARK ? key | (raw >> 4 & 3) << 4 : key);
 			}
-			for (int i = 0; i < SOUND_PARAMS; i++)
+			for (int i = 0; i < FILE_SOUNDS; i++)
 				if (chunk[36 + i])
-					step.lock(SOUND_ORDER[i], chunk[18 + i] / 255.f);
+					step.lock(soundParam(t, i), chunk[18 + i] / 255.f);
 		}
 	}
 	p.opz = f;
@@ -195,8 +204,8 @@ inline std::vector<uint8_t> write(const Project& p) {
 		track[7] = byte(part.quantize);
 		track[9] = (uint8_t) part.noteLength;
 		if (part.hasSound)
-			for (int i = 0; i < SOUND_PARAMS; i++)
-				f[at + SOUNDS + 18 * ft + i] = byte(part.sound[SOUND_ORDER[i]]);
+			for (int i = 0; i < FILE_SOUNDS; i++)
+				f[at + SOUNDS + 18 * ft + i] = byte(part.sound[soundParam(t, i)]);
 
 		for (int s = 0; s < STEPS; s++) {
 			const Step& step = part.pattern.steps[s];
@@ -224,8 +233,8 @@ inline std::vector<uint8_t> write(const Project& p) {
 			chunk[0] = mask & 0xff;
 			chunk[1] = mask >> 8;
 			// A lock let go of keeps its old value, as the OP-Z leaves it.
-			for (int i = 0; i < SOUND_PARAMS; i++) {
-				int param = SOUND_ORDER[i];
+			for (int i = 0; i < FILE_SOUNDS; i++) {
+				int param = soundParam(t, i);
 				if (step.locked(param))
 					chunk[18 + i] = byte(step.lockValues[param]);
 				chunk[36 + i] = step.locked(param) ? 0xff : 0;

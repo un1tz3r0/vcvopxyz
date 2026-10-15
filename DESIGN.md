@@ -113,12 +113,19 @@ tested on its own. `src/opz/Sequencer.cpp` is the module: the face, the modes, r
   project switch (below).
 - **Components** are a bitmask and a value per step. Most act in the player when it schedules a slot; sweeps go out
   over the bus as offsets on the lane; the gate step jump advances the tracks that wait for triggers, as **ADV** does.
-- **Parameter locks** are a mask and a value per step over a track's 18 params, each a share of the
-  dial's travel, as the OP-Z's files keep them. The player marks each slot with whether the step's parameter spark
+- **Parameter locks** are a mask and a value per step over a track's 22 params (the arp's four last), each a share of
+  the dial's travel, as the OP-Z's files keep them. The player marks each slot with whether the step's parameter spark
   let its locks through, and the lane carries the locks of the slot under the playhead; the engine reads every dial
   through `value()`, which takes a lock over the param, so the knob stays put. While a step is held, the dials
   turn four `LockQuantity` params on the Sequencer that read and write the held step's locks on the UI thread, as
   the step menu does, and the pattern's undo records the change.
+- **Arp:** the arp lives in the arp track's player, so every engine, Breakout included, gets its notes as ordinary
+  ones over the bus. With it on, the player's channels hold the notes (all 16, whatever the polyphony) and a second
+  set of channels, as many as the polyphony, carries what it plays. Its dials are the engine's four extra params,
+  which the engine shows on the LFO page while it plays track 7 and sends back over the bus; the player applies the
+  step's locks to them itself, so a locked step's first note already follows them. A held sequenced note keeps its
+  pitch and tonality component, and each arp note moves it as the master track says then. In OP-Z files the arp
+  track's LFO bytes hold its arp dials.
 - **Modes:** TRACK and the three latching index keys (PROJECT, MIXER, TEMPO) are one mode at a time, each taking
   over the dials, steps and value keys. The dials re-point at the mode's own params, so the mixer's levels and the
   metronome are ordinary params with undo and MIDI mapping too.
@@ -184,6 +191,12 @@ do, so the plugin can go to the VCV Library some day.
   the mode follows), and one outside it by semitones (so the key changes). Latch lets go at the pattern's start
   rather than the bar's. The tonality component's values follow the guide's names; the three quantize values snap
   to the moved scale, triad, and root and fifth, the lower note winning a tie.
+- **Arp:** the guide names the dials and the six patterns; a community wiki (hyphz/opzdoc) gives the styles as
+  accent strings, which are read here as velocities: H as played, M three quarters, L half, and rests. It lists
+  style 3 the same as style 2, so style 3 here is the same rhythm moved to start on the accent (HLLHLLHL). The eight
+  speeds (1/4 to 1/64 with the triplets between), range as 1 to 4 octaves, notes half the time to the next, the arp following
+  swing, and its grid starting with the first key while stopped are guesses. A patch saved before the arp has it off
+  on load, so it still plays the arp track as before.
 - **Untuned:** engine voicing, the built-in kits and the drums' level against the synths, sweep depth (half a dial's travel) and glide times (up to a beat) are first guesses,
   waiting to be tuned by ear.
 - **Index keys:** the OP-Z's are held while turning dials or pressing keys, so here three latch, like TRACK, and

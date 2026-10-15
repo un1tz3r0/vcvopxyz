@@ -2,8 +2,6 @@
 
 ## Next
 
-- [ ] **The arp track's page:** the OP-Z swaps track 7's LFO page for arp speed, pattern, style and range. Its
-      notes should play in the key the Sequencer finds, as the ramps do.
 - [ ] **FX modules** for the **FX 1** and **FX 2** sends, the OP-Z's tracks 13 and 14.
 
 ## Later
@@ -49,4 +47,7 @@
       what the tonality component's quantize values snap to.
 - [ ] The master track's own sound dials (the OP-Z's master filter and the like) aren't there: outside track mode its
       dials do nothing.
+- [ ] **Arp:** check against the hardware its eight speeds, the styles' accents (and style 3, which the only source
+      lists the same as style 2), what range does between whole octaves, and how long its notes are.
+- [ ] A held step plays its arp locks only while playing: stopped, the arp plays with the dials as they are.
 - [ ] **Dead code:** `src/Screen.{hpp,cpp}` and the unused widgets in `src/ui.hpp`, with their SVGs.
