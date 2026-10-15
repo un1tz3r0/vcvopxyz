@@ -10,10 +10,11 @@
 
 /*
 An OP-Z track's engine, whatever it plays: four dials that step through four pages (sound, envelope, LFO, mix) plus
-the track settings. Its notes come from the inputs, or with GATE unpatched from its track's lane of a Sequencer to
-its left, over the bus (see Bus.hpp). Everything after the voices is shared: the LFO, the filter, the level and pan,
-the outputs, the lights and the snapshots a Screen beside it reads. A synth track (SynthTrack.hpp) and a drum track
-(Drum.cpp) differ only in their voices, their two sound dials and their note styles.
+the track settings. On the arp track, the arp's dials take the LFO page's place, and the LFO is off. Its notes come
+from the inputs, or with GATE unpatched from its track's lane of a Sequencer to its left, over the bus (see
+Bus.hpp). Everything after the voices is shared: the LFO, the filter, the level and pan, the outputs, the lights
+and the snapshots a Screen beside it reads. A synth track (SynthTrack.hpp) and a drum track (Drum.cpp) differ only
+in their voices, their two sound dials and their note styles.
 */
 namespace opz {
 
@@ -75,6 +76,13 @@ struct FilterQuantity : ParamQuantity {
 	}
 };
 
+struct OctavesQuantity : ParamQuantity {
+	std::string getDisplayValueString() override {
+		int n = Arp{0, 0, 0, getValue()}.octaves();
+		return string::f("%d octave%s", n, n > 1 ? "s" : "");
+	}
+};
+
 struct SpeedQuantity : ParamQuantity {
 	std::string getDisplayValueString() override {
 		float v = getValue();
@@ -107,9 +115,10 @@ struct Track : Module, BusNode {
 		LFO_AMOUNT_PARAM, LFO_SPEED_PARAM, LFO_TARGET_PARAM, LFO_SHAPE_PARAM,
 		FX1_PARAM, FX2_PARAM, PAN_PARAM, LEVEL_PARAM,
 		STYLE_PARAM, GLIDE_PARAM,
+		ARP_SPEED_PARAM, ARP_PATTERN_PARAM, ARP_STYLE_PARAM, ARP_RANGE_PARAM,
 		PARAMS_LEN
 	};
-	static_assert(PARAMS_LEN == SOUND_PARAMS, "a step locks any of a track's params");
+	static_assert(PARAMS_LEN == SOUND_PARAMS && ARP_SPEED_PARAM == ARP_PARAMS, "a step locks any of a track's params");
 	// The return and the CV outputs belong to Breakout and Drum Breakout, which hand the voice to other modules; the
 	// other engines' panels leave them out. Ids are append-only, since patches save them.
 	enum InputId { VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, CLOCK_INPUT, RESET_INPUT, EXT_INPUT, RETURN_L_INPUT, RETURN_R_INPUT, INPUTS_LEN };
@@ -161,6 +170,15 @@ struct Track : Module, BusNode {
 	};
 
 	static constexpr const char* PAGE_NAMES[PAGES_LEN] = {"SOUND", "ENVELOPE", "LFO", "MIX", "TRACK"};
+
+	/** Whether it plays the arp track, whose LFO page is the arp's. */
+	bool arp() const {
+		return busTrack == ARP_TRACK;
+	}
+
+	const char* pageName(int p) const {
+		return p == PAGE_LFO && arp() ? "ARP" : PAGE_NAMES[p];
+	}
 
 	bool drum = false;           // takes one of tracks 1 to 4 rather than 5 to 8
 	float secondsPerBeat = 0.5f; // 120 BPM until a clock says otherwise
@@ -226,6 +244,13 @@ struct Track : Module, BusNode {
 		configParam(LEVEL_PARAM, 0.f, 1.f, 0.7f, "Level", "%", 0.f, 100.f);
 		configSwitch(STYLE_PARAM, 0.f, styles.size() - 1, 0.f, "Note style", styles)->description = styleHelp;
 		configParam(GLIDE_PARAM, 0.f, 1.f, 0.f, "Portamento", "%", 0.f, 100.f)->description = "Mono and legato only";
+		configSwitch(ARP_SPEED_PARAM, 0.f, ARP_SPEEDS, 4.f, "Arp speed", {"Off", "1/4", "1/8", "1/8 triplets", "1/16",
+			"1/16 triplets", "1/32", "1/32 triplets", "1/64"})->description = "Arp track only. Off plays its notes as they are";
+		configSwitch(ARP_PATTERN_PARAM, 0.f, ARP_PATTERNS - 1, ARP_UP, "Arp pattern", {"As played", "Up", "Down", "Up and down",
+			"Down and up", "Random"})->description = "Arp track only";
+		configSwitch(ARP_STYLE_PARAM, 0.f, ARP_STYLES - 1, 0.f, "Arp style", {"As set", "LHLLHLLH", "HLLHLLHL", "LLHLLHLL", "LMH",
+			"LL, rest"})->description = "Arp track only. A rhythm of accents: H as played, M three quarters, L half, and rests";
+		configParam<OctavesQuantity>(ARP_RANGE_PARAM, 0.f, 1.f, 0.f, "Arp range")->description = "Arp track only. Higher octaves of the notes";
 
 		configLight(SELECTED_LIGHT, "Selected on the Sequencer");
 		configLight(ACTIVE_LIGHT, "Notes playing");
@@ -259,7 +284,7 @@ struct Track : Module, BusNode {
 
 	/** What dial `d` turns on a page, or -1 for nothing. */
 	virtual int dial(int page, int d) const {
-		return DIALS[page][d];
+		return page == PAGE_LFO && arp() ? ARP_SPEED_PARAM + d : DIALS[page][d];
 	}
 
 	/** What a note plays, for the Sequencer's keys, where that isn't just its pitch; for the UI thread. */
@@ -276,7 +301,7 @@ struct Track : Module, BusNode {
 	/** A dial's name as the panel's legend prints it; the engine's two are named after its params. */
 	std::string dialName(int param) {
 		static const char* const names[] = {nullptr, nullptr, "FILTER", "RESO", "ATTACK", "DECAY", "SUSTAIN", "RELEASE",
-			"AMOUNT", "SPEED", "TARGET", "SHAPE", "FX 1", "FX 2", "PAN", "LEVEL", "STYLE", "GLIDE"};
+			"AMOUNT", "SPEED", "TARGET", "SHAPE", "FX 1", "FX 2", "PAN", "LEVEL", "STYLE", "GLIDE", "SPEED", "PATTERN", "STYLE", "RANGE"};
 		return names[param] ? names[param] : string::uppercase(paramQuantities[param]->name);
 	}
 
@@ -374,6 +399,9 @@ struct Track : Module, BusNode {
 		if (busTrack < 0)
 			return;
 		out->page[busTrack] = trackMode ? -1 : page;
+		if (arp())
+			for (int i = 0; i < 4; i++)
+				out->arp[i] = params[ARP_SPEED_PARAM + i].getValue();
 		if (!outputs[LEFT_OUTPUT].isConnected() && !outputs[RIGHT_OUTPUT].isConnected()) {
 			out->left += left;
 			out->right += right;
@@ -417,7 +445,7 @@ struct Track : Module, BusNode {
 	}
 
 	void updateControls(float sampleTime) {
-		float amount = value(LFO_AMOUNT_PARAM);
+		float amount = arp() ? 0.f : value(LFO_AMOUNT_PARAM);
 		// Squaring the amount leaves room for subtle settings, like vibrato, near the middle.
 		Controls& c = controls;
 		c.lfo = amount * std::fabs(amount) * lfoValue;
@@ -597,6 +625,19 @@ struct Track : Module, BusNode {
 		ppqn = 4;
 		page = PAGE_SOUND;
 		trackMode = false;
+	}
+
+	/** A patch from before the arp has no arp dials. It played the arp track's notes as they were, so it still does. */
+	void paramsFromJson(json_t* root) override {
+		Module::paramsFromJson(root);
+		size_t i;
+		json_t* p;
+		json_array_foreach(root, i, p) {
+			json_t* id = json_object_get(p, "id");
+			if ((id ? json_integer_value(id) : (json_int_t) i) == ARP_SPEED_PARAM)
+				return;
+		}
+		params[ARP_SPEED_PARAM].setValue(0.f);
 	}
 
 	/** Track mode isn't saved, so a patch always opens on the dials' pages. */

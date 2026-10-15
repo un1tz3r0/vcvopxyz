@@ -35,6 +35,7 @@ touch, with or without a Sequencer.
 | Sound (green) | The engine's two dials, **Filter** (low-pass to the left, high-pass to the right, open in the middle), **Reso** |
 | Envelope (blue) | **Attack**, **Decay**, **Sustain**, **Release**, 1 ms to 10 s |
 | LFO (yellow) | **Amount** (off in the middle), **Speed** (synced 1/64 to 2/1 to the left, free 8 s to 20 Hz to the right), **Target**, **Shape** |
+| Arp (yellow, on the arp track in place of the LFO) | **Speed**, **Pattern**, **Style**, **Range**; see [Arp](#arp) |
 | Mix (red) | **FX 1** and **FX 2** (sends to the outputs of the same names), **Pan**, **Level** |
 | Track (white) | **Style** (poly, mono, legato) on the second dial, **Glide** (mono and legato) on the fourth |
 
@@ -57,6 +58,28 @@ dials. It stands in for holding the hardware's track key.
   as a second envelope. External follows the **EXT** input, ±5V, in place of the OP-Z's motion sensor.
 - **Clock:** the synced speeds follow the **CLOCK** input, at 4 pulses per beat unless you change it in the context
   menu; unpatched, the Sequencer's tempo, or 120 BPM without one. **RESET** restarts the LFO.
+
+## Arp
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/arp-screen-dark.png">
+  <img alt="Cluster on the arp track, with a Screen showing its arp" src="assets/arp-screen-light.png" width="270">
+</picture>
+
+On the arp track, track 7, the LFO page is the arpeggiator's, and the track has no LFO. Hold notes or a chord, from
+the steps, the keys or the inputs, and it plays them one at a time on the tempo's grid, in key: the master track
+moves its notes as it moves any track's, while they're held.
+
+- **Speed** (green): off fully left, which plays the notes as they are; then 1/4, 1/8, 1/8 triplets, 1/16, 1/16
+  triplets, 1/32, 1/32 triplets and 1/64. Swing moves its notes as it moves the steps.
+- **Pattern** (blue): as played, up, down, up and down, down and up, or random.
+- **Style** (yellow): a rhythm of accents over the notes, H as played, M at three quarters, L at half, and - a
+  rest: as set, LHLLHLLH, HLLHLLHL, LLHLLHLL, LMH, or LL- (two notes, then a rest).
+- **Range** (red): 1 to 4 octaves of the notes, low to high.
+
+Each note lasts half the time to the next. The first plays as soon as the notes are held; while stopped, the grid
+starts with it. Mono with portamento slides from note to note, as the guide suggests. A step can lock the arp's
+dials like any other. A patch saved before the arp opens with it off, so the arp track plays as it did.
 
 ## Jacks
 

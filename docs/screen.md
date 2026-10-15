@@ -16,6 +16,7 @@ The middle shows a picture of the page:
 | Sound | A scope of the output, with the filter pair's response over it |
 | Envelope | The envelope, a stage per dial colour, with a dot riding it for each sounding voice |
 | LFO | One cycle of the shape, as deep as the amount, with the speed, the target and a dot at the current phase |
+| Arp (the arp track's LFO page) | Sixteen beats of the arp over a triad: each note as high as the pattern takes it, as big as its accent |
 | Mix | The two sends, the pan, the output meters and the level |
 | Track | The note style, and the glide as a slide between two notes |
 

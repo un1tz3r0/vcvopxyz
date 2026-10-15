@@ -1,6 +1,6 @@
 /*
 Screen: the OP-Z's phone app as an expander. Placed to the right of an OP-Z engine, it shows a picture of the page the
-dials are on (the filter over a scope, the envelope with a dot per voice, the LFO, the mix, the track settings), the
+dials are on (the filter over a scope, the envelope with a dot per voice, the LFO or the arp, the mix, the track settings), the
 value of the dial last touched, and every dial of every page. Click a dial on it to select it and its page, and drag
 anywhere on it to change the selected dial, like the app's touch pad.
 */
@@ -168,7 +168,7 @@ struct Display : widget::OpaqueWidget {
 
 		// Status bar
 		text(vg, PAD, 4.2f, 2.8f, INK, NVG_ALIGN_LEFT, string::lowercase(track->model->name));
-		text(vg, s.x / 2, 4.2f, 2.3f, PAGE_COLORS[shown], NVG_ALIGN_CENTER, Track::PAGE_NAMES[shown]);
+		text(vg, s.x / 2, 4.2f, 2.3f, PAGE_COLORS[shown], NVG_ALIGN_CENTER, track->pageName(shown));
 		text(vg, s.x - PAD, 4.2f, 2.1f, DIM, NVG_ALIGN_RIGHT, string::f("%.0f BPM", 60.f / track->secondsPerBeat));
 		nvgBeginPath(vg);
 		nvgMoveTo(vg, PAD, 7.4f);
@@ -193,7 +193,7 @@ struct Display : widget::OpaqueWidget {
 		switch (shown) {
 			case PAGE_SOUND: drawSound(vg, track, snap, v); break;
 			case PAGE_ENVELOPE: drawEnvelope(vg, track, snap, v); break;
-			case PAGE_LFO: drawLfo(vg, track, snap, v); break;
+			case PAGE_LFO: track->arp() ? drawArp(vg, track, v) : drawLfo(vg, track, snap, v); break;
 			case PAGE_MIX: drawMix(vg, track, snap, v); break;
 			default: drawTrackSettings(vg, track, v); break;
 		}
@@ -351,6 +351,39 @@ struct Display : widget::OpaqueWidget {
 		ParamQuantity* target = track->paramQuantities[Track::LFO_TARGET_PARAM];
 		text(vg, v.getRight() - 1.8f, v.pos.y + 3.f, 1.7f, DIM, NVG_ALIGN_RIGHT,
 			string::uppercase(speed->getDisplayValueString() + " \xc2\xb7 " + target->getDisplayValueString()));
+	}
+
+	/** Sixteen beats of the arp over a triad: each note as high as its place in the pattern, as big as its accent. */
+	void drawArp(NVGcontext* vg, Track* track, math::Rect v) {
+		auto value = [&](int param) { return track->params[param].getValue(); };
+		Arp a{(int) value(Track::ARP_SPEED_PARAM), (int) value(Track::ARP_PATTERN_PARAM), (int) value(Track::ARP_STYLE_PARAM),
+			value(Track::ARP_RANGE_PARAM)};
+		const int BEATS = 16, m = 3 * a.octaves();
+		static const int RANDOM[BEATS] = {5, 1, 9, 4, 0, 7, 11, 2, 8, 3, 10, 6, 1, 9, 4, 7};
+		float x0 = v.pos.x + 4.f, w = v.size.x - 8.f, bottom = v.getBottom() - 4.f, h = v.size.y - 11.f;
+		auto y = [&](int j) { return bottom - h * j / std::max(m - 1, 1); };
+		for (int j = 0; j < m; j++) {
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, x0, y(j));
+			nvgLineTo(vg, x0 + w, y(j));
+			stroke(vg, j % 3 ? nvgTransRGBAf(FAINT, 0.5f) : FAINT, 0.25f);
+		}
+		const char* rhythm = ARP_RHYTHMS[a.style];
+		NVGcolor color = a.speed > 0 ? DIAL_COLORS[3] : DIM;
+		for (long b = 0, k = 0; b < BEATS; b++) {
+			char beat = rhythm[b % std::strlen(rhythm)];
+			if (beat == '-')
+				continue;
+			int j = a.pattern == ARP_RANDOM ? RANDOM[k % BEATS] % m : Arp::pick(a.pattern, m, k);
+			k++;
+			nvgBeginPath(vg);
+			nvgCircle(vg, x0 + w * (b + 0.5f) / BEATS, y(j), beat == 'H' ? 1.1f : beat == 'M' ? 0.85f : 0.6f);
+			nvgFillColor(vg, color);
+			nvgFill(vg);
+		}
+		std::string label = a.speed > 0 ? track->paramQuantities[Track::ARP_SPEED_PARAM]->getDisplayValueString() + " \xc2\xb7 "
+			+ track->paramQuantities[Track::ARP_PATTERN_PARAM]->getDisplayValueString() : "OFF";
+		text(vg, v.getRight() - 1.8f, v.pos.y + 3.f, 1.7f, DIM, NVG_ALIGN_RIGHT, string::uppercase(label));
 	}
 
 	/** Where the track sits in the stereo field, how loud it is, and what it sends to the effects. */

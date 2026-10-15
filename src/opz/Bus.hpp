@@ -42,6 +42,7 @@ struct Upstream {
 	float left = 0.f, right = 0.f;    // the mix of every engine whose own outputs are unpatched
 	int8_t page[TRACKS];              // each engine's page, or -1 for a track without one
 	float dials[4] = {-1.f, -1.f, -1.f, -1.f}; // the selected track's dials, 0 to 1, or -1 for none
+	float arp[4] = {};                // the arp track's engine's arp dials, as turned (the master applies a step's locks); off with no engine
 
 	Upstream() {
 		std::fill(std::begin(page), std::end(page), -1);

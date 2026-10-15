@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <iterator>
 #include <limits>
 #include <tuple>
@@ -18,15 +19,20 @@ parameter locks hold its engine's dials for as long as its slots are under the p
 
 Notes are in the key the Sequencer finds in the synth tracks (Scale), and a note is moved as the master track says
 when it starts rather than when it's scheduled, so it follows a master note starting with it (Tonality).
+
+The arp track's player can arpeggiate (Arp): its channels then hold the notes, and the arp plays them one at a time
+on channels of its own, in key, on a grid of song time.
 */
 namespace opz {
 
 constexpr int STEPS = 16, STEP_NOTES = 4, TICKS = 24, CHANNELS = 16;
 constexpr int TRACKS = 8, DRUM_TRACKS = 4, SYNTH_TRACKS = TRACKS - DRUM_TRACKS; // kick, snare, perc, sample, then bass, lead, arp, chord
 constexpr int MASTER = TRACKS, LANES = TRACKS + 1; // the master track, sequenced after the eight it transposes
+constexpr int ARP_TRACK = 6;
 constexpr int MIN_OFFSET = 1 - TICKS, MAX_OFFSET = TICKS;
 constexpr int DRONE = std::numeric_limits<int16_t>::max();
-constexpr int SOUND_PARAMS = 18; // a synth track's dials, every page's and the track settings', which a step can lock
+constexpr int SOUND_PARAMS = 22; // a synth track's dials, every page's, the track settings' and the arp's, which a step can lock
+constexpr int ARP_PARAMS = 18;   // the first of the arp's four: speed, pattern, style and range
 
 /** The step components, in the order of the white keys that pick them. */
 enum Component {
@@ -175,6 +181,50 @@ inline bool operator==(const Pattern& a, const Pattern& b) {
 	return std::equal(a.steps, a.steps + STEPS, b.steps);
 }
 
+/** The arp's patterns, by its blue dial. */
+enum ArpPattern { ARP_PLAYED, ARP_UP, ARP_DOWN, ARP_UP_DOWN, ARP_DOWN_UP, ARP_RANDOM, ARP_PATTERNS };
+constexpr int ARP_SPEEDS = 8, ARP_STYLES = 6;
+constexpr double ARP_PERIODS[ARP_SPEEDS] = {4.0, 2.0, 4.0 / 3, 1.0, 2.0 / 3, 0.5, 1.0 / 3, 0.25}; // 1/4 to 1/64, in sixteenths
+/** Each style's beats in turn: H plays a note at its velocity, M at three quarters of it, L at half, and - rests. */
+constexpr const char* ARP_RHYTHMS[ARP_STYLES] = {"H", "LHLLHLLH", "HLLHLLHL", "LLHLLHLL", "LMH", "LL-"};
+
+/** The arp track's arpeggiator, as its engine's dials set it. */
+struct Arp {
+	int speed = -1;            // 1 to 8 for ARP_PERIODS, 0 off, and -1 on a track with no arp
+	int pattern = ARP_UP, style = 0;
+	float range = 0.f;         // 0 to 1, over 1 to 4 octaves
+
+	int octaves() const {
+		return 1 + std::min(int(range * 4.f), 3);
+	}
+
+	/** With a step's locks on the arp's dials, as the engine's dials would take them. */
+	void lock(const Step& step) {
+		auto locked = [&](int i, int top, int* v) {
+			if (step.locked(ARP_PARAMS + i))
+				*v = (int) std::lround(step.lockValues[ARP_PARAMS + i] * top);
+		};
+		locked(0, ARP_SPEEDS, &speed);
+		locked(1, ARP_PATTERNS - 1, &pattern);
+		locked(2, ARP_STYLES - 1, &style);
+		if (step.locked(ARP_PARAMS + 3))
+			range = step.lockValues[ARP_PARAMS + 3];
+	}
+
+	/** Which of `m` notes, low to high or as played, the arp's `k`th note plays, but for random. */
+	static int pick(int pattern, int m, long k) {
+		if (pattern == ARP_DOWN)
+			return m - 1 - int(k % m);
+		if (pattern == ARP_UP_DOWN || pattern == ARP_DOWN_UP) {
+			if (m < 2)
+				return 0;
+			int i = int(k % (2 * m - 2)), up = i < m ? i : 2 * m - 2 - i;
+			return pattern == ARP_UP_DOWN ? up : m - 1 - up;
+		}
+		return int(k % m);
+	}
+};
+
 /** The track settings the player reads every time it schedules a step. */
 struct Settings {
 	int stepCount = STEPS;
@@ -183,6 +233,7 @@ struct Settings {
 	float quantize = 0.f;     // 0 to 1: how far micro timing is pulled to the grid
 	float swing = 0.5f;       // the share of each pair of sixteenths the first one takes, 0.5 to 0.75
 	int channels = 4;
+	Arp arp;
 };
 
 /** The step length set by each value key, 1 to 9 then 0: ×1 to ×8, ×16, and one step per trigger. */
@@ -332,6 +383,7 @@ struct Player {
 		bool live = false;         // played from the keys or inputs, rather than by the sequence
 		double off = 0.0;          // when the gate falls, in sixteenths
 		uint32_t id = 0;           // which note it is playing; ids count up, so lower is older
+		int midi = -1, tonality = -1; // a sequenced note's Event pitch and tonality, for the arp to move as it plays
 	};
 
 	struct Event {
@@ -384,6 +436,15 @@ struct Player {
 	Sweep sweeps[2];           // the sweep running, and the one after it
 	uint32_t seed = 0x9e3779b9;
 	Tonality tonality;         // the key, and the master track's move, which the Sequencer keeps up to date
+
+	// The arp: with it on, the channels hold the notes, and it plays them on its own.
+	Arp arp;                   // as it plays now: the track's, with the locks of the step under the playhead
+	Channel arped[CHANNELS];
+	bool arping = false;       // notes are held, and the arp's grid runs
+	bool arpRunning = false;   // the grid is in song time, or by the clock while stopped
+	double arpPeriod = 0.0, arpOrigin = 0.0; // while stopped, the grid starts with the first note held
+	double arpFrom = 0.0, arpDue = 0.0;       // when the last tick was, and the next is due
+	long arpTick = 0, arpNotes = 0, arpBeats = 0; // the last grid tick; notes and beats since the notes were first held
 
 	double song() const {
 		return now - offset;
@@ -439,6 +500,9 @@ struct Player {
 		for (Channel& c : channels)
 			if (!c.live)
 				c.gate = false;
+		for (Channel& c : arped)
+			c.gate = false;
+		arping = false;
 	}
 
 	/** Stops, and lets go of every note, the ones played live too. */
@@ -463,18 +527,108 @@ struct Player {
 				next += s.stepLength;
 			}
 		}
+		arp = s.arp;
+		if (arp.speed >= 0 && locking() >= 0)
+			arp.lock(pattern.steps[locking()]);
 		while (queued > 0 && queue[0].time <= now) {
 			Event e = queue[0];
 			std::copy(queue + 1, queue + queued, queue);
 			queued--;
-			noteOn((std::clamp(tonality.apply(e.pitch, e.tonality), 0, 127) - 60) / 12.f, e.velocity, e.time + e.length, false, s, e.glide);
+			noteOn(volts(e.pitch, e.tonality), e.velocity, e.time + e.length, false, s, e.glide, e.pitch, e.tonality);
 		}
-		for (int i = 0; i < used; i++) {
-			Channel& c = channels[i];
+		play(channels, used, sixteenths);
+		if (arp.speed > 0)
+			arpeggiate(s, sixteenths);
+		else if (arping)
+			silenceArp();
+	}
+
+	/** A sequenced note's pitch in V/oct, moved as the master track says. */
+	float volts(int pitch, int tonality) const {
+		return (std::clamp(this->tonality.apply(pitch, tonality), 0, 127) - 60) / 12.f;
+	}
+
+	/** Ends and glides the notes of `n` channels. */
+	void play(Channel* cs, int n, double sixteenths) {
+		for (int i = 0; i < n; i++) {
+			Channel& c = cs[i];
 			if (c.gate && now >= c.off)
 				c.gate = false;
 			c.pitch += (c.target - c.pitch) * (c.glide > 0.f ? float(std::min(sixteenths / c.glide, 1.0)) : 1.f);
 		}
+	}
+
+	/** What the engine plays: the channels, or with the arp on, the arp's. */
+	const Channel* voices() const {
+		return arp.speed > 0 ? arped : channels;
+	}
+
+	void silenceArp() {
+		for (Channel& c : arped)
+			c.gate = false;
+		arping = false;
+	}
+
+	/** Plays the held notes one at a time: the first as soon as they're held, then on each tick of the arp's grid, in
+	its pattern over its octaves and in its style's rhythm. A held sequenced note follows the master track's moves. The
+	grid is song time while running, swung like the steps, and while stopped, starts with the first note. */
+	void arpeggiate(const Settings& s, double sixteenths) {
+		const Arp& a = arp;
+		int n = polyphony(s);
+		play(arped, n, sixteenths);
+		int order[CHANNELS], held = 0;
+		for (int i = 0; i < used; i++)
+			if (channels[i].gate)
+				order[held++] = i;
+		if (!held) {
+			arping = false;
+			return;
+		}
+
+		bool fire = !arping;
+		if (!arping) {
+			arpNotes = arpBeats = 0;
+			arpOrigin = now;
+		}
+		double period = ARP_PERIODS[a.speed - 1], clock = running ? song() : now - arpOrigin;
+		bool swing = running && s.stepLength > 0;
+		auto due = [&](long k) { return swing ? swung(k * period, s.swing) : k * period; };
+		if (!arping || period != arpPeriod || running != arpRunning || clock < arpFrom) {
+			arping = true;
+			arpRunning = running;
+			arpPeriod = period;
+			for (arpTick = (long) std::floor(clock / period); due(arpTick) > clock; arpTick--) {}
+			arpFrom = due(arpTick);
+			arpDue = due(arpTick + 1);
+		}
+		for (; clock >= arpDue; arpDue = due(++arpTick + 1)) {
+			arpFrom = arpDue;
+			fire = true;
+		}
+		const char* rhythm = ARP_RHYTHMS[a.style];
+		char beat = fire ? rhythm[arpBeats++ % std::strlen(rhythm)] : '-';
+		if (beat == '-')
+			return;
+
+		auto pitch = [&](const Channel& c) { return c.midi >= 0 ? volts(c.midi, c.tonality) : c.target; };
+		auto before = [&](int i, int j) {
+			const Channel &x = channels[i], &y = channels[j];
+			return a.pattern == ARP_PLAYED || pitch(x) == pitch(y) ? x.id < y.id : pitch(x) < pitch(y);
+		};
+		std::sort(order, order + held, before);
+		int m = held * a.octaves(), k = a.pattern == ARP_RANDOM ? randomInt(m) : Arp::pick(a.pattern, m, arpNotes++);
+		const Channel& h = channels[order[k % held]];
+		Channel& c = arped[freeChannel(arped, n, h.glide > 0.f)];
+		c.retrigger = c.gate;
+		c.gate = true;
+		c.target = pitch(h) + k / held;
+		if (h.glide <= 0.f)
+			c.pitch = c.target;
+		c.glide = h.glide;
+		c.velocity = h.velocity * (beat == 'H' ? 1.f : beat == 'M' ? 0.75f : 0.5f);
+		c.live = h.live;
+		c.off = now + period / 2;
+		c.id = ++notes;
 	}
 
 	/** Steps on once, for a track whose step length is 0. */
@@ -677,23 +831,38 @@ struct Player {
 		queue[i] = e;
 	}
 
-	/** A channel for a new note: the newest one when it glides, so it slides from the last note; otherwise the one
-	silent longest, else the one playing longest. */
-	int channelFor(bool glide, const Settings& s) const {
-		int n = std::clamp(s.channels, 1, CHANNELS), best = 0;
+	static int polyphony(const Settings& s) {
+		return std::clamp(s.channels, 1, CHANNELS);
+	}
+
+	/** One of `n` channels for a new note: the newest one when it glides, so it slides from the last note; otherwise
+	the one silent longest, else the one playing longest. */
+	static int freeChannel(const Channel* cs, int n, bool glide) {
+		int best = 0;
 		for (int i = 1; i < n; i++) {
-			const Channel& c = channels[i];
-			const Channel& b = channels[best];
+			const Channel& c = cs[i];
+			const Channel& b = cs[best];
 			if (glide ? c.id > b.id : c.gate == b.gate ? c.id < b.id : b.gate)
 				best = i;
 		}
 		return best;
 	}
 
+	/** A channel for a new note. With the arp on, every channel can hold one for it to play, the first silent one
+	first, which keeps the channels in use few. */
+	int channelFor(bool glide, const Settings& s) const {
+		if (arp.speed <= 0)
+			return freeChannel(channels, polyphony(s), glide);
+		for (int i = 0; i < CHANNELS; i++)
+			if (!channels[i].gate)
+				return i;
+		return freeChannel(channels, CHANNELS, false);
+	}
+
 	/** Starts a note now, to end at `off` by now's clock, and returns its id. A sequenced note ends its length after its
 	time, not after the sample it started in, so one a step long is over as the next step's notes start. Live notes
 	pass INFINITY and end with release(). */
-	uint32_t noteOn(float pitch, float velocity, double off, bool live, const Settings& s, float glide = 0.f) {
+	uint32_t noteOn(float pitch, float velocity, double off, bool live, const Settings& s, float glide = 0.f, int midi = -1, int tonality = -1) {
 		int i = channelFor(glide > 0.f, s);
 		used = std::max(used, i + 1);
 		Channel& c = channels[i];
@@ -707,6 +876,8 @@ struct Player {
 		c.live = live;
 		c.off = off;
 		c.id = ++notes;
+		c.midi = midi;
+		c.tonality = tonality;
 		return c.id;
 	}
 

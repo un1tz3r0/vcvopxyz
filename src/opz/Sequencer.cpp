@@ -459,7 +459,7 @@ struct Sequencer : Module, BusNode {
 	bool external = false;
 	long pulses = 0, lastTick = -1, lastBeat = -1;
 	float sincePulse = 0.f, pulsePeriod = 0.f; // seconds; a period of 0 is unknown
-	Upstream engines;            // the last the engines sent back, read at light rate
+	Upstream engines;            // the last the engines sent back
 	dsp::ClockDivider controlDivider, lightDivider, scaleDivider;
 	Meter inputMeters[INPUTS_LEN], outputMeters[JACKS];
 	float blink = 0.f;
@@ -520,7 +520,7 @@ struct Sequencer : Module, BusNode {
 				"to edit its notes and lock the dials on it";
 		for (int i = 0; i < KEYS; i++)
 			configKey<KeyQuantity>(this, KEY_PARAM + i);
-		static const char* const pages[PAGES] = {"Sound page", "Envelope page", "LFO page", "Mix page"};
+		static const char* const pages[PAGES] = {"Sound page", "Envelope page", "LFO page (the arp's, on the arp track)", "Mix page"};
 		for (int i = 0; i < PAGES; i++)
 			configKey(this, PAGE_PARAM + i, pages[i])->description = "Of the selected track's engine";
 		for (int i = 0; i < CHANNELS; i++)
@@ -1007,6 +1007,12 @@ struct Sequencer : Module, BusNode {
 			s.quantize = params[laneParam(QUANTIZE_PARAM, t)].getValue();
 			s.swing = params[SWING_PARAM].getValue();
 		}
+		// The arp track's engine sends its arp dials back; without one, the arp is off.
+		Arp& arp = lanes[ARP_TRACK].settings.arp;
+		arp.speed = clamp((int) engines.arp[0], 0, ARP_SPEEDS);
+		arp.pattern = clamp((int) engines.arp[1], 0, ARP_PATTERNS - 1);
+		arp.style = clamp((int) engines.arp[2], 0, ARP_STYLES - 1);
+		arp.range = clamp(engines.arp[3], 0.f, 1.f);
 		// Latch plays the master track's notes on the steps, as the OP-Z does.
 		if (params[MASTER_STYLE_PARAM].getValue() == LATCH)
 			lanes[MASTER].settings.quantize = 1.f;
@@ -1348,17 +1354,19 @@ struct Sequencer : Module, BusNode {
 				out.locks = step ? step->locks : 0;
 				if (step)
 					std::copy(std::begin(step->lockValues), std::end(step->lockValues), out.lockValues);
+				const Player::Channel* voices = l.player.voices();
+				bool mute = muted(t);
 				for (int c = 0; c < n; c++) {
-					const Player::Channel& channel = l.player.channels[c];
+					const Player::Channel& channel = voices[c];
 					out.pitch[c] = channel.pitch;
 					out.velocity[c] = channel.velocity;
-					out.gate[c] = channel.gate && !channel.retrigger && !muted(t);
+					out.gate[c] = channel.gate && !channel.retrigger && !mute;
 				}
 				for (int k = 0; k < SWEEP_TARGETS; k++)
 					out.sweep[k] = l.player.sweep(k);
 			}
 			for (int c = 0; c < n; c++)
-				l.player.channels[c].retrigger = false;
+				l.player.channels[c].retrigger = l.player.arped[c].retrigger = false;
 		}
 		if (bus) {
 			bus->secondsPerBeat = 60.f / bpm();
@@ -1525,6 +1533,7 @@ struct Sequencer : Module, BusNode {
 				level[k] = std::max(level[k], b);
 		};
 		NVGcolor keyColor = NOTE_COLOR;
+		const Player::Channel* voices = l.player.voices();
 		if (trackMode) {
 			keyColor = led::BLUE;
 			for (int v = 0; v < 10; v++)
@@ -1572,9 +1581,9 @@ struct Sequencer : Module, BusNode {
 				if (masterNote >= 0)
 					light(masterNote, 0.6f);
 			}
-			for (const Player::Channel& c : l.player.channels)
-				if (c.gate)
-					light(60 + (int) std::round(c.pitch * 12.f), 0.4f);
+			for (int c = 0; c < CHANNELS; c++)
+				if (voices[c].gate)
+					light(60 + (int) std::round(voices[c].pitch * 12.f), 0.4f);
 			for (const Live& n : live)
 				if (n.on && n.lane == track)
 					light(n.pitch, 1.f);
@@ -1585,7 +1594,7 @@ struct Sequencer : Module, BusNode {
 		for (int k = 0; k < KEYS; k++)
 			setKeyLight(KEY_PARAM + k, keyColor, level[k]);
 		for (int c = 0; c < CHANNELS; c++) {
-			const Player::Channel& channel = l.player.channels[c];
+			const Player::Channel& channel = voices[c];
 			lights[CHANNEL_LIGHT + c].setBrightness(channel.gate && c < l.settings.channels ? 0.2f + 0.8f * channel.velocity : 0.f);
 		}
 
