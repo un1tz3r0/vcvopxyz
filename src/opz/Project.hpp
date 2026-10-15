@@ -10,15 +10,18 @@ project file (projects/project01.opz to project10.opz on its disk), knowing noth
 
 The file's layout comes from reverse engineering: lrk's z-po-project wiki (firmware 1.1.17) and kmorrill's
 op-z-sysex (1.2.45 on, tested on the device). Both agree on the offsets. It is little-endian, uncompressed and
-always 342844 bytes: a 4-byte header, a 568-byte block of project settings, then 16 patterns of 21392 bytes. Only
-the first pattern of the chain playing is read and written, since the Sequencer has one, for the eight tracks, the
-two FX tracks and the master track. Nobody has decoded the track settings' bytes, so those encodings are guesses, marked below. Everything else a file holds (the other
-patterns, mutes, the drum tracks' plugs) is kept from the file a project was imported from, so a round trip changes
-only what a project models.
+always 342844 bytes: a 4-byte header, a 568-byte block of project settings and chains, then 16 patterns of 21392
+bytes. All 16 are read and written, for the eight tracks, the two FX tracks and the master track, with the chain
+playing and the saved chains. Nobody has decoded the track settings' bytes, so those encodings are guesses, marked
+below. Everything else a file holds (mutes, the other tracks, the drum and FX tracks' plugs) is kept from the file a
+project was imported from, so a round trip changes only what a project models.
 */
 namespace opz {
 
 constexpr int PROJECTS = 10, MUTE_GROUPS = 10;
+constexpr int PATTERN_COUNT = 16;           // patterns in a project, on the steps in project mode
+constexpr int CHAIN_LENGTH = 32;            // patterns in a chain at most
+constexpr int SAVED_CHAINS = 14;            // saved chains, one on each white key (an OP-Z file has room for 15)
 enum Level { DRUM_LEVEL, SYNTH_LEVEL, PUNCH, MASTER_LEVEL, LEVELS_LEN };
 
 struct Project {
@@ -32,7 +35,39 @@ struct Project {
 		bool hasSound = false;          // whether it holds an engine's dials
 		float sound[SOUND_PARAMS] = {}; // the synth track's dials in its own param order, 0 to 1 over each one's range
 	};
-	Part parts[LANES];                  // the eight tracks', the master track's, which has no sound, then the FX tracks'
+	/** One of the project's 16 patterns: every track's steps (each a Pattern, in Sequence.hpp's sense), settings and
+	dials, and the mute group it plays with. */
+	struct Scene {
+		Part parts[LANES];              // the eight tracks', the master track's, which has no sound, then the FX tracks'
+		int muteGroup = 0;
+		bool used = false;              // played or edited, so worth saving
+		/** Whether it has no notes. */
+		bool empty() const {
+			for (const Part& part : parts)
+				for (const Step& s : part.pattern.steps)
+					if (!s.empty())
+						return false;
+			return true;
+		}
+	};
+	/** Patterns that play one after another, round and round. A chain of one is a pattern looping by itself. */
+	struct Chain {
+		int length = 0;
+		uint8_t patterns[CHAIN_LENGTH] = {};
+		static Chain of(int pattern) {
+			Chain c;
+			c.length = 1;
+			c.patterns[0] = (uint8_t) pattern;
+			return c;
+		}
+		bool operator==(const Chain& o) const {
+			return length == o.length && std::equal(patterns, patterns + length, o.patterns);
+		}
+	};
+	Scene scenes[PATTERN_COUNT];
+	int pattern = 0;                    // the pattern playing
+	Chain chain = Chain::of(0);         // the chain playing
+	Chain chains[SAVED_CHAINS];         // the saved ones; empty for none
 	int masterStyle = 0;                // the master track's note style: 0 latch, 1 free
 	uint16_t transposed = 0xf0;         // the tracks it moves, a bit each: the synth tracks to begin with
 	float tempo = 120.f, swing = 0.5f;
@@ -40,7 +75,6 @@ struct Project {
 	int metronomeSound = 0;
 	float metronomeLevel = 0.f;
 	uint16_t mutes[MUTE_GROUPS] = {}, audioMutes[MUTE_GROUPS] = {};
-	int muteGroup = 0;
 	bool used = false;                  // saved or imported at least once
 	std::vector<uint8_t> opz;           // the file it came from, for everything it doesn't model
 };
@@ -90,9 +124,18 @@ inline uint8_t byte(float x) {
 	return (uint8_t) std::lround(std::clamp(x, 0.f, 1.f) * 255.f);
 }
 
-/** The pattern a file is on: the first of the chain playing, or the first one. */
-inline size_t pattern(const std::vector<uint8_t>& f) {
-	return PATTERNS + PATTERN * (f[LIVE_CHAIN] < 16 ? f[LIVE_CHAIN] : 0);
+/** A chain's patterns in a file, up to the first FF. */
+inline Project::Chain readChain(const std::vector<uint8_t>& f, size_t at) {
+	Project::Chain c;
+	c.length = 0;
+	for (; c.length < CHAIN_LENGTH && f[at + c.length] < PATTERN_COUNT; c.length++)
+		c.patterns[c.length] = f[at + c.length];
+	return c;
+}
+
+inline void writeChain(std::vector<uint8_t>& f, size_t at, const Project::Chain& c) {
+	for (int i = 0; i < CHAIN_LENGTH; i++)
+		f[at + i] = i < c.length ? c.patterns[i] : 0xff;
 }
 
 /** A file with no notes, no components, default settings and the default engines. */
@@ -121,13 +164,15 @@ inline std::vector<uint8_t> blank() {
 	return f;
 }
 
+inline void readScene(const std::vector<uint8_t>& f, size_t at, Project::Scene& scene);
+inline void writeScene(std::vector<uint8_t>& f, size_t at, const Project::Scene& scene);
+
 /** Reads a file into a project, or says why it can't. */
 inline bool read(const std::vector<uint8_t>& f, Project& p, std::string* error) {
 	if (f.size() != SIZE) {
 		*error = "Not an OP-Z project: it should be " + std::to_string(SIZE) + " bytes, and is " + std::to_string(f.size());
 		return false;
 	}
-	size_t at = pattern(f);
 	uint32_t tempo = get(f, TEMPO, 2);
 	p.tempo = tempo >= 40 && tempo <= 200 ? tempo : 120.f;
 	for (int l = 0; l < LEVELS_LEN; l++)
@@ -135,8 +180,26 @@ inline bool read(const std::vector<uint8_t>& f, Project& p, std::string* error) 
 	p.swing = 0.5f + 0.25f * f[SWING] / 255.f;             // a guess: 0 straight, 255 the most
 	p.metronomeLevel = f[METRONOME_LEVEL] / 255.f;
 	p.metronomeSound = f[METRONOME_SOUND] * 6 / 256;
+	p.chain = readChain(f, LIVE_CHAIN);
+	if (!p.chain.length)
+		p.chain = Project::Chain::of(0);
+	p.pattern = p.chain.patterns[0];
+	for (int c = 0; c < SAVED_CHAINS; c++)
+		p.chains[c] = readChain(f, 4 + CHAIN_LENGTH * c);
+	for (int pattern = 0; pattern < PATTERN_COUNT; pattern++) {
+		size_t at = PATTERNS + PATTERN * pattern;
+		readScene(f, at, p.scenes[pattern]);
+	}
+	p.opz = f;
+	p.used = true;
+	return true;
+}
+
+/** One of a file's patterns into a scene. */
+inline void readScene(const std::vector<uint8_t>& f, size_t at, Project::Scene& scene) {
+	scene.used = true;
 	for (int t = 0; t < LANES; t++) {
-		Project::Part& part = p.parts[t];
+		Project::Part& part = scene.parts[t];
 		int ft = FILE_TRACK[t];
 		const uint8_t* track = &f[at + TRACK_CHUNKS + 12 * ft];
 		// Guesses: the step count as is, the step length as its value key 1 to 0 (10), quantize and the note length
@@ -180,23 +243,31 @@ inline bool read(const std::vector<uint8_t>& f, Project& p, std::string* error) 
 					step.lock(soundParam(t, i), chunk[18 + i] / 255.f);
 		}
 	}
-	p.opz = f;
-	p.used = true;
-	return true;
 }
 
 /** A project as a file: the one it was imported from with what it models written over, or a blank one. */
 inline std::vector<uint8_t> write(const Project& p) {
 	std::vector<uint8_t> f = p.opz.size() == SIZE ? p.opz : blank();
-	size_t at = pattern(f);
 	put(f, TEMPO, 2, (uint32_t) std::lround(p.tempo));
 	for (int l = 0; l < LEVELS_LEN; l++)
 		f[LEVELS + l] = byte(p.levels[l]);
 	f[SWING] = byte((p.swing - 0.5f) / 0.25f);
 	f[METRONOME_LEVEL] = byte(p.metronomeLevel);
 	f[METRONOME_SOUND] = (uint8_t) std::clamp(p.metronomeSound * 256 / 6 + 21, 0, 255);
+	writeChain(f, LIVE_CHAIN, p.chain);
+	for (int c = 0; c < SAVED_CHAINS; c++)
+		writeChain(f, 4 + CHAIN_LENGTH * c, p.chains[c]);
+	// A pattern never played or edited keeps the file's.
+	for (int pattern = 0; pattern < PATTERN_COUNT; pattern++)
+		if (p.scenes[pattern].used)
+			writeScene(f, PATTERNS + PATTERN * pattern, p.scenes[pattern]);
+	return f;
+}
+
+/** A scene over one of a file's patterns. */
+inline void writeScene(std::vector<uint8_t>& f, size_t at, const Project::Scene& scene) {
 	for (int t = 0; t < LANES; t++) {
-		const Project::Part& part = p.parts[t];
+		const Project::Part& part = scene.parts[t];
 		int ft = FILE_TRACK[t];
 		uint8_t* track = &f[at + TRACK_CHUNKS + 12 * ft];
 		track[4] = (uint8_t) std::clamp(part.stepCount, 1, STEPS);
@@ -241,7 +312,6 @@ inline std::vector<uint8_t> write(const Project& p) {
 			}
 		}
 	}
-	return f;
 }
 
 } // namespace opzfile

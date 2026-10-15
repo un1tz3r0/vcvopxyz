@@ -9,7 +9,8 @@ The OP-Z's front panel, and the master of the OP-Z modules to its right. It keep
 sequences the OP-Z's first eight tracks: kick, snare, perc and sample, then bass, lead, arp and chord, and the
 [master track](#master-track) that transposes them in key, and the two [FX tracks](fx-tracks.md), 9 and 10, that play
 the send effects. Each track has 16 steps of up to four notes, with micro
-timing, note lengths, step count and step length, and ten project slots that save it all.
+timing, note lengths, step count and step length. A project has 16 [patterns](#patterns-and-chains) of them all,
+chained to play in turn, and ten project slots save it all.
 
 ## The chain
 
@@ -86,11 +87,13 @@ off. Switching one on switches the others, and track mode, off.
   track, which stops its gates (a muted FX track silences its effect, and a muted master track stops transposing). With SHIFT latched, a
   click mutes only its sound, and the step lights red. The black keys pick one of ten mute groups, each its own set
   of mutes, and the display shows which.
-- **Project:** the black keys are ten project slots, lit dimly for the ones in use and brightly for the one
+- **Project:** the steps are the project's 16 [patterns](#patterns-and-chains), and the white keys its saved
+  chains. The black keys are ten project slots, lit dimly for the ones in use and brightly for the one
   playing. Click one to load it; the project left is saved to its own slot first, as on the OP-Z, unless
   **Save the project on switching** is off in the context menu's **Projects**. A long press or a Ctrl+click saves
   the project to that slot instead. An empty slot loads as a new, blank project. Holding **STOP** for a second clears
-  every track. The display shows the project's number.
+  every track of the pattern playing; with SHIFT latched, the whole project, every pattern and chain. The display
+  shows the project's number.
 - **Screen:** hold it to see the battery, on the display and on the steps in green. There is no battery, so it runs
   down slowly while playing and charges while stopped.
 
@@ -117,14 +120,39 @@ any other track, or play it on the keys.
 - **The tonality component:** on a step of a track it moves, it changes how that step's notes follow the master
   track. See [Step components](step-components.md).
 
+## Patterns and chains
+
+A project has 16 patterns, each a full set of tracks: every track's steps, step components, parameter locks, step
+count and length, note length, quantize and polyphony, the dials of the engine playing it, and the mute group. In
+project mode the steps pick them: white for the pattern playing, green for the rest of its chain, and dim for the
+others with notes in them.
+
+- **Switching:** click a step to play its pattern. While playing it comes in at once, and every track carries on
+  from the step it's on, as on the OP-Z. Its engines take the dials the pattern saved; a pattern never played keeps
+  the dials as they are, so a new one starts from the sound of the last.
+- **Chains:** click **PLAY** in project mode, and it blinks: the steps now build a chain, the first pattern playing
+  at once and the rest after it, up to 32, repeats allowed. The display counts them. Click **PLAY** again to finish.
+  A chain plays each pattern to its end, then the next, round and round. A pattern's end is that of its longest
+  track (step count times step length, of the tracks that step in time), and every track starts the next pattern
+  from its first step together. **PLAY**, outside project mode, starts the chain from its first pattern.
+- **Saved chains:** the 14 white keys keep a chain each, lit dimly when one is saved there and brightly for the one
+  playing. A long press or a Ctrl+click saves the chain playing to one; a click plays it. Clicking a step makes a
+  chain of one pattern again.
+- **Copy and paste:** click **SHIFT** in project mode to copy the pattern playing; SHIFT and the steps blink. Each
+  step clicked then takes a copy, and **SHIFT** again stops. A paste over the pattern playing is one undo step for
+  each track it changes.
+
+A pattern on its own loops each track at its own length, so polymeters drift as before; only a chain brings the
+tracks back together at the end of each pattern.
+
 ## Projects
 
-A slot keeps everything that makes a song: each track's pattern, step components, parameter locks, step count and
-length, note length, quantize and polyphony, every dial of the engine playing it (the note style and portamento too),
-the tempo, swing and metronome, the mixer's levels and ten mute groups, and the master track with the tracks it
-moves. Loading one sets the engines' dials too, so each
-engine plays the sound it had. The slots save with the patch, and a switch is one step of Rack's undo, which puts
-the project left back as it was.
+A slot keeps everything that makes a song: its 16 patterns, each with every track's steps, settings and engine dials
+(the note style and portamento too), the chain playing and the saved chains, the tempo, swing and metronome, the
+mixer's levels and ten mute groups, and the master track with the tracks it moves. Loading one sets the engines'
+dials too, so each engine plays the sound it had. The slots save with the patch, and a switch is one step of Rack's
+undo, which puts the project left back as it was. Switching patterns isn't an undo step, but each edit in a pattern
+is, and undoing it later changes that pattern, whichever is playing.
 
 The context menu's **Projects** moves them in and out of files:
 
@@ -134,11 +162,12 @@ The context menu's **Projects** moves them in and out of files:
   files the OP-Z shows in its disk mode's `projects` folder. **Import a projects folder** reads them back into the
   slots of the same numbers, and **Import a project** reads one file into the current slot.
 
-The OP-Z's project files hold far more than a slot does: 16 patterns per track, chains, the drum tracks' samples and
-the module tracks. The master track is written to and read from the file's track 12, and the FX tracks from 9 and
-10. An imported file is kept with the patch, and its export writes the slot over it, so
-whatever the Sequencer doesn't model goes back unchanged. Only the first pattern is read and written, and micro
-timing is written from −12 to +11 ticks, as far as the OP-Z's files go. The file
+The OP-Z's project files hold more than a slot does: the drum tracks' samples, the module tracks and a 15th saved
+chain. All 16 patterns are read and written, with the chain playing and the 14 saved chains. The master track is
+written to and read from the file's track 12, and the FX tracks from 9 and 10. An imported file is kept with the
+patch, and its export writes the slot over it, so whatever the Sequencer doesn't model goes back unchanged, as do the
+file's patterns that the slot never played or changed. Micro timing is written from −12 to +11 ticks, as far as the
+OP-Z's files go. The file
 format comes from the OP-Z community's reverse engineering, not from teenage engineering, and has not been tried on
 a real OP-Z yet, so copy your OP-Z's projects somewhere safe before you put exported files on it.
 

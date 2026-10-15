@@ -427,6 +427,7 @@ struct Player {
 	double paused = 0.0;       // the song time it stopped at
 	double scheduled = -1.0;   // start of the last slot scheduled, in song time, -1 before the first
 	double next = 0.0;         // start of the slot to schedule after it
+	double hold = INFINITY;    // song time no slot may start at or after yet: where a chain's next pattern comes in
 	Slot slots[2];             // the slot playing and the one after it
 	int position = -1;         // the step the playhead is on
 	long slotsPlayed = 0;
@@ -475,6 +476,7 @@ struct Player {
 		offset = now;
 		scheduled = -1.0;
 		next = 0.0;
+		hold = INFINITY;
 		slots[0] = slots[1] = Slot();
 		position = -1;
 		slotsPlayed = 0;
@@ -499,6 +501,18 @@ struct Player {
 			return start();
 		running = true;
 		offset = now - paused;
+	}
+
+	/** Starts the pattern over at song time `at`, from its first step: a chain's next pattern comes in. A track on a
+	grid that doesn't meet `at` steps onto it there. */
+	void restartPattern(double at) {
+		position = -1;
+		slotsLeft = holdSlots = 0;
+		jump = -1;
+		passOrigin = slotsPlayed;
+		if (timed)
+			next = at;
+		hold = INFINITY;
 	}
 
 	/** Lets go of the notes the sequence is playing or has queued, and keeps going. */
@@ -528,7 +542,7 @@ struct Player {
 				next = std::ceil(song() / s.stepLength) * s.stepLength;
 				timed = true;
 			}
-			while (song() >= scheduled) {
+			while (song() >= scheduled && next < hold) {
 				schedule(pattern, s, next, s.stepLength);
 				scheduled = next;
 				next += s.stepLength;

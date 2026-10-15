@@ -12,8 +12,9 @@ Its keys are laid out as on the OP-Z: TRACK, REC and −, PLAY and +, STOP and S
 the numbered black keys and the white keys from F to E. Rack can't hold one button down while clicking another, so
 a long press or a Ctrl+click picks a step up, and it stays held (blinking) until it's clicked again; SHIFT latches
 the same way, and a click on it turns the page. TRACK latches, and so do the first three of the OP-Z's four index
-keys over the display: PROJECT (ten project slots on the value keys), MIXER (group levels, punch, master, and mutes
-on the steps) and TEMPO (tempo, swing and the metronome). The fourth, SCREEN, shows the battery while it's held.
+keys over the display: PROJECT (ten project slots on the value keys, and each project's 16 patterns on the steps),
+MIXER (group levels, punch, master, and mutes on the steps) and TEMPO (tempo, swing and the metronome). The fourth,
+SCREEN, shows the battery while it's held.
 
 With SHIFT latched, the steps are picked for step components (blinking green), the white keys put a component on
 them, as the icons above the keys say, and the black keys set its value. While a step is held, the dials lock the
@@ -25,6 +26,10 @@ tracks, and the ramps, random walks and tonality component play in them too.
 
 Then the two FX tracks, the OP-Z's 9th and 10th, which play the FX modules: the send effects every engine's FX 1 and
 FX 2 dials send to. Their steps lock the effects' dials, and their notes set the effects' time.
+
+A project has 16 patterns, each every track's steps, settings and dials. The lanes, the params and the engines hold
+the one playing; the others wait in scenes. A chain plays patterns one after another, each starting over from its
+first step as the last ends.
 */
 #include "Track.hpp"
 #include "Sequence.hpp"
@@ -130,6 +135,14 @@ inline int stepLane(int i) {
 
 inline std::string trackName(int t) {
 	return string::f("Track %d, %s", trackNumber(t), TRACK_NAMES[t]);
+}
+
+/** A chain's patterns, numbered as the steps are. */
+inline std::string chainName(const Project::Chain& c) {
+	std::string name;
+	for (int i = 0; i < c.length; i++)
+		name += (i ? " " : "") + std::to_string(c.patterns[i] + 1);
+	return c.length ? name : "empty";
 }
 
 static const char* const MODE_NAMES[7] = {"major", "dorian", "phrygian", "lydian", "mixolydian", "minor", "locrian"};
@@ -285,8 +298,11 @@ struct Sequencer : Module, BusNode {
 			int t = stepLane(i);
 			if (m->mixerMode)
 				return t >= 0 ? trackName(t) + (m->muted(t) ? ": muted" : m->audioMuted(t) ? ": audio muted" : ": on") : "";
-			if (m->projectMode)
-				return i == 0 ? "Pattern 1" : "";
+			if (m->projectMode) {
+				std::string label = string::f("Pattern %d", i + 1);
+				label += i == m->pattern ? " (playing)" : m->scenes[i].empty() ? " (empty)" : "";
+				return label + (m->copying ? ": click to paste" : m->chaining ? ": click to chain" : "");
+			}
 			if (m->trackMode)
 				return m->shifted ? string::f("Step count %d", i + 1) : t >= 0 ? trackName(t) : "";
 			std::string label = string::f("Step %d", i + 1);
@@ -314,7 +330,8 @@ struct Sequencer : Module, BusNode {
 			if (m->tempoMode)
 				return value >= 0 ? string::f("Tempo digit %d", (value + 1) % 10) : "Tap tempo";
 			if (m->projectMode)
-				return value >= 0 ? string::f("Project %d%s", value + 1, m->projects[value].used ? "" : " (empty)") : "";
+				return value >= 0 ? string::f("Project %d%s", value + 1, m->projects[value].used ? "" : " (empty)")
+					: string::f("Chain %d: %s", keyComponent(key) + 1, chainName(m->chains[keyComponent(key)]).c_str());
 			if (m->mixerMode)
 				return value >= 0 ? string::f("Mute group %d", value + 1) : "";
 			if (m->editingComponents()) {
@@ -443,6 +460,25 @@ struct Sequencer : Module, BusNode {
 	Project projects[PROJECTS];
 	int project = 0;             // the slot the live project came from, and goes back to
 	bool autoSave = true;        // as the OP-Z: switching projects saves the one left
+	const Project blank = blankProject(); // a new project, for an empty slot: kept, as it's too big for the audio thread's stack
+	// The live project's 16 patterns: the one playing lives in the lanes, the params and the engines' dials, the rest
+	// here. The audio thread alone changes them and the chains, and the UI thread reads them, under the slots' lock.
+	Project::Scene scenes[PATTERN_COUNT];
+	int pattern = 0;                // the pattern playing
+	Project::Chain chain = Project::Chain::of(0); // the chain playing: the pattern, or patterns played in turn
+	Project::Chain chains[SAVED_CHAINS];          // the saved chains, on the white keys in project mode
+	int chainAt = 0;                // where in the chain the pattern playing is
+	double patternStart = 0.0;      // the song time the pattern playing started at, for the chain to move on from
+	bool chaining = false;          // PLAY in project mode: the steps build a new chain
+	int chained = 0;                // patterns picked for it so far
+	bool copying = false;           // SHIFT in project mode copied the pattern: the steps paste it
+	Project::Scene clipboard;
+	// What the project mode keys asked for, done when the slots' lock is free: patterns picked, a white key's chain
+	// to play or save over, pastes, going back to the chain's first pattern, and clearing every pattern.
+	int picks[CHAIN_LENGTH] = {}, picked = 0;
+	int chainKey = -1;
+	bool chainKeySave = false, rewound = false, clearAll = false;
+	uint16_t pastes = 0;
 	// The slots, and the projects and recall below, belong to the audio and UI threads both, under this lock. The UI
 	// thread can hold it a while, writing files, so the audio thread only tries it, and project work waits till it's free.
 	std::mutex projectsMutex;
@@ -453,7 +489,8 @@ struct Sequencer : Module, BusNode {
 	Project restored;
 	Project left, entered;          // the live project either side of the last switch, for the undo history
 	int leftSlot = 0;
-	enum { SETTLED, RESTORED, SWITCHED } recall = SETTLED; // a change of live project the widget has yet to see
+	// A change of live project or pattern the widget has yet to see; only a project switch is a step of the undo history.
+	enum { SETTLED, PATTERNED, RESTORED, SWITCHED } recall = SETTLED;
 	uint16_t mutes[MUTE_GROUPS] = {}, audioMutes[MUTE_GROUPS] = {};
 	int muteGroup = 0;
 	float battery = 0.87f, batteryShown = 0.f; // a pretend charge, and how long SCREEN shows it after a press
@@ -516,8 +553,10 @@ struct Sequencer : Module, BusNode {
 		configKey(this, SHIFT_PARAM, "Shift")->description = "Click: the next page of dials. Long-press or " RACK_MOD_CTRL_NAME "+click: latch it, "
 			"to pick steps for step components; then a white key puts one on them, again takes it off, and the black keys set its value. "
 			"STOP clears every component on the track";
-		configKey(this, PROJECT_PARAM, "Project")->description = "On and off: the black keys load projects 1 to 10, saving the one left; "
-			"a long press or " RACK_MOD_CTRL_NAME "+click saves to one. Holding STOP clears every track";
+		configKey(this, PROJECT_PARAM, "Project")->description = "On and off: the steps play patterns 1 to 16, and the black keys load projects 1 "
+			"to 10, saving the one left; a long press or " RACK_MOD_CTRL_NAME "+click saves to one. PLAY builds a chain of patterns on the steps, "
+			"and the white keys play saved chains, a long press saving one. SHIFT copies the pattern for the steps to paste. Holding STOP clears "
+			"the pattern, or with SHIFT latched, the whole project";
 		configKey(this, MIXER_PARAM, "Mixer")->description = "On and off: the dials set the drum and synth levels, punch and the master level; "
 			"steps 1 to 10 and 12 mute tracks (with SHIFT latched, their audio only), and the black keys pick one of 10 mute groups";
 		configKey(this, METRONOME_PARAM, "Tempo")->description = "On and off: the dials set the tempo, swing, metronome sound and metronome level, "
@@ -577,6 +616,7 @@ struct Sequencer : Module, BusNode {
 		trackMode = tempoMode = projectMode = mixerMode = false;
 		this->*mode = on;
 		typed = digits = 0;
+		chaining = copying = false;
 	}
 
 	bool editingComponents() const {
@@ -652,6 +692,17 @@ struct Sequencer : Module, BusNode {
 		scale = findScale();
 		for (Lane& l : lanes)
 			l.player.start();
+		// From the top: a chain starts over from its first pattern.
+		patternStart = 0.0;
+		if (chain.length > 1) {
+			chainAt = 0;
+			if (projectsMutex.try_lock()) {
+				std::lock_guard<std::mutex> lock(projectsMutex, std::adopt_lock);
+				switchPattern(chain.patterns[0]);
+			}
+			else
+				rewound = true;
+		}
 		lastTick = lastBeat = -1;
 		pulses = 0;
 		resetOut.trigger(1e-3f);
@@ -725,18 +776,27 @@ struct Sequencer : Module, BusNode {
 		pageRequests++;
 	}
 
-	/** A project as a new slot has it: empty patterns, the default settings, each track's own polyphony. */
+	/** A pattern as a new project has it: no notes, the default settings, each track's own polyphony, and no dials, so
+	the engines keep theirs until it's played. */
+	static Project::Scene blankScene() {
+		Project::Scene scene;
+		for (int t = 0; t < LANES; t++)
+			scene.parts[t].channels = TRACK_CHANNELS[t];
+		return scene;
+	}
+
 	static Project blankProject() {
 		Project p;
-		for (int t = 0; t < LANES; t++)
-			p.parts[t].channels = TRACK_CHANNELS[t];
+		for (Project::Scene& scene : p.scenes)
+			scene = blankScene();
 		return p;
 	}
 
-	/** The live project into a slot: the patterns, the settings, the mixer, and the dials of the engines playing. */
-	void storeProject(Project& p) {
+	/** The pattern playing into a scene: each track's steps and settings, the dials of the engine playing it, and the
+	mute group. */
+	void storeScene(Project::Scene& scene) {
 		for (int t = 0; t < LANES; t++) {
-			Project::Part& part = p.parts[t];
+			Project::Part& part = scene.parts[t];
 			part.pattern = lanes[t].pattern;
 			part.stepCount = (int) params[laneParam(STEP_COUNT_PARAM, t)].getValue();
 			part.stepLength = (int) params[laneParam(STEP_LENGTH_PARAM, t)].getValue();
@@ -748,29 +808,18 @@ struct Sequencer : Module, BusNode {
 			for (int i = 0; e && i < SOUND_PARAMS; i++)
 				part.sound[i] = e->paramQuantities[i]->getScaledValue();
 		}
-		p.masterStyle = (int) params[MASTER_STYLE_PARAM].getValue();
-		p.transposed = transposed;
-		p.tempo = params[TEMPO_PARAM].getValue();
-		p.swing = params[SWING_PARAM].getValue();
-		for (int l = 0; l < LEVELS_LEN; l++)
-			p.levels[l] = params[LEVEL_PARAM + l].getValue();
-		p.metronomeSound = (int) params[METRONOME_SOUND_PARAM].getValue();
-		p.metronomeLevel = params[METRONOME_LEVEL_PARAM].getValue();
-		std::copy(std::begin(mutes), std::end(mutes), p.mutes);
-		std::copy(std::begin(audioMutes), std::end(audioMutes), p.audioMutes);
-		p.muteGroup = muteGroup;
-		p.used = true;
+		scene.muteGroup = muteGroup;
+		scene.used = true;
 	}
 
-	/** A slot into the live project. Engines take the dials it saved; a track saved without an engine leaves its
-	engine's dials as they are. A slot's values are always in range, since projectFromJson and opzfile::read clamp
-	what they read. */
-	void recallProject(const Project& p) {
+	/** A scene into the pattern playing, leaving the notes sounding to ring. Engines take the dials it saved; a track
+	saved without an engine leaves its engine's dials as they are. A scene's values are always in range, since
+	projectFromJson and opzfile::read clamp what they read. */
+	void recallScene(const Project::Scene& scene) {
 		for (int t = 0; t < LANES; t++) {
-			const Project::Part& part = p.parts[t];
+			const Project::Part& part = scene.parts[t];
 			lanes[t].pattern = part.pattern;
 			lanes[t].settings.channels = part.channels;
-			lanes[t].player.silence();
 			params[laneParam(STEP_COUNT_PARAM, t)].setValue(part.stepCount);
 			params[laneParam(STEP_LENGTH_PARAM, t)].setValue(part.stepLength);
 			params[laneParam(LENGTH_PARAM, t)].setValue(part.noteLength);
@@ -782,6 +831,45 @@ struct Sequencer : Module, BusNode {
 				e->params[i].setValue(q->snapEnabled ? std::round(v) : v);
 			}
 		}
+		muteGroup = scene.muteGroup;
+		readSettings();
+		held = -1;
+		selection = 0;
+		component = -1;
+	}
+
+	/** The live project into a slot: its patterns and chains, its settings and the mixer. */
+	void storeProject(Project& p) {
+		std::copy(std::begin(scenes), std::end(scenes), p.scenes);
+		storeScene(p.scenes[pattern]);
+		p.pattern = pattern;
+		p.chain = chain;
+		std::copy(std::begin(chains), std::end(chains), p.chains);
+		p.masterStyle = (int) params[MASTER_STYLE_PARAM].getValue();
+		p.transposed = transposed;
+		p.tempo = params[TEMPO_PARAM].getValue();
+		p.swing = params[SWING_PARAM].getValue();
+		for (int l = 0; l < LEVELS_LEN; l++)
+			p.levels[l] = params[LEVEL_PARAM + l].getValue();
+		p.metronomeSound = (int) params[METRONOME_SOUND_PARAM].getValue();
+		p.metronomeLevel = params[METRONOME_LEVEL_PARAM].getValue();
+		std::copy(std::begin(mutes), std::end(mutes), p.mutes);
+		std::copy(std::begin(audioMutes), std::end(audioMutes), p.audioMutes);
+		p.used = true;
+	}
+
+	/** A slot into the live project, on the pattern it was playing, its notes let go of. */
+	void recallProject(const Project& p) {
+		std::copy(std::begin(p.scenes), std::end(p.scenes), scenes);
+		pattern = clamp(p.pattern, 0, PATTERN_COUNT - 1);
+		chain = p.chain.length ? p.chain : Project::Chain::of(pattern);
+		std::copy(std::begin(p.chains), std::end(p.chains), chains);
+		const uint8_t* at = std::find(chain.patterns, chain.patterns + chain.length, pattern);
+		chainAt = at < chain.patterns + chain.length ? int(at - chain.patterns) : 0;
+		chaining = copying = false;
+		recallScene(scenes[pattern]);
+		for (Lane& l : lanes)
+			l.player.silence();
 		params[MASTER_STYLE_PARAM].setValue(p.masterStyle);
 		transposed = p.transposed;
 		masterNote = -1;
@@ -793,10 +881,102 @@ struct Sequencer : Module, BusNode {
 		params[METRONOME_LEVEL_PARAM].setValue(p.metronomeLevel);
 		std::copy(std::begin(p.mutes), std::end(p.mutes), mutes);
 		std::copy(std::begin(p.audioMutes), std::end(p.audioMutes), audioMutes);
-		muteGroup = p.muteGroup;
-		held = -1;
-		selection = 0;
-		component = -1;
+	}
+
+	/** Plays another of the live project's patterns, the tracks carrying on from where they are. With the slots
+	locked. */
+	void switchPattern(int q) {
+		if (q == pattern)
+			return;
+		storeScene(scenes[pattern]);
+		pattern = q;
+		recallScene(scenes[q]);
+		recall = std::max(recall, PATTERNED);
+	}
+
+	/** A pattern picked on the steps in project mode: a chain of its own, played now, or while chaining, the next in
+	a new chain, its first played now. With the slots locked. */
+	void pickPattern(int q) {
+		if (chaining && chained++ > 0) {
+			if (chain.length < CHAIN_LENGTH)
+				chain.patterns[chain.length++] = (uint8_t) q;
+			return;
+		}
+		chain = Project::Chain::of(q);
+		chainAt = 0;
+		switchPattern(q);
+	}
+
+	/** What the project mode keys asked for. With the slots locked. */
+	void handlePatternRequests() {
+		for (int i = 0; i < picked; i++)
+			pickPattern(picks[i]);
+		picked = 0;
+		if (chainKey >= 0 && chainKeySave)
+			chains[chainKey] = chain;
+		else if (chainKey >= 0 && chains[chainKey].length) {
+			chain = chains[chainKey];
+			chainAt = 0;
+			switchPattern(chain.patterns[0]);
+		}
+		chainKey = -1;
+		if (rewound)
+			switchPattern(chain.patterns[chainAt]);
+		rewound = false;
+		// A paste over the pattern playing is an edit of each track, for the undo history; over another, it isn't.
+		for (int i = 0; i < PATTERN_COUNT; i++)
+			if (pastes >> i & 1)
+				i == pattern ? recallScene(clipboard) : (void) (scenes[i] = clipboard);
+		pastes = 0;
+		if (clearAll) {
+			for (int i = 0; i < PATTERN_COUNT; i++)
+				if (i != pattern)
+					scenes[i] = blankScene();
+			chain = Project::Chain::of(pattern);
+			chainAt = 0;
+			for (Project::Chain& c : chains)
+				c = Project::Chain();
+		}
+		clearAll = false;
+	}
+
+	bool patternRequested() const {
+		return picked || chainKey >= 0 || rewound || pastes || clearAll;
+	}
+
+	/** How long the pattern playing lasts, in sixteenths: its longest track, of those that step in time, or a bar. */
+	double patternLength() const {
+		int longest = 0;
+		for (const Lane& l : lanes)
+			longest = std::max(longest, clamp(l.settings.stepCount, 1, STEPS) * l.settings.stepLength);
+		return longest > 0 ? longest : STEPS;
+	}
+
+	/** Moves the chain on as the pattern playing ends, `song` being the song time this sample runs to. Every track
+	holds back its steps from the end on until the next pattern is in, then they start it together from its first
+	step. If the UI thread has the slots locked, the next pattern comes in a moment late rather than the audio thread
+	waiting; if the end has passed by more than a sixteenth, as when a track is shortened, it comes in on the next
+	sixteenth. A pattern chained to nothing else just loops, each track running on at its own length. */
+	void followChain(double song) {
+		double length = patternLength(), end = patternStart + length;
+		bool moving = chain.length > 1;
+		for (Lane& l : lanes)
+			l.player.hold = moving ? end : INFINITY;
+		if (song < end)
+			return;
+		if (!moving) {
+			patternStart = end + std::floor((song - end) / length) * length;
+			return;
+		}
+		if (!projectsMutex.try_lock())
+			return;
+		std::lock_guard<std::mutex> lock(projectsMutex, std::adopt_lock);
+		double from = lanes[0].player.song(), at = from < end + 1.0 ? end : std::ceil(from);
+		chainAt = (chainAt + 1) % chain.length;
+		switchPattern(chain.patterns[chainAt]);
+		for (Lane& l : lanes)
+			l.player.restartPattern(at);
+		patternStart = at;
 	}
 
 	/** Loads a slot as one step of the undo history. An empty slot is a new project. With the slots locked. */
@@ -804,7 +984,7 @@ struct Sequencer : Module, BusNode {
 		storeProject(left);
 		leftSlot = project;
 		project = n;
-		recallProject(projects[n].used ? projects[n] : blankProject());
+		recallProject(projects[n].used ? projects[n] : blank);
 		storeProject(entered);
 		recall = SWITCHED;
 	}
@@ -1007,7 +1187,8 @@ struct Sequencer : Module, BusNode {
 			params[laneParam(STEP_LENGTH_PARAM, track)].setValue(keyValue(key));
 	}
 
-	void handleControls(float dt) {
+	/** The tracks' settings from their params. */
+	void readSettings() {
 		for (int t = 0; t < LANES; t++) {
 			Settings& s = lanes[t].settings;
 			s.stepCount = (int) params[laneParam(STEP_COUNT_PARAM, t)].getValue();
@@ -1016,6 +1197,10 @@ struct Sequencer : Module, BusNode {
 			s.quantize = params[laneParam(QUANTIZE_PARAM, t)].getValue();
 			s.swing = params[SWING_PARAM].getValue();
 		}
+	}
+
+	void handleControls(float dt) {
+		readSettings();
 		// The arp track's engine sends its arp dials back; without one, the arp is off.
 		Arp& arp = lanes[ARP_TRACK].settings.arp;
 		arp.speed = clamp((int) engines.arp[0], 0, ARP_SPEEDS);
@@ -1027,7 +1212,7 @@ struct Sequencer : Module, BusNode {
 			lanes[MASTER].settings.quantize = 1.f;
 		if (sinceTap >= 0.f)
 			sinceTap += dt;
-		if ((reload >= 0 || restoring >= 0 || keyed >= 0) && projectsMutex.try_lock()) {
+		if ((reload >= 0 || restoring >= 0 || keyed >= 0 || patternRequested()) && projectsMutex.try_lock()) {
 			std::lock_guard<std::mutex> lock(projectsMutex, std::adopt_lock);
 			if (int r = reload.exchange(-1); r >= 0)
 				enterProject(r);
@@ -1039,6 +1224,7 @@ struct Sequencer : Module, BusNode {
 			if (keyed >= 0)
 				keyedSave ? saveProject(keyed) : switchProject(keyed);
 			keyed = -1;
+			handlePatternRequests();
 		}
 
 		for (int k = 0; k < ALL_KEYS; k++) {
@@ -1054,6 +1240,7 @@ struct Sequencer : Module, BusNode {
 				for (int t = 0; t < LANES; t++)
 					if (projectMode || t == track)
 						lanes[t].pattern.clear();
+				clearAll = projectMode && shifted;
 				clearing = -1.f;
 			}
 		}
@@ -1092,7 +1279,15 @@ struct Sequencer : Module, BusNode {
 		else if (p >= KEY_PARAM) {
 			int key = p - KEY_PARAM;
 			if (projectMode) {
-				// A click loads a project; a long press or a Ctrl+click saves to it.
+				// A click loads a project, or on a white key plays its chain; a long press or a Ctrl+click saves.
+				if (keyComponent(key) >= 0) {
+					if (picksUp(e, g) || e == KeyGesture::CLICK) {
+						chainKey = keyComponent(key);
+						chainKeySave = picksUp(e, g);
+						g.handled = true;
+					}
+					return;
+				}
 				if (keyValue(key) < 0)
 					return;
 				if (picksUp(e, g)) {
@@ -1118,8 +1313,15 @@ struct Sequencer : Module, BusNode {
 				if (e == KeyGesture::PRESS && t >= 0)
 					(shifted && t < TRACKS ? audioMutes : mutes)[muteGroup] ^= 1 << t;
 			}
-			else if (projectMode)
-				return;
+			else if (projectMode) {
+				// A step plays its pattern, adds it to the chain being built, or takes the pattern copied.
+				if (e != KeyGesture::PRESS)
+					return;
+				if (copying)
+					pastes |= 1 << i;
+				else if (picked < CHAIN_LENGTH)
+					picks[picked++] = i;
+			}
 			else if (trackMode) {
 				if (e != KeyGesture::PRESS)
 					return;
@@ -1149,6 +1351,12 @@ struct Sequencer : Module, BusNode {
 			else if (e == KeyGesture::CLICK) {
 				if (shifted)
 					shifted = false;
+				else if (projectMode) {
+					// Copies the pattern playing, for the steps to paste, or puts the copy away.
+					copying = !copying;
+					if (copying)
+						storeScene(clipboard);
+				}
 				else
 					requestPage(NEXT_PAGE);
 			}
@@ -1164,7 +1372,14 @@ struct Sequencer : Module, BusNode {
 				case MIXER_PARAM: toggleMode(&Sequencer::mixerMode); break;
 				case METRONOME_PARAM: toggleMode(&Sequencer::tempoMode); break;
 				case REC_PARAM: recording = !recording; cursor = 0; break;
-				case PLAY_PARAM: play(); break;
+				case PLAY_PARAM:
+					if (projectMode) {
+						chaining = !chaining;
+						chained = 0;
+					}
+					else
+						play();
+					break;
 				case STOP_PARAM:
 					if (editingComponents()) {
 						for (Step& s : lane().pattern.steps)
@@ -1310,6 +1525,8 @@ struct Sequencer : Module, BusNode {
 				d = std::max(d, 0.0);
 			}
 		}
+		if (time.running)
+			followChain(time.song() + d);
 		bool gateStep = false;
 		auto run = [&](Lane& l) {
 			l.player.advance(d, l.pattern, l.settings);
@@ -1492,8 +1709,21 @@ struct Sequencer : Module, BusNode {
 					b = muted(t) ? 0.f : audioMuted(t) ? 0.8f : shifted ? 0.3f : 1.f;
 				}
 			}
-			else if (projectMode)
-				b = i == 0;
+			else if (projectMode) {
+				// The patterns: white for the one playing, green for the rest of its chain, dim for the others with
+				// notes. Copying, they all blink, to take the copy.
+				bool inChain = std::find(chain.patterns, chain.patterns + chain.length, i) < chain.patterns + chain.length;
+				if (i == pattern)
+					b = 1.f;
+				else if (inChain && chain.length > 1) {
+					c = led::GREEN;
+					b = 0.6f;
+				}
+				else
+					b = scenes[i].empty() ? 0.f : 0.2f;
+				if (copying && !on)
+					b = std::max(b * 0.3f, 0.1f);
+			}
 			else if (trackMode && shifted)
 				b = i == count - 1 ? 1.f : i < count ? 0.15f : 0.f;
 			else if (trackMode) {
@@ -1565,6 +1795,8 @@ struct Sequencer : Module, BusNode {
 			keyColor = led::WHITE;
 			for (int v = 0; v < PROJECTS; v++)
 				level[valueKey(v)] = v == project ? 1.f : projects[v].used ? 0.3f : 0.05f;
+			for (int c = 0; c < SAVED_CHAINS; c++)
+				level[componentKey(c)] = !chains[c].length ? 0.f : chains[c] == chain ? 1.f : 0.3f;
 		}
 		else if (mixerMode) {
 			keyColor = led::WHITE;
@@ -1639,11 +1871,11 @@ struct Sequencer : Module, BusNode {
 
 		setKeyLight(TRACK_PARAM, led::WHITE, trackMode);
 		setKeyLight(REC_PARAM, led::RED, recording);
-		setKeyLight(PLAY_PARAM, led::GREEN, playing && (!armed || on));
+		setKeyLight(PLAY_PARAM, led::GREEN, projectMode && chaining ? on : playing && (!armed || on));
 		setKeyLight(STOP_PARAM, led::RED, clearing >= 0.f);
 		setKeyLight(OCTAVE_DOWN_PARAM, erasing ? led::RED : led::WHITE, erasing ? on : octave < 0 ? 0.2f - 0.2f * octave : 0.f);
 		setKeyLight(OCTAVE_UP_PARAM, led::WHITE, octave > 0 ? 0.2f + 0.2f * octave : 0.f);
-		setKeyLight(SHIFT_PARAM, led::WHITE, shifted);
+		setKeyLight(SHIFT_PARAM, led::WHITE, shifted || (projectMode && copying && on));
 		setKeyLight(PROJECT_PARAM, led::WHITE, projectMode);
 		setKeyLight(MIXER_PARAM, led::WHITE, mixerMode);
 		setKeyLight(METRONOME_PARAM, led::WHITE, tempoMode ? 1.f : beat ? 0.3f : 0.f);
@@ -1676,6 +1908,8 @@ struct Sequencer : Module, BusNode {
 			int percent = (int) std::round(100.f * battery);
 			return percent >= 100 ? "FUL" : string::f("b%2d", percent);
 		}
+		if (projectMode && chaining)
+			return string::f("C%2d", std::min(chained, CHAIN_LENGTH));
 		if (projectMode)
 			return string::f("P%2d", project + 1);
 		if (mixerMode)
@@ -1697,7 +1931,7 @@ struct Sequencer : Module, BusNode {
 			l.settings.channels = TRACK_CHANNELS[t];
 			l.recorded = l.pattern;
 		}
-		transposed = Project().transposed;
+		transposed = blank.transposed;
 		masterNote = -1;
 		memory = Step();
 		memory.add(Note());
@@ -1707,8 +1941,17 @@ struct Sequencer : Module, BusNode {
 		{
 			std::lock_guard<std::mutex> lock(projectsMutex);
 			for (Project& p : projects)
-				p = Project();
+				p = blank;
 			project = 0;
+			for (Project::Scene& scene : scenes)
+				scene = blankScene();
+			pattern = chainAt = 0;
+			chain = Project::Chain::of(0);
+			std::fill(std::begin(chains), std::end(chains), Project::Chain());
+			patternStart = 0.0;
+			chaining = copying = rewound = clearAll = false;
+			picked = pastes = 0;
+			chainKey = -1;
 		}
 		std::fill(std::begin(mutes), std::end(mutes), 0);
 		std::fill(std::begin(audioMutes), std::end(audioMutes), 0);
@@ -1839,13 +2082,13 @@ struct Sequencer : Module, BusNode {
 				masks[i] = (uint16_t) json_integer_value(m);
 	}
 
-	/** A project slot, or null for an empty one. Its .opz file, if it came from one, goes in the patch's storage. */
-	static json_t* projectToJson(const Project& p) {
-		if (!p.used)
+	/** A pattern, or null for an empty one. */
+	static json_t* sceneToJson(const Project::Scene& scene) {
+		if (!scene.used)
 			return json_null();
 		json_t* root = json_object();
 		json_t* parts = json_array();
-		for (const Project::Part& part : p.parts) {
+		for (const Project::Part& part : scene.parts) {
 			json_t* t = json_object();
 			json_object_set_new(t, "pattern", patternToJson(part.pattern));
 			json_object_set_new(t, "components", componentsToJson(part.pattern));
@@ -1860,28 +2103,21 @@ struct Sequencer : Module, BusNode {
 			json_array_append_new(parts, t);
 		}
 		json_object_set_new(root, "tracks", parts);
-		json_object_set_new(root, "masterStyle", json_integer(p.masterStyle));
-		json_object_set_new(root, "transposed", json_integer(p.transposed));
-		json_object_set_new(root, "tempo", json_real(p.tempo));
-		json_object_set_new(root, "swing", json_real(p.swing));
-		json_object_set_new(root, "levels", json_pack("[ffff]", p.levels[0], p.levels[1], p.levels[2], p.levels[3]));
-		json_object_set_new(root, "metronome", json_pack("[if]", p.metronomeSound, p.metronomeLevel));
-		json_object_set_new(root, "mutes", masksToJson(p.mutes));
-		json_object_set_new(root, "audioMutes", masksToJson(p.audioMutes));
-		json_object_set_new(root, "muteGroup", json_integer(p.muteGroup));
+		json_object_set_new(root, "muteGroup", json_integer(scene.muteGroup));
 		return root;
 	}
 
-	static Project projectFromJson(json_t* root) {
-		Project p = blankProject();
+	/** A pattern from JSON; a project from 2.0.14 or earlier has the same keys, for its one pattern. */
+	static Project::Scene sceneFromJson(json_t* root) {
+		Project::Scene scene = blankScene();
 		if (!json_is_object(root))
-			return p;
+			return scene;
 		size_t i;
 		json_t* t;
 		json_array_foreach(json_object_get(root, "tracks"), i, t) {
 			if (i >= LANES)
 				break;
-			Project::Part& part = p.parts[i];
+			Project::Part& part = scene.parts[i];
 			if (json_t* j = json_object_get(t, "pattern"))
 				patternFromJson(j, part.pattern);
 			if (json_t* j = json_object_get(t, "components"))
@@ -1902,6 +2138,84 @@ struct Sequencer : Module, BusNode {
 					part.sound[k] = clamp((float) json_number_value(json_array_get(sound, k)), 0.f, 1.f);
 			}
 		}
+		scene.muteGroup = clamp((int) json_integer_value(json_object_get(root, "muteGroup")), 0, MUTE_GROUPS - 1);
+		scene.used = true;
+		return scene;
+	}
+
+	static json_t* chainToJson(const Project::Chain& c) {
+		json_t* a = json_array();
+		for (int i = 0; i < c.length; i++)
+			json_array_append_new(a, json_integer(c.patterns[i]));
+		return a;
+	}
+
+	/** A chain from JSON, up to its first id that's no pattern's. */
+	static Project::Chain chainFromJson(json_t* a) {
+		Project::Chain c;
+		size_t i;
+		json_t* j;
+		json_array_foreach(a, i, j) {
+			json_int_t q = json_integer_value(j);
+			if (!json_is_integer(j) || q < 0 || q >= PATTERN_COUNT || c.length == CHAIN_LENGTH)
+				break;
+			c.patterns[c.length++] = (uint8_t) q;
+		}
+		return c;
+	}
+
+	static void scenesToJson(json_t* root, const Project::Scene* scenes, int pattern, const Project::Chain& chain, const Project::Chain* chains) {
+		json_t* a = json_array();
+		for (int i = 0; i < PATTERN_COUNT; i++)
+			json_array_append_new(a, sceneToJson(scenes[i]));
+		json_object_set_new(root, "patterns", a);
+		json_object_set_new(root, "pattern", json_integer(pattern));
+		json_object_set_new(root, "chain", chainToJson(chain));
+		json_t* c = json_array();
+		for (int i = 0; i < SAVED_CHAINS; i++)
+			json_array_append_new(c, chainToJson(chains[i]));
+		json_object_set_new(root, "chains", c);
+	}
+
+	/** The patterns and chains, as scenesToJson keeps them. Without them, there are none but the pattern playing. */
+	static void scenesFromJson(json_t* root, Project::Scene* scenes, int* pattern, Project::Chain* chain, Project::Chain* chains) {
+		json_t* a = json_object_get(root, "patterns");
+		for (int i = 0; i < PATTERN_COUNT; i++)
+			scenes[i] = sceneFromJson(json_array_get(a, i));
+		*pattern = clamp((int) json_integer_value(json_object_get(root, "pattern")), 0, PATTERN_COUNT - 1);
+		*chain = chainFromJson(json_object_get(root, "chain"));
+		if (!chain->length)
+			*chain = Project::Chain::of(*pattern);
+		for (int i = 0; i < SAVED_CHAINS; i++)
+			chains[i] = chainFromJson(json_array_get(json_object_get(root, "chains"), i));
+	}
+
+	/** A project slot, or null for an empty one. Its .opz file, if it came from one, goes in the patch's storage. */
+	static json_t* projectToJson(const Project& p) {
+		if (!p.used)
+			return json_null();
+		json_t* root = json_object();
+		scenesToJson(root, p.scenes, p.pattern, p.chain, p.chains);
+		json_object_set_new(root, "masterStyle", json_integer(p.masterStyle));
+		json_object_set_new(root, "transposed", json_integer(p.transposed));
+		json_object_set_new(root, "tempo", json_real(p.tempo));
+		json_object_set_new(root, "swing", json_real(p.swing));
+		json_object_set_new(root, "levels", json_pack("[ffff]", p.levels[0], p.levels[1], p.levels[2], p.levels[3]));
+		json_object_set_new(root, "metronome", json_pack("[if]", p.metronomeSound, p.metronomeLevel));
+		json_object_set_new(root, "mutes", masksToJson(p.mutes));
+		json_object_set_new(root, "audioMutes", masksToJson(p.audioMutes));
+		return root;
+	}
+
+	/** A project slot from JSON. One from 2.0.14 or earlier is its first pattern. */
+	static Project projectFromJson(json_t* root) {
+		Project p = blankProject();
+		if (!json_is_object(root))
+			return p;
+		if (json_object_get(root, "patterns"))
+			scenesFromJson(root, p.scenes, &p.pattern, &p.chain, p.chains);
+		else
+			p.scenes[0] = sceneFromJson(root);
 		p.masterStyle = clamp((int) json_integer_value(json_object_get(root, "masterStyle")), (int) LATCH, (int) FREE);
 		if (json_t* j = json_object_get(root, "transposed"))
 			p.transposed = (uint16_t) json_integer_value(j) & 0xff;
@@ -1914,7 +2228,6 @@ struct Sequencer : Module, BusNode {
 		p.metronomeLevel = clamp((float) json_number_value(json_array_get(metronome, 1)), 0.f, 1.f);
 		masksFromJson(json_object_get(root, "mutes"), p.mutes);
 		masksFromJson(json_object_get(root, "audioMutes"), p.audioMutes);
-		p.muteGroup = clamp((int) json_integer_value(json_object_get(root, "muteGroup")), 0, MUTE_GROUPS - 1);
 		p.used = true;
 		return p;
 	}
@@ -1958,6 +2271,11 @@ struct Sequencer : Module, BusNode {
 		json_object_set_new(root, "mutes", masksToJson(mutes));
 		json_object_set_new(root, "audioMutes", masksToJson(audioMutes));
 		json_object_set_new(root, "muteGroup", json_integer(muteGroup));
+		{
+			std::lock_guard<std::mutex> lock(projectsMutex);
+			scenesToJson(root, scenes, pattern, chain, chains);
+			json_object_set_new(root, "chainAt", json_integer(chainAt));
+		}
 		return root;
 	}
 
@@ -2006,6 +2324,18 @@ struct Sequencer : Module, BusNode {
 		masksFromJson(json_object_get(root, "audioMutes"), audioMutes);
 		if (json_t* j = json_object_get(root, "muteGroup"))
 			muteGroup = clamp((int) json_integer_value(j), 0, MUTE_GROUPS - 1);
+		// The pattern playing is in the tracks and the params; the rest, and the chains, are here.
+		std::lock_guard<std::mutex> lock(projectsMutex);
+		scenesFromJson(root, scenes, &pattern, &chain, chains);
+		const uint8_t* at = std::find(chain.patterns, chain.patterns + chain.length, pattern);
+		int first = at < chain.patterns + chain.length ? int(at - chain.patterns) : 0;
+		chainAt = clamp((int) json_integer_value(json_object_get(root, "chainAt")), 0, chain.length - 1);
+		if (chain.patterns[chainAt] != pattern)
+			chainAt = first;
+		chaining = copying = false;
+		picked = pastes = 0;
+		chainKey = -1;
+		rewound = clearAll = false;
 	}
 
 	static std::string opzName(int slot) {
@@ -2061,14 +2391,20 @@ struct ProjectSwitch : history::ModuleAction {
 };
 
 /** A pattern changes in the audio thread, from the keys and inputs, so the widget notices each change and saves it
-here for undo, rather than being told. */
+here for undo, rather than being told. One made on a pattern no longer playing goes back to that pattern. */
 struct PatternChange : history::ModuleAction {
-	int lane;
+	int lane, pattern;
 	Pattern before, after;
 
 	void set(const Pattern& p) {
-		if (Sequencer* m = dynamic_cast<Sequencer*>(APP->engine->getModule(moduleId)))
+		Sequencer* m = dynamic_cast<Sequencer*>(APP->engine->getModule(moduleId));
+		if (!m)
+			return;
+		std::lock_guard<std::mutex> lock(m->projectsMutex);
+		if (pattern == m->pattern)
 			m->lanes[lane].pattern = m->lanes[lane].recorded = p;
+		else
+			m->scenes[pattern].parts[lane].pattern = p;
 	}
 	void undo() override {
 		set(before);
@@ -2461,6 +2797,7 @@ struct SequencerWidget : ModuleWidget {
 			h->name = string::f("edit track %d", trackNumber(t));
 			h->moduleId = m->id;
 			h->lane = t;
+			h->pattern = m->pattern;
 			h->before = l.recorded;
 			h->after = l.recorded = l.pattern;
 			APP->history->push(h);

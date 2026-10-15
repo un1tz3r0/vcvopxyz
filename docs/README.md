@@ -9,7 +9,7 @@
 
 | Page | What it covers |
 | --- | --- |
-| [Sequencer](sequencer.md) | The OP-Z's front panel and the master of the modules to its right: tempo, transport, eight tracks of 16 steps, recording, the mixer and project slots. |
+| [Sequencer](sequencer.md) | The OP-Z's front panel and the master of the modules to its right: tempo, transport, eight tracks of 16 steps, recording, the mixer, 16 patterns with chains, and project slots. |
 | [Step components](step-components.md) | The Sequencer's 14 per-step modifiers: pulses, ratchets, ramps, glides, sweeps, jumps and sparks. |
 | [Synth tracks](synth-tracks.md) | What every track shares (status screen, pages, LFO, jacks), the synth note styles, then Digital, Analog, Cluster and Organ. |
 | [Drum tracks](drum-tracks.md) | Drum, the kick, snare, perc and sample tracks: 24-sound kits, built in or loaded from files, and the drum note styles. |
