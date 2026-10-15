@@ -20,6 +20,10 @@ namespace opz {
 
 enum Target { TARGET_P1, TARGET_P2, TARGET_FILTER, TARGET_RESONANCE, TARGET_ATTACK, TARGET_PITCH, TARGET_PAN, TARGET_VOLUME, TARGETS_LEN };
 
+/** An FX track's notes set its effect's time by key: two octaves of them from F3, the Sequencer's keys before − and +
+move them. */
+constexpr int FX_KEYS = 24, FX_LOWEST = 53;
+
 /** Envelope dials run exponentially from 1 ms to 10 s. */
 inline float envelopeTime(float dial) {
 	return 0.001f * std::pow(10000.f, dial);
@@ -181,6 +185,8 @@ struct Track : Module, BusNode {
 	}
 
 	bool drum = false;           // takes one of tracks 1 to 4 rather than 5 to 8
+	bool effect = false;         // an FX module, which takes FX 1 or 2
+	int timeKey = -1;            // an FX module's time, as the key its notes set it with
 	float secondsPerBeat = 0.5f; // 120 BPM until a clock says otherwise
 	int ppqn = 4;                // clock pulses per beat: 4 is one per sixteenth, one per step
 	int page = PAGE_SOUND;
@@ -238,8 +244,8 @@ struct Track : Module, BusNode {
 		configSwitch(LFO_SHAPE_PARAM, 0.f, Lfo::SHAPES_LEN - 1, Lfo::SINE, "LFO shape",
 			{"Sine", "Triangle", "Square", "Saw", "Random", "External (EXT input)",
 			 "Bell, per note", "Triangle, per note", "Square, per note", "Saw, per note", "Random, per note", "Single saw, per note"});
-		configParam(FX1_PARAM, 0.f, 1.f, 0.f, "FX 1 send", "%", 0.f, 100.f)->description = "To the FX 1 output, after the level";
-		configParam(FX2_PARAM, 0.f, 1.f, 0.f, "FX 2 send", "%", 0.f, 100.f)->description = "To the FX 2 output, after the level";
+		configParam(FX1_PARAM, 0.f, 1.f, 0.f, "FX 1 send", "%", 0.f, 100.f)->description = "To the FX 1 module, or the FX 1 output while it is patched, after the level";
+		configParam(FX2_PARAM, 0.f, 1.f, 0.f, "FX 2 send", "%", 0.f, 100.f)->description = "To the FX 2 module, or the FX 2 output while it is patched, after the level";
 		configParam(PAN_PARAM, -1.f, 1.f, 0.f, "Pan", "%", 0.f, 100.f);
 		configParam(LEVEL_PARAM, 0.f, 1.f, 0.7f, "Level", "%", 0.f, 100.f);
 		configSwitch(STYLE_PARAM, 0.f, styles.size() - 1, 0.f, "Note style", styles)->description = styleHelp;
@@ -305,6 +311,29 @@ struct Track : Module, BusNode {
 		return names[param] ? names[param] : string::uppercase(paramQuantities[param]->name);
 	}
 
+	bool hasDials(int p) const {
+		for (int d = 0; d < 4; d++)
+			if (dial(p, d) >= 0)
+				return true;
+		return false;
+	}
+
+	/** The next page along that has any dials: an FX module has only two. */
+	int nextPage() const {
+		for (int i = 1; i < PAGE_TRACK; i++)
+			if (hasDials((page + i) % PAGE_TRACK))
+				return (page + i) % PAGE_TRACK;
+		return page;
+	}
+
+	/** How busy it looks on its NOTE light, 0 to 1: its loudest voice. */
+	virtual float activity() {
+		float loudest = 0.f, velocity;
+		for (int i = 0; const xyz::Adsr* e = envelope(i, &velocity); i++)
+			loudest = std::fmax(loudest, e->level * velocity);
+		return loudest;
+	}
+
 	/** The page the dials are showing: one of the four, or the track settings. */
 	int shownPage() const {
 		return trackMode ? PAGE_TRACK : page;
@@ -366,7 +395,7 @@ struct Track : Module, BusNode {
 		if (selected && (!was || bus->trackMode != masterTrackMode))
 			setTrackMode(bus->trackMode);
 		if (selected && bus->pageRequests != pageRequests)
-			showPage(bus->page == NEXT_PAGE ? (page + 1) % PAGE_TRACK : bus->page);
+			showPage(bus->page == NEXT_PAGE ? nextPage() : hasDials(bus->page) ? bus->page : page);
 		masterTrackMode = bus->trackMode;
 		pageRequests = bus->pageRequests;
 	}
@@ -377,20 +406,20 @@ struct Track : Module, BusNode {
 		const Downstream* bus = fromLeft(this);
 		busTrack = -1;
 		if (bus) {
-			int taken = drum ? bus->drums : bus->synths;
-			if (taken < (drum ? DRUM_TRACKS : SYNTH_TRACKS))
-				busTrack = (drum ? 0 : DRUM_TRACKS) + taken;
+			int taken = effect ? bus->effects : drum ? bus->drums : bus->synths;
+			if (taken < (effect ? FX_TRACKS : drum ? DRUM_TRACKS : SYNTH_TRACKS))
+				busTrack = (effect ? FX1 : drum ? 0 : DRUM_TRACKS) + taken;
 			if (Downstream* out = toRight(this)) {
 				*out = *bus;
-				(drum ? out->drums : out->synths)++;
+				(effect ? out->effects : drum ? out->drums : out->synths)++;
 			}
 		}
 		return bus;
 	}
 
-	/** Sends the mix of the engines to the right on to the left, with this one's sound added while its outputs are
-	unpatched, and its page and dials. */
-	void sendUpstream(float left, float right) {
+	/** Sends the mix of the engines to the right on to the left, with this one's sound and FX sends added while its
+	outputs are unpatched, and its page and dials. */
+	void sendUpstream(float left, float right, float mono) {
 		Upstream* out = toLeft(this);
 		if (!out)
 			return;
@@ -406,6 +435,12 @@ struct Track : Module, BusNode {
 			out->left += left;
 			out->right += right;
 		}
+		if (effect)
+			out->timeKey[busTrack - FX1] = (int8_t) timeKey;
+		else
+			for (int k = 0; k < FX_TRACKS; k++)
+				if (!outputs[FX1_OUTPUT + k].isConnected())
+					out->send[k] += mono * (k ? controls.fx2 : controls.fx1);
 		if (selected)
 			std::copy(std::begin(dialValues), std::end(dialValues), out->dials);
 	}
@@ -517,7 +552,7 @@ struct Track : Module, BusNode {
 		}
 		scope[scopeEnd] = mono;
 		scopeEnd = (scopeEnd + 1) % Snapshot::SCOPE;
-		sendUpstream(panned[0], panned[1]);
+		sendUpstream(panned[0], panned[1], mono);
 
 		if (lightDivider.process())
 			updateLights(sampleTime * lightDivider.getDivision());
@@ -570,11 +605,8 @@ struct Track : Module, BusNode {
 			int param = dial(shownPage(), d);
 			dialValues[d] = param < 0 ? -1.f : paramQuantities[param]->getScaledValue();
 		}
-		float loudest = 0.f, velocity;
-		for (int i = 0; const xyz::Adsr* e = envelope(i, &velocity); i++)
-			loudest = std::fmax(loudest, e->level * velocity);
 		lights[SELECTED_LIGHT].setBrightness(selected);
-		lights[ACTIVE_LIGHT].setBrightnessSmooth(loudest, dt);
+		lights[ACTIVE_LIGHT].setBrightnessSmooth(activity(), dt);
 
 		for (int i = 0; i < INPUTS_LEN; i++) {
 			float level = peak(inputs[i]);

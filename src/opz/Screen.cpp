@@ -254,6 +254,9 @@ struct Display : widget::OpaqueWidget {
 				nvgLineTo(vg, x, y(float(i) / STEPS));
 		}
 		stroke(vg, DIAL_COLORS[2], 0.5f);
+		// An FX module's time, as its notes set it.
+		if (track->effect && track->timeKey >= 0)
+			text(vg, v.getRight() - 1.5f, v.pos.y + 3.2f, 1.8f, INK, NVG_ALIGN_RIGHT, track->soundName(FX_LOWEST + track->timeKey));
 		text(vg, v.pos.x + 1.5f, v.pos.y + v.size.y - 1.6f, 1.6f, DIM, NVG_ALIGN_LEFT, "20 Hz");
 		text(vg, v.getRight() - 1.5f, v.pos.y + v.size.y - 1.6f, 1.6f, DIM, NVG_ALIGN_RIGHT, "20 kHz");
 	}

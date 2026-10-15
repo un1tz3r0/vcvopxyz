@@ -41,15 +41,16 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | --- | --- |
 | `plugin.json` | The manifest: plugin and module metadata, and the version. |
 | `src/plugin.*` | The plugin's entry point, which registers each module's `Model`. |
-| `src/opz/` | The OP-Z track every engine shares (`Track.hpp`), its panel and status screen (`TrackWidget.hpp`), the synth track's voices around an engine (`SynthTrack.hpp`), and the drum track's dials and keys (`DrumTrack.hpp`). |
+| `src/opz/` | The OP-Z track every engine shares (`Track.hpp`), its panel and status screen (`TrackWidget.hpp`), the synth track's voices around an engine (`SynthTrack.hpp`), the drum track's dials and keys (`DrumTrack.hpp`), and the FX track around an effect (`FxTrack.hpp`). |
 | `src/opz/Kit.*`, `BuiltinKits.cpp` | Drum kits: the OP-1/OP-Z kit, AIFF and WAV readers, and the synthesized built-in kits. |
 | `src/opz/Sequence.hpp` | The sequencer's steps, components and the player that schedules them, knowing nothing of Rack. |
 | `src/opz/Sequencer.cpp` | The Sequencer module. |
 | `src/opz/Project.hpp` | A project slot, and the reader and writer for the OP-Z's `.opz` project files, knowing nothing of Rack. |
 | `src/opz/Bus.hpp` | The bus between the Sequencer and the engines and Screens to its right. |
-| `src/dsp/` | Building blocks that know nothing of Rack: filter, envelope, band-limited saw. |
+| `src/dsp/` | Building blocks that know nothing of Rack: filter, envelope, band-limited saw, delay line. |
 | `src/Digital.cpp`, `Analog.cpp`, `Cluster.cpp`, `Organ.cpp` | The engines. |
 | `src/Drum.cpp` | Drum, the drum track. |
+| `src/Delay.cpp`, `Reverb.cpp`, `Rymd.cpp`, `Chorus.cpp`, `Crush.cpp`, `Dist.cpp` | The FX modules. |
 | `src/Breakout.cpp`, `DrumBreakout.cpp` | Breakout and Drum Breakout, the synth and drum tracks for sounds made of other modules. |
 | `src/opz/Screen.cpp` | The Screen expander. |
 | `src/Screen.*` | A reusable display widget whose readouts line up with the controls around it. |
@@ -94,4 +95,6 @@ To add a control, add a label and a `p.place('NAME_PARAM', x, y)` to the module'
 
 A new synth engine is less work: it is a struct with a slug, its two sound dials and a `Voice`, handed to
 `SynthTrack` (see [DESIGN.md](../DESIGN.md#synth-engines)), with a panel from `res-src/synth_track.py`.
-`src/Analog.cpp` is a complete example in about 50 lines.
+`src/Analog.cpp` is a complete example in about 50 lines. A new effect is the same: a struct with a slug, its two
+dials, its time keys and a `Unit`, handed to `FxTrack` (`src/opz/FxTrack.hpp`), with a panel from `fx_track_panel`;
+`src/Crush.cpp` is the shortest.

@@ -34,6 +34,7 @@ One caveat of the virtual rack vs real hardware is that it is not possible to pr
 | [Organ](docs/synth-tracks.md#the-engines) | Drawbar FM organ in eight algorithms. |
 | [Breakout](docs/breakout.md) | A synth track that sends its notes, envelope, LFO and dials out as CV and takes its voice back in. |
 | [Drum Breakout](docs/breakout.md#drum-breakout) | A drum track that sends its triggers, sounds, velocity, envelope, LFO and dials out as CV and takes its sound back in. |
+| [Delay, Reverb, Rymd, Chorus, Crush, Dist](docs/fx-tracks.md) | The OP-Z's send effects, on FX tracks 9 and 10: every engine's FX 1 and FX 2 sends reach them over the bus. |
 | [Screen](docs/screen.md) | The OP-Z's phone app: a picture of the page, and every dial as a touch arc. |
 
 <picture>

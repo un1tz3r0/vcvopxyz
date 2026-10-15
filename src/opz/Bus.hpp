@@ -10,7 +10,11 @@ Rack's expander messages, so the bus is safe however Rack spreads modules over t
 plugin ends it.
 
 The engines take their tracks by kind and order: the first drum engine plays track 1 (kick), the next track 2, and
-so on to track 4, and the first synth engine plays track 5 (bass), the next track 6, and so on to track 8.
+so on to track 4, the first synth engine plays track 5 (bass), the next track 6, and so on to track 8, and the first
+FX module plays FX 1, the next FX 2.
+
+The engines' FX sends come back with their sound, and the master sends them on to the FX modules, whose sound joins
+the mix, so a module's place on the bus doesn't matter.
 */
 namespace opz {
 
@@ -28,24 +32,28 @@ struct Downstream {
 		uint32_t locks = 0;           // the dials the step playing locks, by the synth track's param
 		float lockValues[SOUND_PARAMS] = {}; // where it holds them, 0 to 1 over each one's travel
 	};
-	Lane lanes[TRACKS];
+	Lane lanes[LANES];                // by the master's lanes; the master track's goes unused
+	float send[FX_TRACKS] = {};       // what the engines send each FX module, as they sent it back
 	float secondsPerBeat = 0.5f;
 	int selected = DRUM_TRACKS;       // the track the master's dials and keys are on
 	bool trackMode = false;
 	int page = NEXT_PAGE;             // the page last asked of the selected track's engine
 	uint32_t pageRequests = 0;        // counts the requests, so each one is seen once
-	int drums = 0, synths = 0;        // drum and synth engines passed so far
+	int drums = 0, synths = 0, effects = 0; // drum and synth engines and FX modules passed so far
 };
 
 /** What the engines send leftward. */
 struct Upstream {
 	float left = 0.f, right = 0.f;    // the mix of every engine whose own outputs are unpatched
-	int8_t page[TRACKS];              // each engine's page, or -1 for a track without one
+	float send[FX_TRACKS] = {};       // the FX sends of every engine whose own FX outputs are unpatched
+	int8_t page[LANES];               // each engine's page, or -1 for a track without one
+	int8_t timeKey[FX_TRACKS];        // the key each FX module's notes last set its time with, or -1
 	float dials[4] = {-1.f, -1.f, -1.f, -1.f}; // the selected track's dials, 0 to 1, or -1 for none
 	float arp[4] = {};                // the arp track's engine's arp dials, as turned (the master applies a step's locks); off with no engine
 
 	Upstream() {
 		std::fill(std::begin(page), std::end(page), -1);
+		std::fill(std::begin(timeKey), std::end(timeKey), -1);
 	}
 };
 

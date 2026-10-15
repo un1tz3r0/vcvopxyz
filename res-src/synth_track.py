@@ -3,7 +3,8 @@
 The engines have no dials of their own: the Sequencer's four turn them, and a Screen beside one shows every page.
 So a track is a slim strip: a status screen (the Sequencer track it plays, its icon, a scope, its voices and level),
 an LED for when the Sequencer has it selected and one for when it plays, then its jacks. Breakout and Drum Breakout
-are wider, for the jacks that take their voice out to other modules and back."""
+are wider, for the jacks that take their voice out to other modules and back. The FX modules have the same strip, with
+the jacks of a send effect."""
 from panelkit import HP, LABEL, Panel
 
 HEIGHT = 128.5
@@ -16,15 +17,15 @@ LABELS = dict(VOCT='V/OCT', VELOCITY='VEL', LEFT='L', RIGHT='R', FX1='FX 1', FX2
               CV_SOUND='SOUND', CV_VELOCITY='VEL')
 
 
-def status(slug, hp):
-    """The panel down to the LEDs: the title, the status screen, and SEL and NOTE under it."""
+def status(slug, hp, active='NOTE'):
+    """The panel down to the LEDs: the title, the status screen, and SEL and NOTE (or `active`) under it."""
     width = hp * HP
     p = Panel(width, HEIGHT)
     p.rect(0, 0, width, HEIGHT, 0, 'panel')
     p.title(slug)
     p.rect(2.2, SCREEN_TOP, width - 4.4, SCREEN_HEIGHT, 1.5, 'box')
     p.place('STATUS_WIDGET', 2.2, SCREEN_TOP, width - 4.4, SCREEN_HEIGHT)
-    for x, name, label in [(width / 2 - 6.0, 'SELECTED', 'SEL'), (width / 2 + 6.0, 'ACTIVE', 'NOTE')]:
+    for x, name, label in [(width / 2 - 6.0, 'SELECTED', 'SEL'), (width / 2 + 6.0, 'ACTIVE', active)]:
         p.place(f'{name}_LIGHT', x - 3.0, LED_ROW)
         p.text(label, x + 1.4, LED_ROW, size=2.2, anchor='middle')
     return p
@@ -58,6 +59,19 @@ def synth_track_panel(slug):
     box(p, columns, 0, 1, rows[3], rows[4])
     jacks(p, [(y, [(n, 'INPUT') for n in names]) for y, names in zip(rows, inputs)]
           + [(y, [(n, 'OUTPUT') for n in names]) for y, names in zip(rows[3:], outputs)], columns)
+    return p
+
+
+def fx_track_panel(slug):
+    """6 HP: IN for use off the bus, the notes that set the time, the LFO's clock, reset and EXT, then the outputs
+    in a dark box."""
+    p = status(slug, 6, active='OUT')
+    columns = [3 * HP - PITCH / 2, 3 * HP + PITCH / 2]
+    inputs = [('RETURN_L', 'RETURN_R'), ('VOCT', 'GATE'), ('CLOCK', 'RESET'), ('EXT', None)]
+    rows = [59.0, 71.5, 84.0, 96.5, 113.0]
+    box(p, columns, 0, 1, rows[4])
+    jacks(p, [(y, [(n, 'INPUT') if n else None for n in names]) for y, names in zip(rows, inputs)]
+          + [(rows[4], [('LEFT', 'OUTPUT'), ('RIGHT', 'OUTPUT')])], columns, labels=dict(RETURN_L='IN L', RETURN_R='IN R'))
     return p
 
 

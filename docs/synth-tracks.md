@@ -36,7 +36,7 @@ touch, with or without a Sequencer.
 | Envelope (blue) | **Attack**, **Decay**, **Sustain**, **Release**, 1 ms to 10 s |
 | LFO (yellow) | **Amount** (off in the middle), **Speed** (synced 1/64 to 2/1 to the left, free 8 s to 20 Hz to the right), **Target**, **Shape** |
 | Arp (yellow, on the arp track in place of the LFO) | **Speed**, **Pattern**, **Style**, **Range**; see [Arp](#arp) |
-| Mix (red) | **FX 1** and **FX 2** (sends to the outputs of the same names), **Pan**, **Level** |
+| Mix (red) | **FX 1** and **FX 2** (sends to the [FX modules](fx-tracks.md), or to the outputs of the same names), **Pan**, **Level** |
 | Track (white) | **Style** (poly, mono, legato) on the second dial, **Glide** (mono and legato) on the fourth |
 
 **Track mode:** the Sequencer's **TRACK**, or the track row on a Screen, puts the note style and portamento on the
@@ -85,7 +85,7 @@ dials like any other. A patch saved before the arp opens with it off, so the arp
 
 - **Outputs:** **L** carries a mono mix while **R** is unpatched. With both unpatched, the track also goes, in
   stereo, to the Sequencer's **L** and **R**. **FX 1** and **FX 2** carry the track after its level, before the pan,
-  for patching to effects.
+  for patching to effects; patched, that send no longer goes to its [FX module](fx-tracks.md).
 - **Jack LEDs:** green follows each jack's level. Red means clipping: above 10V on an input, or into the soft limiter
   that keeps the outputs within ±10V. An unpatched output shows nothing.
 
