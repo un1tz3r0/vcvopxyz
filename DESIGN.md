@@ -20,12 +20,15 @@ which owns the double buffers Rack's expander messages flip between, and passes 
 
 - **Downstream** (rightward): each track's lane (poly pitch, velocity, gate, the sweep offsets, the parameter locks
   of the step playing, and its level from the mixer, 0 while its sound is muted), the tempo, the selected track,
-  track mode, page requests, and counts of the drum and synth engines passed so far.
-- **Upstream** (leftward): the L/R mix of every engine whose own outputs are unpatched, each engine's page, and the
-  selected engine's four dial values for the master's dial LEDs.
+  track mode, page requests, the FX sends, and counts of the drum and synth engines and FX modules passed so far.
+- **Upstream** (leftward): the L/R mix and the FX 1 and FX 2 sends of every engine whose own outputs are unpatched,
+  each engine's page, each FX module's time key, and the selected engine's four dial values for the master's dial
+  LEDs.
 
 An engine takes its track from its kind's count: the first drum engine plays track 1, the next track 2, and so on to
-track 4, and the first synth engine track 5, and so on to track 8, so the two kinds can mix in any order. The master
+track 4, the first synth engine track 5, and so on to track 8, and the first FX module FX 1 and the next FX 2, so
+the kinds can mix in any order. The sends travel left with the mix, and the master sends them right again on its next
+sample, so every FX module hears every engine wherever the two sit. The master
 has no CV outputs of its own for the tracks: a Breakout or Drum Breakout engine is the way out to other modules. A module from
 another plugin ends the bus, since `onBus` checks the plugin before casting. A Screen only relays.
 
@@ -76,6 +79,18 @@ Breakout is the exception that proves the split: it derives from `SynthTrack<Bre
 `process` to send each stage out as CV and skip the stages whose outputs are patched, with `lfoInside` turning the
 LFO's inside targets off. Drum and Drum Breakout share `DrumTrack` (src/opz/DrumTrack.hpp): the drum dials, note
 styles and keys. The two breakouts share `Track::emitReturn`, the return through whatever isn't patched out.
+
+### FX modules
+
+`src/opz/FxTrack.hpp`. `FxTrack<Effect>` is a `Track` with `effect` set, around an effect's `Unit` (`src/Delay.cpp`
+and the rest), which takes a stereo sample and returns the effect alone. It has no voices and only the sound and LFO
+pages, so `dial` hides the rest and `nextPage` skips them. Its notes set `timeKey`, which the effect turns into
+seconds against the tempo; the LFO's attack and pitch target slots stand in for time and send. The return goes
+through the track's filter pair and level, so mutes, locks and the mix work as for any track. The delay lines
+(`src/dsp/Delay.hpp`) are powers of two in size, read with Hermite interpolation where a time moves.
+
+The bus's `Downstream` is copied whole by every module every sample. Copying only the channels in use was tried and
+cost more than the plain struct copy, which compiles to one `memcpy`.
 
 ### Drum kits
 
@@ -149,7 +164,7 @@ Param and port ids are append-only from 2.0.6 on.
 
 The .opz layout comes from the OP-Z community's reverse engineering (see the comment at the top of `Project.hpp`).
 Each imported file is kept, in the patch's storage folder, so an export writes the slot over the file it came from
-and keeps everything the Sequencer doesn't model: the other 15 patterns, chains, the drum and FX tracks.
+and keeps everything the Sequencer doesn't model: the other 15 patterns, chains, and the drum and FX plugs.
 
 ## Panels
 
@@ -197,6 +212,11 @@ do, so the plugin can go to the VCV Library some day.
   speeds (1/4 to 1/64 with the triplets between), range as 1 to 4 octaves, notes half the time to the next, the arp following
   swing, and its grid starting with the first key while stopped are guesses. A patch saved before the arp has it off
   on load, so it still plays the arp track as before.
+- **FX:** the guide names the effects and their two dials and little else. Delay's keys run 1/64 to 3/8 in 64ths
+  (3/16 by default) and its feedback tops out at 98%; Reverb is Dattorro's plate with the keys as 10 ms of predelay
+  each; Rymd is Freeverb's room; Chorus-80 is a 3.5 ms BBD-style chorus; Crush holds and μ-law quantizes; Dist is a
+  4× oversampled tanh with a slight bias. The FX tracks' LFO targets are the synth track's, with attack moving the
+  time and pitch the send. The returns come back at unity, with no dial for their level.
 - **Untuned:** engine voicing, the built-in kits and the drums' level against the synths, sweep depth (half a dial's travel) and glide times (up to a beat) are first guesses,
   waiting to be tuned by ear.
 - **Index keys:** the OP-Z's are held while turning dials or pressing keys, so here three latch, like TRACK, and

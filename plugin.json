@@ -1,7 +1,7 @@
 {
   "slug": "vcvopxyz",
   "name": "vcvopxyz",
-  "version": "2.0.13",
+  "version": "2.0.14",
   "license": "MIT",
   "brand": "un1tz3r0",
   "author": "Victor Condino",
@@ -128,6 +128,84 @@
         "Polyphonic",
         "Filter",
         "Envelope generator",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "Delay",
+      "name": "Delay",
+      "description": "The OP-Z's digital delay as a send effect on an FX track: time from the keys, in tempo, with feedback and damping",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/fx-tracks.md#delay",
+      "tags": [
+        "Effect",
+        "Delay",
+        "Hardware clone",
+        "Filter",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "Reverb",
+      "name": "Reverb",
+      "description": "The OP-Z's clean, lightly modulated reverb as a send effect on an FX track: a plate with decay, tone and predelay from the keys",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/fx-tracks.md#reverb",
+      "tags": [
+        "Effect",
+        "Reverb",
+        "Hardware clone",
+        "Filter",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "Rymd",
+      "name": "Rymd",
+      "description": "The OP-Z's older digital reverb as a send effect on an FX track: a room with size and damping",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/fx-tracks.md#rymd",
+      "tags": [
+        "Effect",
+        "Reverb",
+        "Hardware clone",
+        "Filter",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "Chorus",
+      "name": "Chorus-80",
+      "description": "The OP-Z's old-school chorus as a send effect on an FX track: a swept stereo bucket-brigade chorus",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/fx-tracks.md#chorus80",
+      "tags": [
+        "Effect",
+        "Chorus",
+        "Hardware clone",
+        "Filter",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "Crush",
+      "name": "Crush",
+      "description": "The OP-Z's crusher as a send effect on an FX track: sample rate and bit reduction with a low-pass after",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/fx-tracks.md#crush",
+      "tags": [
+        "Effect",
+        "Distortion",
+        "Hardware clone",
+        "Filter",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "Dist",
+      "name": "Dist",
+      "description": "The OP-Z's overdrive as a send effect on an FX track: oversampled soft clipping with a tone control",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/fx-tracks.md#dist",
+      "tags": [
+        "Effect",
+        "Distortion",
+        "Hardware clone",
+        "Filter",
         "Low-frequency oscillator"
       ]
     },

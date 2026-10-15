@@ -6,14 +6,14 @@
 </picture>
 
 The OP-Z's phone app, as an expander: the OP-Z famously has no screen, since you already carry one. Place it
-directly to the right of an OP-Z engine. Its top line names the engine, the page the dials are on and the tempo, and
+directly to the right of an OP-Z engine or [FX module](fx-tracks.md). Its top line names the engine, the page the dials are on and the tempo, and
 under it is the dial last turned, in its colour, with its value.
 
 The middle shows a picture of the page:
 
 | Page | Picture |
 | --- | --- |
-| Sound | A scope of the output, with the filter pair's response over it |
+| Sound | A scope of the output, with the filter pair's response over it, and an FX module's time |
 | Envelope | The envelope, a stage per dial colour, with a dot riding it for each sounding voice |
 | LFO | One cycle of the shape, as deep as the amount, with the speed, the target and a dot at the current phase |
 | Arp (the arp track's LFO page) | Sixteen beats of the arp over a triad: each note as high as the pattern takes it, as big as its accent |

@@ -27,8 +27,15 @@ namespace opz {
 
 constexpr int STEPS = 16, STEP_NOTES = 4, TICKS = 24, CHANNELS = 16;
 constexpr int TRACKS = 8, DRUM_TRACKS = 4, SYNTH_TRACKS = TRACKS - DRUM_TRACKS; // kick, snare, perc, sample, then bass, lead, arp, chord
-constexpr int MASTER = TRACKS, LANES = TRACKS + 1; // the master track, sequenced after the eight it transposes
+constexpr int MASTER = TRACKS;             // the master track, sequenced after the eight it transposes
+constexpr int FX1 = MASTER + 1, FX_TRACKS = 2; // then the two FX tracks, which play the send effects
+constexpr int LANES = FX1 + FX_TRACKS;
 constexpr int ARP_TRACK = 6;
+
+/** A lane's number on the OP-Z: 1 to 8 for the tracks, 9 and 10 for the FX tracks, 12 for the master track. */
+constexpr int trackNumber(int lane) {
+	return lane < TRACKS ? lane + 1 : lane == MASTER ? 12 : lane;
+}
 constexpr int MIN_OFFSET = 1 - TICKS, MAX_OFFSET = TICKS;
 constexpr int DRONE = std::numeric_limits<int16_t>::max();
 constexpr int SOUND_PARAMS = 22; // a synth track's dials, every page's, the track settings' and the arp's, which a step can lock

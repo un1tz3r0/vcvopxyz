@@ -2,13 +2,13 @@
 
 ## Next
 
-- [ ] **FX modules** for the **FX 1** and **FX 2** sends, the OP-Z's tracks 13 and 14.
-
-## Later
-
 - [ ] **16 patterns per track and pattern chaining** in the Sequencer, read and written in project files: only
       the pattern playing is now. The Sequencer is the master, so these go in it rather than in a module of their
       own.
+
+## Later
+
+- [ ] **More FX,** if the OP-Z has any the six here miss: each is one `Unit` for `FxTrack`.
 - [ ] **More OP-Z synth engines,** each a `Voice` and two dials on the shared synth track.
 - [ ] **The OP-XY:** its sequencer and engines, once the OP-Z's are complete.
 - [ ] **VCV Library:** releases go on GitHub for now, since VCV's guidelines bar copying a product's layout without
@@ -50,4 +50,9 @@
 - [ ] **Arp:** check against the hardware its eight speeds, the styles' accents (and style 3, which the only source
       lists the same as style 2), what range does between whole octaves, and how long its notes are.
 - [ ] A held step plays its arp locks only while playing: stopped, the arp plays with the dials as they are.
+- [ ] **FX:** check the six effects against the hardware: Delay's key times and feedback ceiling, the reverbs'
+      sizes and predelay, Chorus-80's depth and rate range, Crush's rate and bit range, Dist's drive and tone. Which
+      LFO targets the FX tracks really have is a guess (time and send stand in for attack and pitch).
+- [ ] The FX modules' plug ids aren't written to exported project files, so the OP-Z keeps whatever effects the
+      imported file had, or its defaults.
 - [ ] **Dead code:** `src/Screen.{hpp,cpp}` and the unused widgets in `src/ui.hpp`, with their SVGs.

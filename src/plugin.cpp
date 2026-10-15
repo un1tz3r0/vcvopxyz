@@ -13,6 +13,12 @@ void init(Plugin* p) {
 	p->addModel(modelOrgan);
 	p->addModel(modelBreakout);
 	p->addModel(modelDrumBreakout);
+	p->addModel(modelDelay);
+	p->addModel(modelReverb);
+	p->addModel(modelRymd);
+	p->addModel(modelChorus);
+	p->addModel(modelCrush);
+	p->addModel(modelDist);
 	p->addModel(modelScreen);
 	p->addModel(modelSequencer);
 }

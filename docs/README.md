@@ -13,6 +13,7 @@
 | [Step components](step-components.md) | The Sequencer's 14 per-step modifiers: pulses, ratchets, ramps, glides, sweeps, jumps and sparks. |
 | [Synth tracks](synth-tracks.md) | What every track shares (status screen, pages, LFO, jacks), the synth note styles, then Digital, Analog, Cluster and Organ. |
 | [Drum tracks](drum-tracks.md) | Drum, the kick, snare, perc and sample tracks: 24-sound kits, built in or loaded from files, and the drum note styles. |
+| [FX tracks](fx-tracks.md) | Delay, Reverb, Rymd, Chorus, Crush and Dist, the send effects on FX tracks 9 and 10. |
 | [Breakout and Drum Breakout](breakout.md) | A synth track and a drum track whose sounds are made of other modules. |
 | [Screen](screen.md) | The OP-Z's phone app, as an expander. |
 
@@ -38,4 +39,6 @@
    its pages.
 6. Add up to four **Drum**s anywhere in the row for tracks 1 to 4. Select the kick track and click steps 1, 5, 9
    and 13 for four on the floor.
-7. Switch **PROJECT** on and long-press a black key to save the project to that slot.
+7. Add a **Delay** anywhere in the row, select the bass track and turn its **FX 1** send up on the red page for
+   echoes. Click **TRACK** and step 9 to reach the delay's own dials, and play a key to set its time.
+8. Switch **PROJECT** on and long-press a black key to save the project to that slot.

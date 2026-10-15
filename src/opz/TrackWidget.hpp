@@ -3,17 +3,18 @@
 
 namespace opz {
 
-inline const char* const TRACK_SYMBOLS[TRACKS] = {"kick", "snare", "perc", "sample", "bass", "lead", "arp", "chord"};
-inline const char* const TRACK_LABELS[TRACKS] = {"KICK", "SNARE", "PERC", "SAMPLE", "BASS", "LEAD", "ARP", "CHORD"};
+// By lane: the master track has no engine, so no status screen shows its symbol.
+inline const char* const TRACK_SYMBOLS[LANES] = {"kick", "snare", "perc", "sample", "bass", "lead", "arp", "chord", "master", "fx1", "fx2"};
+inline const char* const TRACK_LABELS[LANES] = {"KICK", "SNARE", "PERC", "SAMPLE", "BASS", "LEAD", "ARP", "CHORD", "MASTER", "FX 1", "FX 2"};
 
 /** A track's status screen: the Sequencer track it plays, as a big digit and that track's icon, then a scope of
 its output, a dot per voice and a level bar. Off the bus it shows a dash and plays from its inputs. */
 struct TrackStatus : widget::Widget {
 	Track* module = nullptr;
-	std::shared_ptr<window::Svg> symbols[TRACKS];
+	std::shared_ptr<window::Svg> symbols[LANES];
 
 	TrackStatus() {
-		for (int t = 0; t < TRACKS; t++)
+		for (int t = 0; t < LANES; t++)
 			symbols[t] = Svg::load(asset::plugin(pluginInstance, string::f("res/components/symbols/%s.svg", TRACK_SYMBOLS[t])));
 	}
 
@@ -24,10 +25,15 @@ struct TrackStatus : widget::Widget {
 		widget::Widget::step();
 	}
 
+	/** The track's number, as wide as its digits: two reach left and up to the icon, to keep them apart. */
+	static math::Rect digits(int track) {
+		bool two = track >= 0 && trackNumber(track) > 9;
+		return math::Rect(mm2px(math::Vec(two ? 1.2f : 2.f, 2.2f)), mm2px(math::Vec(two ? 13.6f : 6.f, 11.f)));
+	}
+
 	void draw(const DrawArgs& args) override {
 		int track = module ? module->busTrack : -1;
-		math::Rect digit(mm2px(math::Vec(2.f, 2.2f)), mm2px(math::Vec(6.f, 11.f)));
-		SevenSegment::draw(args.vg, digit, "8", false, nvgTransRGBAf(NOTE_COLOR, 0.08f));
+		SevenSegment::draw(args.vg, digits(track), track >= 0 && trackNumber(track) > 9 ? "88" : "8", false, nvgTransRGBAf(NOTE_COLOR, 0.08f));
 		if (track < 0)
 			return;
 		NVGcolor ink = nvgRGB(0xc9, 0xc8, 0xc4);
@@ -46,8 +52,7 @@ struct TrackStatus : widget::Widget {
 		int track = module->busTrack;
 		bool on = track >= 0;
 		const Track::Snapshot& snapshot = module->snapshots.read();
-		math::Rect digit(mm2px(math::Vec(2.f, 2.2f)), mm2px(math::Vec(6.f, 11.f)));
-		SevenSegment::draw(args.vg, digit, on ? std::to_string(track + 1) : "-", true, NOTE_COLOR);
+		SevenSegment::draw(args.vg, digits(track), on ? std::to_string(trackNumber(track)) : "-", true, NOTE_COLOR);
 
 		// The track's icon, lit white while the Sequencer has it selected.
 		if (on && symbols[track]->handle) {
