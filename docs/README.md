@@ -32,7 +32,7 @@
 
 1. Add a **Sequencer**, then a **Digital** directly to its right. No cables: Digital plays track 5 (bass).
 2. Patch the Sequencer's **L** and **R** to an audio interface or mixer.
-3. Click the bass track's key under the face, play the round keys to hear it, and click steps to paste the last
+3. Click the bass track's key beside the dials, play the round keys to hear it, and click steps to paste the last
    notes played into them.
 4. Click **PLAY**. Turn the Sequencer's dials to shape the sound, and click **SHIFT** for the next page.
 5. Add Analog, Cluster or Organ to the right of Digital for tracks 6, 7 and 8, and a Screen beside any engine to see

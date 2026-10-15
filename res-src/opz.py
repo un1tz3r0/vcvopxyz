@@ -95,7 +95,7 @@ def icon(name, x, y, size, color, background='{panel}'):
             f'stroke-width="{num(STROKE / scale)}" stroke-linecap="round" stroke-linejoin="round">{body}</g>')
 
 
-SCALE = 1.68    # how much bigger than the OP-Z's own face the Sequencer draws it, keys and lit symbols included
+SCALE = 2.16    # how much bigger than the OP-Z's own face the Sequencer draws it, keys and lit symbols included
 KEY = 4.2       # a key's diameter (mm), before scaling
 RING = 0.3      # its ring's line weight (mm)
 NUMERAL = 2.7   # the black keys' numbers (mm)
