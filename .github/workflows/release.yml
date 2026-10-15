@@ -1,0 +1,16 @@
+# Merging a pull request labelled "release" publishes the merge as a release, tagged with plugin.json's version.
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  release:
+    if: github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'release')
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build.yml
+    with:
+      release: true
+      ref: ${{ github.event.pull_request.merge_commit_sha }}

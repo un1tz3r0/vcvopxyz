@@ -114,10 +114,11 @@ struct TrackWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<WhiteLight>>(layout.center("SELECTED_LIGHT"), module, Track::SELECTED_LIGHT));
 		addChild(createLightCentered<SmallLight<NoteLight>>(layout.center("ACTIVE_LIGHT"), module, Track::ACTIVE_LIGHT));
 
-		// Only the jacks the panel has: Breakout's return and CV outputs are on its panel alone.
+		// Only the jacks the panel has: the breakouts' returns and CV outputs are on their panels alone.
 		static const char* const inputs[] = {"VOCT", "GATE", "VELOCITY", "CLOCK", "RESET", "EXT", "RETURN_L", "RETURN_R"};
 		static const char* const outputs[] = {"LEFT", "RIGHT", "FX1", "FX2",
-			"CV_VOCT", "CV_GATE", "CV_ENV", "CV_LFO", "CV_P1", "CV_P2", "CV_FILTER", "CV_RESONANCE", "CV_FX1", "CV_FX2"};
+			"CV_VOCT", "CV_GATE", "CV_ENV", "CV_LFO", "CV_P1", "CV_P2", "CV_FILTER", "CV_RESONANCE", "CV_FX1", "CV_FX2",
+			"CV_TRIGGER", "CV_SOUND", "CV_VELOCITY"};
 		for (int i = 0; i < Track::INPUTS_LEN; i++) {
 			std::string name = inputs[i];
 			if (!layout.has(name + "_INPUT"))

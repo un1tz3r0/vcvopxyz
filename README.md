@@ -33,6 +33,7 @@ One caveat of the virtual rack vs real hardware is that it is not possible to pr
 | [Cluster](docs/synth-tracks.md#the-engines) | Seven detuned saws per note. |
 | [Organ](docs/synth-tracks.md#the-engines) | Drawbar FM organ in eight algorithms. |
 | [Breakout](docs/breakout.md) | A synth track that sends its notes, envelope, LFO and dials out as CV and takes its voice back in. |
+| [Drum Breakout](docs/breakout.md#drum-breakout) | A drum track that sends its triggers, sounds, velocity, envelope, LFO and dials out as CV and takes its sound back in. |
 | [Screen](docs/screen.md) | The OP-Z's phone app: a picture of the page, and every dial as a touch arc. |
 
 <picture>

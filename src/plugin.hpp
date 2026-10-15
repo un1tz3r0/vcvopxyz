@@ -13,5 +13,6 @@ extern Model* modelAnalog;
 extern Model* modelCluster;
 extern Model* modelOrgan;
 extern Model* modelBreakout;
+extern Model* modelDrumBreakout;
 extern Model* modelScreen;
 extern Model* modelSequencer;

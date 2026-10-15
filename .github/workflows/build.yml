@@ -1,6 +1,8 @@
 # Builds the plugin for every platform Rack supports on each push and pull request, keeping the
 # .vcvplugin packages as workflow artifacts. Pushing a tag vX.Y.Z that matches the version in
-# plugin.json also publishes them as a GitHub release.
+# plugin.json also publishes them as a GitHub release. So does running the workflow by hand on main with
+# "release" ticked, or merging a pull request labelled "release" (release.yml): those tag the commit with
+# plugin.json's version themselves.
 name: Build
 
 on:
@@ -9,6 +11,20 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release:
+        description: Publish a release of main, tagged with plugin.json's version
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      release:
+        type: boolean
+        default: false
+      ref:
+        description: The commit to build and release, if not the one that triggered the run
+        type: string
+        default: ''
 
 env:
   RACK_SDK_VERSION: 2.6.6
@@ -24,6 +40,8 @@ jobs:
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential ca-certificates curl unzip jq zstd
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - name: Get Rack SDK
         run: curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-$RACK_SDK_VERSION-lin-x64.zip" -o sdk.zip && unzip -q sdk.zip -d ..
       - name: Build
@@ -44,6 +62,8 @@ jobs:
           msystem: MINGW64
           install: make tar unzip zstd curl jq mingw-w64-x86_64-gcc
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - name: Get Rack SDK
         run: curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-$RACK_SDK_VERSION-win-x64.zip" -o sdk.zip && unzip -q sdk.zip -d ..
       - name: Build
@@ -63,6 +83,8 @@ jobs:
           - { arch: arm64, target: arm64-apple-darwin }
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - name: Get Rack SDK
         run: curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-$RACK_SDK_VERSION-mac-${{ matrix.arch }}.zip" -o sdk.zip && unzip -q sdk.zip -d ..
       - name: Build
@@ -73,19 +95,29 @@ jobs:
           path: dist/*.vcvplugin
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (inputs.release && (github.ref == 'refs/heads/main' || inputs.ref != ''))
     needs: [linux, windows, mac]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - name: Check the tag matches plugin.json
         run: |
           version=$(jq -r .version plugin.json)
-          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+          if [ "$GITHUB_REF_TYPE" != tag ]; then
+            if git ls-remote --exit-code --tags origin "v$version" >/dev/null; then
+              echo "::error::v$version is already tagged; bump the version in plugin.json first"
+              exit 1
+            fi
+            echo "TAG=v$version" >> "$GITHUB_ENV"
+          elif [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match version $version in plugin.json"
             exit 1
+          else
+            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
           fi
       - uses: actions/download-artifact@v4
         with:
@@ -94,4 +126,5 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.vcvplugin --title "$GITHUB_REF_NAME" --generate-notes
+          TARGET: ${{ inputs.ref || github.sha }}
+        run: gh release create "$TAG" dist/*.vcvplugin --target "$TARGET" --title "$TAG" --generate-notes

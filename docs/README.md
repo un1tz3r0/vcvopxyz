@@ -13,7 +13,7 @@
 | [Step components](step-components.md) | The Sequencer's 14 per-step modifiers: pulses, ratchets, ramps, glides, sweeps, jumps and sparks. |
 | [Synth tracks](synth-tracks.md) | What every track shares (status screen, pages, LFO, jacks), the synth note styles, then Digital, Analog, Cluster and Organ. |
 | [Drum tracks](drum-tracks.md) | Drum, the kick, snare, perc and sample tracks: 24-sound kits, built in or loaded from files, and the drum note styles. |
-| [Breakout](breakout.md) | A synth track whose voice is made of other modules. |
+| [Breakout and Drum Breakout](breakout.md) | A synth track and a drum track whose sounds are made of other modules. |
 | [Screen](screen.md) | The OP-Z's phone app, as an expander. |
 
 ## Getting it running
@@ -25,7 +25,7 @@
 ## Behind it
 
 - [DESIGN.md](../DESIGN.md): how the modules fit together, and the choices made where the OP-Z guide is silent.
-- [TODO.md](../TODO.md): what's next, and what's still waiting on an answer.
+- [TODO.md](../TODO.md): what's next, and the loose ends.
 
 ## A first patch
 

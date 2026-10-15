@@ -26,7 +26,7 @@ which owns the double buffers Rack's expander messages flip between, and passes 
 
 An engine takes its track from its kind's count: the first drum engine plays track 1, the next track 2, and so on to
 track 4, and the first synth engine track 5, and so on to track 8, so the two kinds can mix in any order. The master
-has no CV outputs of its own for the tracks: a Breakout engine is the way out to other modules. A module from
+has no CV outputs of its own for the tracks: a Breakout or Drum Breakout engine is the way out to other modules. A module from
 another plugin ends the bus, since `onBus` checks the plugin before casting. A Screen only relays.
 
 Expander messages are the only safe way to share state between modules that Rack may run on different threads, and
@@ -74,7 +74,8 @@ Model* modelAnalog = createModel<opz::SynthTrack<Analog>, opz::SynthTrackWidget<
 
 Breakout is the exception that proves the split: it derives from `SynthTrack<BreakoutSound>` and overrides
 `process` to send each stage out as CV and skip the stages whose outputs are patched, with `lfoInside` turning the
-LFO's inside targets off.
+LFO's inside targets off. Drum and Drum Breakout share `DrumTrack` (src/opz/DrumTrack.hpp): the drum dials, note
+styles and keys. The two breakouts share `Track::emitReturn`, the return through whatever isn't patched out.
 
 ### Drum kits
 
@@ -166,7 +167,8 @@ do, so the plugin can go to the VCV Library some day.
 - **OP-1 kit encodings:** markers at 4058 to a sample and the play mode and reverse values are well established;
   pitch as 512ths of a semitone and volume with 8192 as unity are guesses.
 - **Digital's dials:** octave steps the modulator from −2 to +3 octaves from the note, and feedback is FM depth, up
-  to two cycles of phase deviation. Unconfirmed against the hardware.
+  to two cycles of phase deviation. Vic hears the hardware differently: a sine that wraps around as it's driven,
+  octave setting how many times it wraps and feedback some kind of phase self-modulation. TODO has the rework.
 - **LFO:** synced speeds run 1/64 at the far left to 2/1 just left of centre, in the order the guide lists them, so
   the dial is slowest in the middle. Depth is squared, for fine vibrato; at full depth the LFO sweeps a target's
   whole range, or ±2 octaves of pitch. Free shapes are bipolar; note-triggered shapes are unipolar.

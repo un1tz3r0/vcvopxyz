@@ -110,13 +110,14 @@ struct Track : Module, BusNode {
 		PARAMS_LEN
 	};
 	static_assert(PARAMS_LEN == SOUND_PARAMS, "a step locks any of a track's params");
-	// The return and the CV outputs belong to Breakout, which hands the voice to other modules; the other engines'
-	// panels leave them out.
+	// The return and the CV outputs belong to Breakout and Drum Breakout, which hand the voice to other modules; the
+	// other engines' panels leave them out. Ids are append-only, since patches save them.
 	enum InputId { VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, CLOCK_INPUT, RESET_INPUT, EXT_INPUT, RETURN_L_INPUT, RETURN_R_INPUT, INPUTS_LEN };
 	enum OutputId {
 		LEFT_OUTPUT, RIGHT_OUTPUT, FX1_OUTPUT, FX2_OUTPUT,
 		CV_VOCT_OUTPUT, CV_GATE_OUTPUT, CV_ENV_OUTPUT, CV_LFO_OUTPUT, CV_P1_OUTPUT, CV_P2_OUTPUT,
 		CV_FILTER_OUTPUT, CV_RESONANCE_OUTPUT, CV_FX1_OUTPUT, CV_FX2_OUTPUT,
+		CV_TRIGGER_OUTPUT, CV_SOUND_OUTPUT, CV_VELOCITY_OUTPUT,
 		OUTPUTS_LEN
 	};
 	static constexpr int AUDIO_OUTPUTS = CV_VOCT_OUTPUT;
@@ -183,6 +184,7 @@ struct Track : Module, BusNode {
 	Lfo lfo;
 	float lfoValue = 0.f;
 	xyz::Svf lowpass, highpass;
+	xyz::Svf returnLowpasses[2], returnHighpasses[2];
 	Controls controls;
 	dsp::ClockDivider controlDivider, lightDivider;
 	dsp::SchmittTrigger clock, reset;
@@ -241,7 +243,8 @@ struct Track : Module, BusNode {
 		configInput(RETURN_L_INPUT, "Return left, or mono");
 		configInput(RETURN_R_INPUT, "Return right");
 		const char* const cvs[] = {"1V/octave pitch", "Gate", "Envelope (0-10V)", "LFO (±5V)", "", "",
-			"Filter (0-10V)", "Resonance (0-10V)", "FX 1 send (0-10V)", "FX 2 send (0-10V)"};
+			"Filter (0-10V)", "Resonance (0-10V)", "FX 1 send (0-10V)", "FX 2 send (0-10V)",
+			"Trigger", "Sound (1/12V a sound, 0V for the first)", "Velocity (0-10V)"};
 		for (int i = CV_VOCT_OUTPUT; i < OUTPUTS_LEN; i++)
 			configOutput(i, cvs[i - CV_VOCT_OUTPUT]);
 		configOutput(CV_P1_OUTPUT, getParamQuantity(P1_PARAM)->name + " (0-10V)");
@@ -490,6 +493,40 @@ struct Track : Module, BusNode {
 
 		if (lightDivider.process())
 			updateLights(sampleTime * lightDivider.getDivision());
+	}
+
+	/** A breakout's voice, back from other modules at RET, through whatever it doesn't send out: enveloped unless ENV
+	is patched, filtered unless FILTER or RESO is, and at full level to an FX output whose amount is patched.
+	`levels` are the voices' envelopes: a polyphonic return takes them channel by channel, a mono one the loudest. */
+	void emitReturn(const float* levels, float loudest, float sampleTime) {
+		bool enveloped = !outputs[CV_ENV_OUTPUT].isConnected();
+		bool filtered = !outputs[CV_FILTER_OUTPUT].isConnected() && !outputs[CV_RESONANCE_OUTPUT].isConnected();
+		float sides[2];
+		for (int s = 0; s < 2; s++) {
+			// RIGHT is normalled to LEFT, as on a stereo pair.
+			Input& in = inputs[s && inputs[RETURN_R_INPUT].isConnected() ? RETURN_R_INPUT : RETURN_L_INPUT];
+			int n = in.getChannels();
+			float x = 0.f;
+			for (int c = 0; c < n; c++)
+				x += in.getVoltage(c) / 5.f * (!enveloped ? 1.f : n > 1 ? levels[c] : loudest);
+			if (filtered) {
+				returnLowpasses[s].tuneLike(lowpass);
+				returnHighpasses[s].tuneLike(highpass);
+				x = returnHighpasses[s].process(returnLowpasses[s].process(x).lp).hp;
+			}
+			sides[s] = x * controls.gain;
+		}
+		emit(sides[0], sides[1], outputs[CV_FX1_OUTPUT].isConnected() ? 1.f : controls.fx1,
+			outputs[CV_FX2_OUTPUT].isConnected() ? 1.f : controls.fx2, sampleTime);
+	}
+
+	/** The dials every breakout sends out, 0 to 10V after the LFO. */
+	void emitDialCVs() {
+		outputs[CV_LFO_OUTPUT].setVoltage(5.f * controls.lfo);
+		const std::pair<int, float> cvs[] = {{CV_FILTER_OUTPUT, controls.filter}, {CV_RESONANCE_OUTPUT, controls.resonance},
+			{CV_FX1_OUTPUT, controls.fx1}, {CV_FX2_OUTPUT, controls.fx2}};
+		for (auto [output, value] : cvs)
+			outputs[output].setVoltage(10.f * value);
 	}
 
 	static float peak(Port& port) {
