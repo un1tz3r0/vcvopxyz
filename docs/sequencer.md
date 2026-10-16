@@ -29,14 +29,15 @@ one shows every page.
 The face copies the OP-Z's, icons and all, scaled up to fill the panel above the jacks: four dials over 17 columns
 of round keys. **TRACK**, **REC** and **−**, **PLAY** and **+**, **STOP** and **SHIFT** on the left, the 16 steps along
 the top under the track icons, the black keys numbered 1 to 0 on the column lines, and the white keys along the
-bottom under the step component icons. Each key has an RGB LED that lights up its symbol. Top left are the OP-Z's
-four index keys, **PROJECT**, **MIXER**, **TEMPO** and **SCREEN**, and under them, where the OP-Z's speaker is, the
-display and the selected track's channel dots. Under the face, the four page keys over the jacks, and a key per
-track, named, with **MASTER** last.
+bottom under the step component icons. Each key has an RGB LED that lights up its symbol. The OP-Z's four index keys,
+**PROJECT**, **MIXER**, **TEMPO** and **SCREEN**, sit on the face's top edge in its corner, as they sit on top of the
+hardware. Where the OP-Z's speaker is, beside the dials, are the keys the hardware has no room for: the display top
+left, the four page keys top right, and along the bottom a key per track with **MASTER** last. Under the face, one
+row of jacks: the transport's inputs, the notes to record, then the transport's outputs and the mix.
 
 ## Tracks and dials
 
-- **Selecting a track:** click its key under the face (white while selected, orange while it plays), or switch
+- **Selecting a track:** click its key beside the dials (white while selected, orange while it plays), or switch
   **TRACK** on and click one of steps 1 to 8, 9 or 10 for an FX track, or 12 for the master track. The keys, steps, dials and recording all work on the selected track.
 - **Dials:** they are the selected track's engine's dials, so turning one turns that parameter on the engine, with
   its own tooltip, undo and MIDI mapping. Click **SHIFT**, or one of the four page keys, to change the page; the
@@ -116,7 +117,7 @@ any other track, or play it on the keys.
   go when the pattern starts over or the sequencer stops, unless a key is still held. **Free** moves the tracks only
   while a note plays. Of several notes at once, the lowest moves them.
 - **Which tracks:** the synth tracks, to start with. With the master track selected and SHIFT latched, the track
-  keys under the face light green for the tracks it moves; click one to add or remove it.
+  keys beside the dials light green for the tracks it moves; click one to add or remove it.
 - **The tonality component:** on a step of a track it moves, it changes how that step's notes follow the master
   track. See [Step components](step-components.md).
 

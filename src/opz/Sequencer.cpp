@@ -245,7 +245,7 @@ struct Sequencer : Module, BusNode {
 	static constexpr int JACKS = OLD_TRACK_OUTPUT; // the outputs on the panel
 	enum LightId {
 		ENUMS(KEY_LIGHT, 3 * (LOCK_PARAM - TRACK_PARAM + 1)), ENUMS(DIAL_LIGHT, 3 * 4),
-		ENUMS(CHANNEL_LIGHT, CHANNELS), INTERNAL_LIGHT, EXTERNAL_LIGHT,
+		INTERNAL_LIGHT, EXTERNAL_LIGHT,
 		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * JACKS),
 		LIGHTS_LEN
 	};
@@ -570,8 +570,6 @@ struct Sequencer : Module, BusNode {
 		static const char* const pages[PAGES] = {"Sound page", "Envelope page", "LFO page (the arp's, on the arp track)", "Mix page"};
 		for (int i = 0; i < PAGES; i++)
 			configKey(this, PAGE_PARAM + i, pages[i])->description = "Of the selected track's engine";
-		for (int i = 0; i < CHANNELS; i++)
-			configLight(CHANNEL_LIGHT + i, string::f("Channel %d", i + 1));
 		for (int d = 0; d < 4; d++) {
 			ParamQuantity* q = configParam<LockQuantity>(LOCK_PARAM + d, 0.f, 1.f, 0.f, "Lock", "%", 0.f, 100.f);
 			q->resetEnabled = q->randomizeEnabled = false;
@@ -1845,10 +1843,6 @@ struct Sequencer : Module, BusNode {
 		}
 		for (int k = 0; k < KEYS; k++)
 			setKeyLight(KEY_PARAM + k, keyColor, level[k]);
-		for (int c = 0; c < CHANNELS; c++) {
-			const Player::Channel& channel = voices[c];
-			lights[CHANNEL_LIGHT + c].setBrightness(channel.gate && c < l.settings.channels ? 0.2f + 0.8f * channel.velocity : 0.f);
-		}
 
 		// The track keys: white for the one selected, orange while one is busy, or on the master track with SHIFT
 		// latched, green for the tracks it transposes. The page keys light in their colours, brightly for the page the
@@ -2699,8 +2693,6 @@ struct SequencerWidget : ModuleWidget {
 		addChild(display);
 		addChild(createLightCentered<SmallSimpleLight<NoteLight>>(AT(INTERNAL_LIGHT)));
 		addChild(createLightCentered<SmallSimpleLight<NoteLight>>(AT(EXTERNAL_LIGHT)));
-		for (int i = 0; i < CHANNELS; i++)
-			addChild(createLightCentered<DotLight<NoteLight>>(layout.center(string::f("CHANNEL%d_LIGHT", i)), module, Sequencer::CHANNEL_LIGHT + i));
 
 		for (int d = 0; d < 4; d++) {
 			MasterDial* dial = createWidgetCentered<MasterDial>(layout.center(string::f("DIAL%d_WIDGET", d)));
