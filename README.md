@@ -5,9 +5,13 @@
   <img alt="A Sequencer playing four Drums, Digital, Analog, Cluster and Organ, with a Screen beside Digital" src="docs/assets/rack-light.png">
 </picture>
 
-An ode to the [Teenage Engineering OP-Z](https://teenage.engineering/products/op-z), this is a [VCV Rack](http://vcvrack.com/) plugin which adds a module and a set of expanders that work together to bring the magic, fun and deeply expressive and versatile sequencing experience of the OP-Z to the eurorack modular form factor.
+## What is it?
 
-Rather than try and make a sample-perfect copy of each sound and FX module, the goal is to bring something similar enough to be instantly usable by anyone who is proficient at playing the original to the modular rack, where it can be combined with third-party module chains to add just about any sound you can imagine as a voice for one of the OP-Z's eight (four percussive and four melodic) musical part tracks.
+An ode to the [Teenage Engineering OP-Z](https://teenage.engineering/products/op-z), this project is a [VCV Rack](http://vcvrack.com/) plugin that adds a set of modules and expanders which work together to bring the magic, fun and deeply expressive and sequencing experience of the OP-Z to the (virtual) eurorack modular environment.
+
+## What it is not
+
+Rather than try and make a sample-perfect copy of each sound and FX module, the goal is to bring something similar enough to be instantly usable by anyone who is familiar with the original to the modular rack, where the sequencer tracks can be routed out to standard 1v/oct pitch and note gate/trig input chains of other modules taking the place of the original's drum samplers and synth engines that voice the eight drum and eight synth tracks, 
 
 Doesn't that sound pretty neat? I sure think so.
 
