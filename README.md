@@ -1,24 +1,19 @@
 # vcvopxyz
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/rack-dark.png">
+  <source media="(prefers-color-scheme: high-contrast)" srcset="docs/assets/rack-dark.png">
   <img alt="A Sequencer playing four Drums, Digital, Analog, Cluster and Organ, with a Screen beside Digital" src="docs/assets/rack-light.png">
 </picture>
 
 ## What is it?
 
-An ode to the [Teenage Engineering OP-Z](https://teenage.engineering/products/op-z), this project is a [VCV Rack](http://vcvrack.com/) plugin that adds a set of modules and expanders which work together to bring the magic, fun and deeply expressive and sequencing experience of the OP-Z to the (virtual) eurorack modular environment.
+An ode to the [Teenage Engineering OP-Z](https://teenage.engineering/products/op-z), this project is a [VCV Rack](http://vcvrack.com/) plugin that adds a set of modules and expanders which work together to take the magic and fun of the OP-Z out of your pocket and put it into to your (virtual) eurorack modular system.
 
 ## What it is not
 
-Rather than try and make a sample-perfect copy of each sound and FX module, the goal is to bring something similar enough to be instantly usable by anyone who is familiar with the original to the modular rack, where the sequencer tracks can be routed out to standard 1v/oct pitch and note gate/trig input chains of other modules taking the place of the original's drum samplers and synth engines that voice the eight drum and eight synth tracks, 
+Rather than try and make a sample-perfect clone of each sound and FX engine, the goal was to build something similar *enough* to be instantly usable by anyone who is familiar with the original. What it lacks in sounding exactly like the hardware, it makes up for by allowing the sequencer tracks to be diverted to 1v/oct pitch and gate/trig outputs so that they can control chains of external modules whose output can then be routed back into the OP-Z's track-fx and mixer. 
 
-Doesn't that sound pretty neat? I sure think so.
-
-For those unfamiliar, this will likely be, as is the real thing upon unboxing, slightly confusing and frustrating, until one has learned TE's screenless, lightly modal and mostly easy-to-remember multi-button-combination-based interface. This may sound daunting, but be patient and trust that once you're comfortable with how it works, this little guy is so much fun to use that it can be hard to put down even after hours of playing.
-
-#### Not affiliated with or endorsed by teenage engineering. OP-Z and OP-XY are their trademarks.
-
+#### This project is not affiliated with or endorsed by teenage engineering. OP-Z and OP-XY are their trademarks.
 ## Modules
 
 The Sequencer module is the master, and controls up to eight expanders to its right (up to four drum kits and four synth engines), which pick up the tracks in the order they appear, showing the assigned track number, symbol and name on each attached engine's status panel. The main sequencer module has V/OCT, GATE and velocity inputs for recording notes, and clock and transport control inputs and outputs with pass-through, and clocks itself internally if no clock signal is patched. The tracks reach other modules through a Breakout, not through cables from the Sequencer. The tempo of the internal clock can be adjusted exactly as on the real OP-Z, using the tempo-mode button along the top of the device.
