@@ -80,6 +80,12 @@ Breakout is the exception that proves the split: it derives from `SynthTrack<Bre
 LFO's inside targets off. Drum and Drum Breakout share `DrumTrack` (src/opz/DrumTrack.hpp): the drum dials, note
 styles and keys. The two breakouts share `Track::emitReturn`, the return through whatever isn't patched out.
 
+The FM engines (Organ, Electric, Shade, Uranus, Volt, EP) share `xyz::sine` and `xyz::softClip` in
+`src/dsp/Sine.hpp`: a 4096-point table, linearly interpolated, and a rational tanh. The saws use `src/dsp/Blep.hpp`.
+Bow is the one physical model, a bowed waveguide after STK's: its bridge low-pass never sits below the note's
+eighth harmonic and its friction curve stays shallow, since past either the string jumps to an upper mode, and the
+delay is shortened by the low-pass's phase delay to keep it in tune.
+
 ### FX modules
 
 `src/opz/FxTrack.hpp`. `FxTrack<Effect>` is a `Track` with `effect` set, around an effect's `Unit` (`src/Delay.cpp`

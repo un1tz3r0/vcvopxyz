@@ -11,7 +11,7 @@
 | --- | --- |
 | [Sequencer](sequencer.md) | The OP-Z's front panel and the master of the modules to its right: tempo, transport, eight tracks of 16 steps, recording, the mixer, 16 patterns with chains, and project slots. |
 | [Step components](step-components.md) | The Sequencer's 14 per-step modifiers: pulses, ratchets, ramps, glides, sweeps, jumps and sparks. |
-| [Synth tracks](synth-tracks.md) | What every track shares (status screen, pages, LFO, jacks), the synth note styles, then Digital, Analog, Cluster and Organ. |
+| [Synth tracks](synth-tracks.md) | What every track shares (status screen, pages, LFO, jacks), the synth note styles, then the eleven engines from Digital to EP. |
 | [Drum tracks](drum-tracks.md) | Drum, the kick, snare, perc and sample tracks: 24-sound kits, built in or loaded from files, and the drum note styles. |
 | [FX tracks](fx-tracks.md) | Delay, Reverb, Rymd, Chorus, Crush and Dist, the send effects on FX tracks 9 and 10. |
 | [Breakout and Drum Breakout](breakout.md) | A synth track and a drum track whose sounds are made of other modules. |
@@ -35,8 +35,8 @@
 3. Click the bass track's key beside the dials, play the round keys to hear it, and click steps to paste the last
    notes played into them.
 4. Click **PLAY**. Turn the Sequencer's dials to shape the sound, and click **SHIFT** for the next page.
-5. Add Analog, Cluster or Organ to the right of Digital for tracks 6, 7 and 8, and a Screen beside any engine to see
-   its pages.
+5. Add three more engines (Analog, Organ, EP or any other) to the right of Digital for tracks 6, 7 and 8, and a
+   Screen beside any engine to see its pages.
 6. Add up to four **Drum**s anywhere in the row for tracks 1 to 4. Select the kick track and click steps 1, 5, 9
    and 13 for four on the floor.
 7. Add a **Delay** anywhere in the row, select the bass track and turn its **FX 1** send up on the red page for

@@ -23,10 +23,17 @@ The Sequencer module is the master, and controls up to eight expanders to its ri
 | --- | --- |
 | [Sequencer](docs/sequencer.md) | The OP-Z's front panel: tempo, transport, eight tracks of 16 steps with micro timing, a master track that transposes them in the key it detects, an arpeggiator on the arp track, recording, [step components](docs/step-components.md), a mixer, 16 patterns per project with chains, and ten project slots that import and export the OP-Z's project files. |
 | [Drum](docs/drum-tracks.md) | The four drum tracks: 24 sounds a kit, synthesized or loaded from OP-1 and OP-Z kits, AIFF and WAV, with the drum note styles. |
-| [Digital](docs/synth-tracks.md#the-engines) | Two binary-counter oscillators reading a 4-bit sine, one frequency-modulating the other. |
+| [Digital](docs/synth-tracks.md#the-engines) | A sine driven past full scale so it wraps like an overflowing integer, with phase feedback. |
 | [Analog](docs/synth-tracks.md#the-engines) | Saw, sub and noise through an enveloped low-pass. |
 | [Cluster](docs/synth-tracks.md#the-engines) | Seven detuned saws per note. |
 | [Organ](docs/synth-tracks.md#the-engines) | Drawbar FM organ in eight algorithms. |
+| [Bow](docs/synth-tracks.md#the-engines) | A bowed string waveguide, with a second string for chorus. |
+| [Electric](docs/synth-tracks.md#the-engines) | Two sines modulating each other, at any ratio from 0.5 to 4. |
+| [Saw](docs/synth-tracks.md#the-engines) | Two saws through an enveloped resonant low-pass. |
+| [Shade](docs/synth-tracks.md#the-engines) | A soft FM piano with detune and drive. |
+| [Uranus](docs/synth-tracks.md#the-engines) | A clean sine bass with harmonics and feedback. |
+| [Volt](docs/synth-tracks.md#the-engines) | Saw, pulse and sub, with a width sweep and ring modulation. |
+| [EP](docs/synth-tracks.md#the-engines) | FM electric piano in eight algorithms, from tines to a toy. |
 | [Breakout](docs/breakout.md) | A synth track that sends its notes, envelope, LFO and dials out as CV and takes its voice back in. |
 | [Drum Breakout](docs/breakout.md#drum-breakout) | A drum track that sends its triggers, sounds, velocity, envelope, LFO and dials out as CV and takes its sound back in. |
 | [Delay, Reverb, Rymd, Chorus, Crush, Dist](docs/fx-tracks.md) | The OP-Z's send effects, on FX tracks 9 and 10: every engine's FX 1 and FX 2 sends reach them over the bus. |

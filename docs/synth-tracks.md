@@ -1,7 +1,7 @@
 # Synth tracks
 
-Digital, Analog, Cluster, Organ and [Breakout](breakout.md) are all the same OP-Z synth track around a different
-sound. Everything on this page but the last section applies to each of them; only their two sound dials differ. The
+Digital, Analog, Cluster, Organ, Bow, Electric, Saw, Shade, Uranus, Volt, EP and [Breakout](breakout.md) are all the
+same OP-Z synth track around a different sound. Everything on this page but the last section applies to each of them; only their two sound dials differ. The
 [drum tracks](drum-tracks.md) share all of it but the note styles and portamento.
 
 <picture>
@@ -102,3 +102,13 @@ dials like any other. A patch saved before the arp opens with it off, so the arp
 | Analog | A saw, a square an octave below and noise, through a low-pass the amp envelope opens | **Mix**: saw, then saw and sub, then sub and noise | **Envelope**: how far the filter closes between notes, for the envelope to sweep it up to eight octaves |
 | Cluster | Seven detuned saws per note | **Tone**: a low-pass that follows the note, from a near sine to fully bright | **Gravity**: pulls the saws together, from almost two semitones each way to one saw |
 | Organ | Up to four sine carriers and one modulator, in eight algorithms | **Algorithm**: flute, jazz, full and gospel drawbars, reed, pipe, combo, bell | **Tweak**: FM depth, from pure drawbars to grit |
+| Bow | A bowed string as a waveguide; the bow's speed follows the amp envelope, so a note swells in and rings on | **Tension**: bow pressure and the string's brightness, from airy to biting | **Chorus**: a second string either side of the note, up to 9 cents each way |
+| Electric | Two sines modulating each other's phase, opened up by the amp envelope | **Cross mod**: how hard, from two pure tones to a snarl | **X mod**: the second sine's ratio to the note, 0.5 to 4 through the inharmonic ratios between |
+| Saw | Two saws a few cents apart through a resonant low-pass | **Envelope**: how far the amp envelope opens the filter, for plucks to swells | **Tone**: where the filter sits over the note, and how much it rings |
+| Shade | A soft FM piano, a sine modulated by another at its own pitch | **Detune**: a second piano against the first, from unison to a wide chorus | **Drive**: a soft clip, from clean to growling |
+| Uranus | A clean bass: a sine operator that feeds back on itself, as a DX7's does | **Tone**: adds the second and third harmonics | **Feedback**: from a sine towards a saw |
+| Volt | A saw, a pulse above it and a triangle sub | **Variation**: the pulse's interval above the saw, unison to two octaves, bringing the sub in as it goes | **Modulation**: a slow sweep of the pulse's width, and ring modulation of saw and pulse |
+| EP | An FM electric piano in eight algorithms, struck bright and mellowing as it fades | **Algorithm**: tine, bright tine, dyno, reed, soft, bell, glass, toy | **Tone**: how hard the hammer strikes |
+
+A Sequencer has four synth tracks, so four of these play at once; a fifth synth engine along the row has no track
+and shows a dash. The OP-Z's twelfth engine, Sample (a PCM sample player), isn't here yet.
