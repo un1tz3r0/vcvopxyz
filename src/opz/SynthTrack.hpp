@@ -20,6 +20,17 @@ namespace opz {
 
 enum Style { POLY, MONO, LEGATO, STYLES_LEN };
 
+/** An engine's optional SOUND_SINCE: the version its two dials took their present meaning, so older patches reset
+them rather than load a value meant for something else. */
+template <class Engine, class = void>
+struct SoundSince {
+	static constexpr const char* value = nullptr;
+};
+template <class Engine>
+struct SoundSince<Engine, std::void_t<decltype(Engine::SOUND_SINCE)>> {
+	static constexpr const char* value = Engine::SOUND_SINCE;
+};
+
 template <class Engine>
 struct SynthTrack : Track {
 
@@ -39,6 +50,15 @@ struct SynthTrack : Track {
 		Engine::configSound(this, P1_PARAM, P2_PARAM);
 		configTrack({"Poly", "Mono", "Legato"},
 			"Mono plays the newest held note and retriggers on every change; legato slides between held notes without retriggering");
+	}
+
+	void fromJson(json_t* root) override {
+		Track::fromJson(root);
+		const char* version = json_string_value(json_object_get(root, "version"));
+		if (SoundSince<Engine>::value && (!version || string::Version(version) < string::Version(SoundSince<Engine>::value))) {
+			paramQuantities[P1_PARAM]->reset();
+			paramQuantities[P2_PARAM]->reset();
+		}
 	}
 
 	const xyz::Adsr* envelope(int voice, float* velocity) const override {
