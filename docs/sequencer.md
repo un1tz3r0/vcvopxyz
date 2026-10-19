@@ -58,7 +58,8 @@ row of jacks: the transport's inputs, the notes to record, then the transport's 
   and its LED turns white; double-click it to let go of the lock. A lock holds the engine's dial where you set it
   for as long as the step is under the playhead, then lets it go back to where the dial is, so the knob itself
   never moves. Any dial on any of the four pages can be locked, and a held step plays with its locks while stopped,
-  so you can hear them. A step's tooltip counts its locks, and its context menu clears them.
+  so you can hear them. A step's tooltip counts its locks, and its context menu clears them. With a step held, hold
+  **STOP** until every step lights red to clear its locks (playback carries on); let go sooner to keep them.
 - **Step components:** with **SHIFT** latched, steps take components that bend how they play. See
   [Step components](step-components.md).
 
@@ -178,6 +179,12 @@ Click **REC** to switch it on. While playing, notes from the keys and inputs go 
 micro timing and length. Hold notes on the inputs and click **−** to erase them from the steps they pass instead,
 until they're released. While stopped, REC records a step at a time: each note or chord goes into the blinking step,
 which moves on when they're released. Click a step to move it there.
+
+Turn a dial while recording and playing to record it as parameter locks: each step the playhead passes while the
+dial moves locks it where it is then, and steps it passes while the dial is still keep the locks they had. The dial
+itself moves too, for the steps without locks. One turn is one undo step. Hold **STOP** while recording until every
+step lights red to clear all the selected track's locks; let go sooner to keep them. Playback stops at the press, as
+it always does.
 
 ## Transport and clock
 

@@ -4,8 +4,6 @@
 
 In Vic's order (2026-10-19); the OP-XY waits for a fresh start.
 
-- [ ] **Recording dial moves as parameter locks** while recording live, if the OP-Z does: the dials only lock a
-      held step now.
 - [ ] **Kit editing:** a kit's slice starts and ends, and each slice's tuning and play mode, can't be changed in
       Rack yet, and kits can't be saved back out as OP-1 kit files.
 - [ ] **More OP-Z synth engines,** each a `Voice` and two dials on the shared synth track.

@@ -133,7 +133,10 @@ tested on its own. `src/opz/Sequencer.cpp` is the module: the face, the modes, r
   let its locks through, and the lane carries the locks of the slot under the playhead; the engine reads every dial
   through `value()`, which takes a lock over the param, so the knob stays put. While a step is held, the dials
   turn four `LockQuantity` params on the Sequencer that read and write the held step's locks on the UI thread, as
-  the step menu does, and the pattern's undo records the change.
+  the step menu does, and the pattern's undo records the change. Recording live, the audio thread watches the
+  engine params under the four dials at each control step, and a change locks the param on the step under the
+  playhead; a recalled scene moves them without counting as a turn. The undo history waits until the dials have been
+  still half a second, so a turn is one edit (the knob's own move is another).
 - **Arp:** the arp lives in the arp track's player, so every engine, Breakout included, gets its notes as ordinary
   ones over the bus. With it on, the player's channels hold the notes (all 16, whatever the polyphony) and a second
   set of channels, as many as the polyphony, carries what it plays. Its dials are the engine's four extra params,
