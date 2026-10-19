@@ -11,6 +11,13 @@ void init(Plugin* p) {
 	p->addModel(modelAnalog);
 	p->addModel(modelCluster);
 	p->addModel(modelOrgan);
+	p->addModel(modelBow);
+	p->addModel(modelElectric);
+	p->addModel(modelSaw);
+	p->addModel(modelShade);
+	p->addModel(modelUranus);
+	p->addModel(modelVolt);
+	p->addModel(modelEP);
 	p->addModel(modelBreakout);
 	p->addModel(modelDrumBreakout);
 	p->addModel(modelDelay);

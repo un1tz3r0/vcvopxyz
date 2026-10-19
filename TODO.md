@@ -2,14 +2,13 @@
 
 ## Next
 
-In Vic's order (2026-10-19); the OP-XY waits for a fresh start.
-
-- [ ] **More OP-Z synth engines,** each a `Voice` and two dials on the shared synth track.
+- [ ] **Sample,** the OP-Z's last synth engine: a PCM sample player with a crush dial, which could load its sound
+      through `Kit`.
 
 ## Later
 
 - [ ] **More FX,** if the OP-Z has any the six here miss: each is one `Unit` for `FxTrack`.
-- [ ] **The OP-XY:** its sequencer and engines, once the OP-Z's are complete.
+- [ ] **The OP-XY:** its sequencer and engines, in a fresh start once the OP-Z's are complete.
 - [ ] **VCV Library:** releases go on GitHub for now, since VCV's guidelines bar copying a product's layout without
       its maker's permission. Next would be asking teenage engineering; a redesign under another name is the last
       resort.

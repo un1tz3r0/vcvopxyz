@@ -4,7 +4,7 @@ the registration, from drawbar organs to FM reeds and bells; TWEAK is how hard t
 from pure drawbars to grit and bark.
 */
 #include "opz/SynthTrackWidget.hpp"
-#include <array>
+#include "dsp/Sine.hpp"
 
 struct Organ {
 	static constexpr const char* SLUG = "Organ";
@@ -36,23 +36,6 @@ struct Organ {
 		m->configParam(p2, 0.f, 1.f, 0.2f, "Tweak", "%", 0.f, 100.f)->description = "Frequency modulation depth";
 	}
 
-	static constexpr int TABLE = 4096;
-	static inline const std::array<float, TABLE + 1> SINE = []() {
-		std::array<float, TABLE + 1> t;
-		for (int i = 0; i <= TABLE; i++)
-			t[i] = std::sin(2.f * float(M_PI) * i / TABLE);
-		return t;
-	}();
-
-	/** sin(2πx), interpolated from the table. */
-	static float sine(float x) {
-		float f = (x - std::floor(x)) * TABLE;
-		int i = int(f);
-		float fraction = f - i;
-		i &= TABLE - 1; // an x a hair under a whole number rounds up to f = TABLE
-		return SINE[i] + (SINE[i + 1] - SINE[i]) * fraction;
-	}
-
 	struct Voice {
 		float phase = 0.f; // in the note's cycles, 0 to 2
 
@@ -61,10 +44,10 @@ struct Organ {
 			phase += std::fmin(frequency * sampleTime, 0.5f);
 			if (phase >= 2.f)
 				phase -= 2.f;
-			float modulation = tweak * a.depth * sine(a.modulator * phase);
+			float modulation = tweak * a.depth * xyz::sine(a.modulator * phase);
 			float x = 0.f, total = 0.f;
 			for (int i = 0; i < 4 && a.levels[i] > 0.f; i++) {
-				x += a.levels[i] * sine(a.ratios[i] * phase + modulation);
+				x += a.levels[i] * xyz::sine(a.ratios[i] * phase + modulation);
 				total += a.levels[i];
 			}
 			return x / total;
