@@ -109,6 +109,12 @@ are made once, on the UI thread, when the first Drum is created (about 200 ms, 1
 A kit from a file reaches the audio thread through a mutex the audio thread only `try_lock`s, and the kit it
 replaces goes back to the UI thread to be freed, so the audio thread never blocks or frees memory.
 
+The Screen edits a kit through three `Track` hooks (`kit()`, `editSlice()`, `lastSlice()`) that only Drum fills in.
+Slices change in place while they play: the audio thread reads a slice's ends once a sample and stops a voice that
+finds them less than two samples apart, so a half-made edit costs at most a cut-off sound. Editing a built-in kit
+first copies it in as a loaded kit. `Kit::toOp1()` writes the OP-1 kit format the loader reads, resampled to 44.1
+kHz, with the unknown fields (envelope, FX, LFO) at the values OP-1 kits commonly carry.
+
 ## The sequencer
 
 `src/opz/Sequence.hpp` holds the pattern, the track settings and the `Player`, with no Rack in it, so it can be

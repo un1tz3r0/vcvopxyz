@@ -278,6 +278,75 @@ std::unique_ptr<Kit> Kit::loadFolder(const std::string& dir, std::string* error)
 	return kit;
 }
 
+std::vector<uint8_t> Kit::toOp1(bool* cut) const {
+	static constexpr double RATE = 44100.0, MARKER = 4058.0;
+	const size_t most = size_t(INT32_MAX / MARKER);
+	double step = rate / RATE;
+	size_t frames = samples.empty() ? 0 : size_t((samples.size() - 1) / step) + 1;
+	if (cut)
+		*cut = frames > most;
+	frames = std::min(frames, most);
+
+	json_t* root = json_pack("{s:i, s:s, s:s, s:i}", "drum_version", 2, "type", "drum", "name", name.c_str(), "octave", 0);
+	json_t* fields[6];
+	const char* keys[6] = {"start", "end", "pitch", "playmode", "reverse", "volume"};
+	for (int k = 0; k < 6; k++)
+		json_object_set_new(root, keys[k], fields[k] = json_array());
+	for (const Slice& s : slices) {
+		auto marker = [&](int at) { return json_integer(std::lround(std::min(at / step, double(frames)) * MARKER)); };
+		json_array_append_new(fields[0], marker(s.start));
+		json_array_append_new(fields[1], marker(s.end));
+		json_array_append_new(fields[2], json_integer(std::lround(12.0 * std::log2(s.speed) * 512.0)));
+		json_array_append_new(fields[3], json_integer(s.mode == GATE ? 4096 : s.mode == LOOP ? 20480 : 8192));
+		json_array_append_new(fields[4], json_integer(s.reverse ? 24576 : 8192));
+		json_array_append_new(fields[5], json_integer(std::lround(s.gain * 8192.0)));
+	}
+	json_object_set_new(root, "dyna_env", json_pack("[iiiiiiii]", 0, 8192, 0, 8192, 0, 0, 0, 0));
+	json_object_set_new(root, "fx_active", json_false());
+	json_object_set_new(root, "fx_type", json_string("delay"));
+	json_object_set_new(root, "fx_params", json_pack("[iiiiiiii]", 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000));
+	json_object_set_new(root, "lfo_active", json_false());
+	json_object_set_new(root, "lfo_type", json_string("tremolo"));
+	json_object_set_new(root, "lfo_params", json_pack("[iiiiiiii]", 16000, 16000, 16000, 16000, 0, 0, 0, 0));
+	char* text = json_dumps(root, JSON_COMPACT);
+	std::string op1 = std::string("op-1") + text + "\n";
+	std::free(text);
+	json_decref(root);
+	if (op1.size() & 1)
+		op1 += ' ';
+
+	std::vector<uint8_t> f;
+	auto put = [&](uint64_t v, int bytes) {
+		for (int i = bytes - 1; i >= 0; i--)
+			f.push_back(uint8_t(v >> (8 * i)));
+	};
+	auto tag = [&](const char* t) { f.insert(f.end(), t, t + 4); };
+	size_t sound = 2 * frames;
+	tag("FORM");
+	put(4 + 26 + 8 + op1.size() + 16 + sound, 4);
+	tag("AIFF");
+	tag("COMM");
+	put(18, 4);
+	put(1, 2);
+	put(frames, 4);
+	put(16, 2);
+	put(0x400eac44, 4);         // 44100 as an 80-bit extended float
+	put(0, 6);
+	tag("APPL");
+	put(op1.size(), 4);
+	f.insert(f.end(), op1.begin(), op1.end());
+	tag("SSND");
+	put(8 + sound, 4);
+	put(0, 8);
+	for (size_t i = 0; i < frames; i++) {
+		double t = i * step;
+		size_t j = (size_t) t;
+		float a = samples[j], b = j + 1 < samples.size() ? samples[j + 1] : a;
+		put(uint16_t(int16_t(std::lround(clamp(a + (b - a) * float(t - j), -1.f, 1.f) * 32767.f))), 2);
+	}
+	return f;
+}
+
 std::vector<uint8_t> Kit::toWav() const {
 	std::vector<uint8_t> f(44 + 4 * samples.size());
 	auto put = [&](size_t at, uint32_t v, int bytes) {

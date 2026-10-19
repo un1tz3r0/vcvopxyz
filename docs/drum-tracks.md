@@ -34,6 +34,11 @@ pages, LFO and jacks; this page covers only where it differs. To play a drum tra
   Ctrl+D (duplicate) carries the kit's sound.
 - **Kit settings:** a kit file's own slices keep their tuning, volume, direction and play mode: a slice set to gate
   or loop plays that way whatever the note style.
+- **Editing:** a [Screen](screen.md#kit-editor) beside a Drum edits its kit's slices: their ends, tuning, level,
+  play mode and direction. Editing a built-in kit makes a copy of it that saves with the patch, as a loaded kit does.
+- **Saving as a kit file:** the context menu's **Save as a kit file…** writes the kit playing, built in or edited, as
+  an OP-1 and OP-Z kit: a 16-bit AIFF at 44.1 kHz with the slices in it. A kit file holds 12 seconds, so a longer kit
+  is cut short there. These files load back here unchanged, but haven't been tried on an OP-Z yet.
 
 ## Pages
 

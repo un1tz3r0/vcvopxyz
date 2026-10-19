@@ -24,5 +24,26 @@ Below that, every dial of every page is an arc in its colour, with the page the 
 select it and jump to its page (the track row switches track mode on), then drag up or down anywhere on the screen to
 turn it, finely with Ctrl, like the app's touch pad. Each drag is one undo step.
 
+## Kit editor
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/kit-screen-dark.png">
+  <img alt="A Screen editing a Drum's kit" src="assets/kit-screen-light.png" width="270">
+</picture>
+
+Beside a [Drum](drum-tracks.md), a **KIT** button sits by the dial's value. Click it to swap the page's picture for
+the kit, as teenage engineering's drum utility shows one, and again to go back.
+
+- The top strip is the whole kit, with a tick where each slice starts and the slice shown shaded. Click a slice there
+  to show it. Playing a key shows its slice too.
+- Below it is the slice up close. Drag near its green start or blue end to move it, finely with Ctrl.
+- **TUNE** and **LEVEL** drag up and down (four octaves of tuning, up to 400% level). Click **PLAY** to step through
+  one shot, gate and loop, and **REVERSE** to flip it.
+
+The slice's name and length replace the dial's value above. Each drag or click is one undo step, and the dials below
+work as ever.
+
+## The bus
+
 A Screen passes the bus on, so engines to its right still get their tracks from the Sequencer. The engines have no
 dials of their own, so a Screen is the way to edit one that isn't on a Sequencer's bus.

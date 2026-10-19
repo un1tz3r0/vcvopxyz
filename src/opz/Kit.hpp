@@ -36,12 +36,12 @@ struct Kit {
 	Slice slices[SLICES];
 	int used = 0;                   // slices filled by append()
 
-	/** The sound at a fractional position in a slice, interpolated over four samples (Catmull-Rom) that stop at the
-	slice's ends. */
-	float at(double position, const Slice& s) const {
+	/** The sound at a fractional position between `start` and `end`, interpolated over four samples (Catmull-Rom)
+	that stop at the ends. */
+	float at(double position, int start, int end) const {
 		int i = (int) std::floor(position);
 		float f = float(position - i);
-		auto x = [&](int j) { return samples[std::clamp(j, s.start, s.end - 1)]; };
+		auto x = [&](int j) { return samples[std::clamp(j, start, end - 1)]; };
 		float y0 = x(i - 1), y1 = x(i), y2 = x(i + 1), y3 = x(i + 2);
 		float c1 = 0.5f * (y2 - y0), c2 = y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3, c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
 		return ((c3 * f + c2) * f + c1) * f + y1;
@@ -54,6 +54,10 @@ struct Kit {
 	static std::unique_ptr<Kit> load(const std::string& path, std::string* error);
 	/** Up to 24 sounds from a folder of AIFF and WAV files, in order of their names, one per key. */
 	static std::unique_ptr<Kit> loadFolder(const std::string& dir, std::string* error);
+
+	/** As an OP-1 or OP-Z kit file: a 16-bit AIFF at 44.1 kHz with the slices in its "op-1" chunk. The OP-1 counts
+	markers up to 2^31, so only the first 12 seconds fit; `cut` says whether there was more. */
+	std::vector<uint8_t> toOp1(bool* cut = nullptr) const;
 
 	/** As a patch keeps it: the samples as a float WAV, and everything else as JSON. */
 	std::vector<uint8_t> toWav() const;

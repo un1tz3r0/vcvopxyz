@@ -47,11 +47,13 @@ struct Drum : DrumTrack {
 	Voice voices[PORT_MAX_CHANNELS];
 	// A kit from a file: the audio thread's, and one the UI thread hands it, swapped under the mutex. The one swapped
 	// out stays in `incoming` until the UI thread replaces it, so it's never freed on the audio thread.
-	std::unique_ptr<const Kit> loaded, incoming;
+	// The UI thread edits the slices of the one playing in place; see editKit().
+	std::unique_ptr<Kit> loaded, incoming;
 	std::mutex kitMutex;
 	std::atomic<bool> handing{false};
 	std::atomic<int> builtin{-1};  // the built-in kit played without a file: -1 for its track's own
 	const Kit* playing = nullptr;  // the kit the voices are playing
+	std::atomic<int> lastSound{0}; // the slice played last, for the kit editor
 	json_t* savedKit = nullptr;    // a patch's kit, from dataFromJson until onAdd reads its samples
 
 	Drum() {
@@ -70,7 +72,7 @@ struct Drum : DrumTrack {
 	}
 
 	/** The kit to play: one from a file, or the built-in one. */
-	const Kit& kit() const {
+	const Kit& playable() const {
 		return loaded ? *loaded : builtinFor();
 	}
 
@@ -86,7 +88,7 @@ struct Drum : DrumTrack {
 	}
 
 	/** For the UI thread: a kit from a file to play, or null to go back to the built-in ones. */
-	void setKit(std::unique_ptr<const Kit> kit) {
+	void setKit(std::unique_ptr<Kit> kit) {
 		std::lock_guard<std::mutex> lock(kitMutex);
 		incoming = std::move(kit);
 		handing = true;
@@ -100,8 +102,50 @@ struct Drum : DrumTrack {
 	}
 
 	/** For the UI thread: the kit from a file that plays, or will once handed over, or null. */
-	const Kit* fileKit() {
+	Kit* fileKit() {
 		return handing ? incoming.get() : loaded.get();
+	}
+
+	/** For the UI thread: the kit to edit, a copy of the built-in one if no file's is loaded. Its slices change in
+	place while it plays, so the audio thread reads each slice's ends once a sample, and a voice that catches them
+	half changed stops. */
+	Kit* editKit() {
+		{
+			std::lock_guard<std::mutex> lock(kitMutex);
+			if (Kit* k = fileKit())
+				return k;
+		}
+		auto copy = std::make_unique<Kit>(builtinFor());
+		Kit* k = copy.get();
+		useKit(std::move(copy));
+		return k;
+	}
+
+	/** For the UI thread: a slice's settings, its ends kept in the kit and at least two samples apart. */
+	void setSlice(int i, const Kit::Slice& to) {
+		Kit* k = editKit();
+		Kit::Slice& s = k->slices[i];
+		int n = (int) k->samples.size(), start = clamp(to.start, 0, std::max(n - 2, 0)), end = clamp(to.end, start + 2, n);
+		s.start = start;
+		s.end = end;
+		s.speed = clamp(to.speed, 0.25f, 4.f);
+		s.gain = clamp(to.gain, 0.f, 4.f);
+		s.mode = clamp(to.mode, 0, (int) Kit::LOOP);
+		s.reverse = to.reverse;
+	}
+
+	const Kit* kit() override {
+		std::lock_guard<std::mutex> lock(kitMutex);
+		const Kit* k = fileKit();
+		return k ? k : &builtinFor();
+	}
+
+	void editSlice(int i, const Kit::Slice& to) override {
+		setSlice(i, to);
+	}
+
+	int lastSlice() override {
+		return lastSound;
 	}
 
 	std::string soundName(int pitch) override {
@@ -132,7 +176,9 @@ struct Drum : DrumTrack {
 	}
 
 	void noteOn(int c) override {
-		const Kit::Slice& s = playing->slices[soundOf(notePitch(c))];
+		int sound = soundOf(notePitch(c));
+		const Kit::Slice& s = playing->slices[sound];
+		lastSound = sound;
 		if (s.empty())
 			return;
 		int limit = style == MONO ? 1 : std::max(2, channels), sounding = 0;
@@ -178,7 +224,7 @@ struct Drum : DrumTrack {
 
 	void process(const ProcessArgs& args) override {
 		takeKit();
-		const Kit* k = &kit();
+		const Kit* k = &playable();
 		if (k != playing) {
 			for (Voice& v : voices)
 				v.stop();
@@ -192,12 +238,17 @@ struct Drum : DrumTrack {
 			if (!v.active())
 				continue;
 			const Kit::Slice& s = *v.slice;
-			mix += playing->at(v.position, s) * s.gain * v.envelope.process(controls.envelope) * v.velocity * v.fade;
+			int start = s.start, end = s.end;
+			if (end - start < 2) {
+				v.stop();
+				continue;
+			}
+			mix += playing->at(v.position, start, end) * s.gain * v.envelope.process(controls.envelope) * v.velocity * v.fade;
 			v.position += (v.reverse ? -step : step) * s.speed;
-			if (v.position >= s.end || v.position < s.start) {
-				double length = s.end - s.start, into = std::fmod(v.position - s.start, length);
+			if (v.position >= end || v.position < start) {
+				double length = end - start, into = std::fmod(v.position - start, length);
 				if (v.looping)
-					v.position = s.start + (into < 0.0 ? into + length : into);
+					v.position = start + (into < 0.0 ? into + length : into);
 				else
 					v.stop();
 			}
@@ -281,6 +332,37 @@ struct DrumWidget : TrackWidget {
 		osdialog_message(OSDIALOG_WARNING, OSDIALOG_OK, ("Couldn't load " + path + ": " + error).c_str());
 	}
 
+	/** The kit playing as an OP-1 or OP-Z kit file, built in or not. */
+	static void save(Drum* m) {
+		std::vector<uint8_t> file;
+		std::string name;
+		bool cut = false;
+		{
+			std::lock_guard<std::mutex> lock(m->kitMutex);
+			const Kit* k = m->fileKit();
+			const Kit& kit = k ? *k : m->builtinFor();
+			file = kit.toOp1(&cut);
+			name = kit.name;
+		}
+		osdialog_filters* filters = osdialog_filters_parse("OP-1 and OP-Z kits:aif");
+		char* chosen = osdialog_file(OSDIALOG_SAVE, nullptr, (name + ".aif").c_str(), filters);
+		osdialog_filters_free(filters);
+		if (!chosen)
+			return;
+		std::string path = chosen;
+		std::free(chosen);
+		if (system::getExtension(path).empty())
+			path += ".aif";
+		try {
+			system::writeFile(path, file);
+		}
+		catch (const Exception& e) {
+			return (void) osdialog_message(OSDIALOG_WARNING, OSDIALOG_OK, ("Couldn't write " + path + ": " + e.what()).c_str());
+		}
+		if (cut)
+			osdialog_message(OSDIALOG_INFO, OSDIALOG_OK, "The kit is longer than the 12 seconds a kit file holds, so it was cut short there.");
+	}
+
 	void appendContextMenu(Menu* menu) override {
 		TrackWidget::appendContextMenu(menu);
 		Drum* m = getModule<Drum>();
@@ -294,6 +376,7 @@ struct DrumWidget : TrackWidget {
 		menu->addChild(createMenuLabel("Kit: " + name));
 		menu->addChild(createMenuItem("Load a kit file…", "OP-1, OP-Z, AIFF or WAV", [=]() { load(m, false); }));
 		menu->addChild(createMenuItem("Load a folder of sounds…", "one per key", [=]() { load(m, true); }));
+		menu->addChild(createMenuItem("Save as a kit file…", "OP-1 and OP-Z", [=]() { save(m); }));
 		menu->addChild(createSubmenuItem("Built-in kit", "", [=](Menu* sub) {
 			static const char* const names[] = {"Its track's", "Kick", "Snare", "Perc", "Sample"};
 			for (int i = -1; i < DRUM_TRACKS; i++)

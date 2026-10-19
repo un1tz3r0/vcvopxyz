@@ -6,6 +6,7 @@
 #include "Lfo.hpp"
 #include "../TripleBuffer.hpp"
 #include "Bus.hpp"
+#include "Kit.hpp"
 #include <atomic>
 
 /*
@@ -296,6 +297,16 @@ struct Track : Module, BusNode {
 	/** What a note plays, for the Sequencer's keys, where that isn't just its pitch; for the UI thread. */
 	virtual std::string soundName(int pitch) {
 		return "";
+	}
+
+	/** A track that plays a kit, for the Screen to show and edit, on the UI thread: the kit playing, or null; a
+	slice's new settings; and the slice played last. */
+	virtual const Kit* kit() {
+		return nullptr;
+	}
+	virtual void editSlice(int i, const Kit::Slice& to) {}
+	virtual int lastSlice() {
+		return 0;
 	}
 
 	virtual void noteOn(int channel) = 0;
