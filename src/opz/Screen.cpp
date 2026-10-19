@@ -2,7 +2,9 @@
 Screen: the OP-Z's phone app as an expander. Placed to the right of an OP-Z engine, it shows a picture of the page the
 dials are on (the filter over a scope, the envelope with a dot per voice, the LFO or the arp, the mix, the track settings), the
 value of the dial last touched, and every dial of every page. Click a dial on it to select it and its page, and drag
-anywhere on it to change the selected dial, like the app's touch pad.
+anywhere on it to change the selected dial, like the app's touch pad. Beside a Drum, KIT swaps the picture for a kit
+editor, as teenage engineering's drum utility does it: the whole kit, the slice played last up close with its ends to
+drag, and its tuning, level, play mode and direction.
 */
 #include "Track.hpp"
 
@@ -25,6 +27,24 @@ struct Screen : Module, BusNode {
 };
 
 
+/** A slice's settings changed on the Screen, for the undo history. */
+struct SliceChange : history::ModuleAction {
+	int slice = 0;
+	Kit::Slice before, after;
+
+	void apply(const Kit::Slice& s) {
+		if (Track* t = dynamic_cast<Track*>(APP->engine->getModule(moduleId)))
+			t->editSlice(slice, s);
+	}
+	void undo() override {
+		apply(before);
+	}
+	void redo() override {
+		apply(after);
+	}
+};
+
+
 static const NVGcolor INK = nvgRGB(0xe8, 0xe7, 0xe3), DIM = nvgRGB(0x8c, 0x8b, 0x88), FAINT = nvgRGB(0x3a, 0x3b, 0x3f),
 	WELL = nvgRGB(0x0d, 0x0e, 0x10);
 
@@ -43,6 +63,20 @@ struct Display : widget::OpaqueWidget {
 	bool dragging = false;
 	// Dummy snapshot for before the first one arrives.
 	Track::Snapshot empty = {};
+
+	// The kit editor
+	static constexpr int PEAKS = 256;
+	static constexpr const char* FIELDS[4] = {"TUNE", "LEVEL", "PLAY", "REVERSE"};
+	bool kitMode = false;
+	int slice = 0, seenSlice = -1;      // the slice shown, and the last one played when it was picked
+	const Kit* peaksOf = nullptr;       // the kit, and its length, that `peaks` are of
+	size_t peaksSize = 0;
+	std::vector<float> peaks;           // the loudest sample in each of PEAKS stretches of the kit, for the whole of it
+	enum { NO_EDIT, START, END, TUNE, LEVEL } kitDrag = NO_EDIT;
+	Kit::Slice before;                  // the slice as a drag found it
+	double dragged = 0.0;               // where the drag has the end, tuning or level it moves
+	double viewFrom = 0.0, viewTo = 1.0; // the samples the close-up shows, held still while an end is dragged
+	math::Vec pressed;                  // where the last press was, in mm
 
 	math::Vec size() const {
 		return box.size.div(mm2px(1.f));
@@ -91,6 +125,10 @@ struct Display : widget::OpaqueWidget {
 					focus = i;
 				last[i] = v;
 			}
+			if (track != lastTrack)
+				seenSlice = -1;
+			if (track->lastSlice() != seenSlice)
+				slice = seenSlice = track->lastSlice();
 			lastTrack = track;
 			int shown = track->shownPage(), page, dial;
 			if (shown != lastPage && !(locate(track, focus, &page, &dial) && page == shown))
@@ -175,9 +213,29 @@ struct Display : widget::OpaqueWidget {
 		nvgLineTo(vg, s.x - PAD, 7.4f);
 		stroke(vg, FAINT, 0.25f);
 
-		// The selected dial's name in its colour, and its value
+		// The selected dial's name in its colour, and its value; or in the kit editor, the slice's name and length.
+		const Kit* kit = track->kit();
+		bool editing = kit && kitMode;
 		int page, dial;
-		if (focus >= 0 && locate(track, focus, &page, &dial)) {
+		if (kit) {
+			math::Rect chip = kitChip();
+			nvgBeginPath(vg);
+			nvgRoundedRect(vg, RECT_ARGS(chip), 1.f);
+			if (editing) {
+				nvgFillColor(vg, INK);
+				nvgFill(vg);
+			}
+			else
+				stroke(vg, DIM, 0.25f);
+			text(vg, chip.getCenter().x, chip.getCenter().y, 1.8f, editing ? WELL : INK, NVG_ALIGN_CENTER, "KIT");
+		}
+		if (editing) {
+			const Kit::Slice& s = kit->slices[slice];
+			text(vg, PAD, 10.6f, 2.0f, DIM, NVG_ALIGN_LEFT, string::f("sound %d", slice + 1));
+			text(vg, PAD, 15.0f, 3.2f, INK, NVG_ALIGN_LEFT, s.empty() ? "no sound" : !s.name.empty() ? s.name : kit->name);
+			text(vg, kitChip().pos.x - 1.5f, 10.6f, 2.0f, DIM, NVG_ALIGN_RIGHT, string::f("%.2f s", (s.end - s.start) / kit->rate));
+		}
+		else if (focus >= 0 && locate(track, focus, &page, &dial)) {
 			ParamQuantity* q = track->paramQuantities[focus];
 			text(vg, PAD, 10.6f, 2.0f, DIAL_COLORS[dial], NVG_ALIGN_LEFT, track->dialName(focus));
 			text(vg, PAD, 15.0f, 3.8f, INK, NVG_ALIGN_LEFT, q->getDisplayValueString() + q->getUnit());
@@ -190,7 +248,8 @@ struct Display : widget::OpaqueWidget {
 		nvgFill(vg);
 		nvgSave(vg);
 		nvgIntersectScissor(vg, RECT_ARGS(v));
-		switch (shown) {
+		switch (editing ? -1 : shown) {
+			case -1: drawKit(vg, *kit, v); break;
 			case PAGE_SOUND: drawSound(vg, track, snap, v); break;
 			case PAGE_ENVELOPE: drawEnvelope(vg, track, snap, v); break;
 			case PAGE_LFO: track->arp() ? drawArp(vg, track, v) : drawLfo(vg, track, snap, v); break;
@@ -200,6 +259,181 @@ struct Display : widget::OpaqueWidget {
 		nvgRestore(vg);
 
 		drawOverview(vg, track, shown);
+	}
+
+	// Kit editor layout, in mm: KIT beside the readout, then in the picture's place the whole kit, the slice up close,
+	// and its four settings.
+
+	math::Rect kitChip() const {
+		return math::Rect(size().x - PAD - 8.f, 9.f, 8.f, 3.6f);
+	}
+
+	math::Rect kitWhole() const {
+		math::Rect v = visual();
+		return math::Rect(v.pos.x + 1.5f, v.pos.y + 1.5f, v.size.x - 3.f, 7.f);
+	}
+
+	math::Rect kitClose() const {
+		math::Rect v = visual();
+		return math::Rect(v.pos.x + 1.5f, v.pos.y + 10.5f, v.size.x - 3.f, 17.f);
+	}
+
+	math::Rect kitField(int i) const {
+		math::Rect v = visual();
+		float w = (v.size.x - 3.f) / 4;
+		return math::Rect(v.pos.x + 1.5f + w * i, v.pos.y + 29.5f, w, 7.5f);
+	}
+
+	/** The close-up: the slice with a sixth of its length either side, or a little of the kit where it's empty. */
+	void frame(const Kit::Slice& s) {
+		double length = std::max(s.end - s.start, 2048);
+		viewFrom = s.start - length / 6;
+		viewTo = s.start + length * 7 / 6;
+	}
+
+	static std::string fieldValue(int i, const Kit::Slice& s) {
+		switch (i) {
+			case 0: return string::f("%+.1f st", 12.f * std::log2(s.speed));
+			case 1: return string::f("%.0f%%", 100.f * s.gain);
+			case 2: return s.mode == Kit::GATE ? "GATE" : s.mode == Kit::LOOP ? "LOOP" : "ONE SHOT";
+			default: return s.reverse ? "ON" : "OFF";
+		}
+	}
+
+	/** The whole kit with the slice shaded, the slice up close between its ends, and its settings. */
+	void drawKit(NVGcontext* vg, const Kit& k, math::Rect v) {
+		size_t n = k.samples.size();
+		if (&k != peaksOf || n != peaksSize) {
+			peaks.assign(PEAKS, 0.f);
+			for (size_t i = 0; i < n; i++)
+				peaks[i * PEAKS / n] = std::fmax(peaks[i * PEAKS / n], std::fabs(k.samples[i]));
+			float most = *std::max_element(peaks.begin(), peaks.end());
+			for (float& p : peaks)
+				p /= std::fmax(most, 1e-6f);
+			peaksOf = &k;
+			peaksSize = n;
+		}
+		const Kit::Slice& s = k.slices[slice];
+
+		math::Rect w = kitWhole();
+		float mid = w.getCenter().y;
+		auto wholeX = [&](double at) { return w.pos.x + w.size.x * float(at / std::max<size_t>(n, 1)); };
+		nvgBeginPath(vg);
+		nvgRect(vg, wholeX(s.start), w.pos.y, std::fmax(wholeX(s.end) - wholeX(s.start), 0.3f), w.size.y);
+		nvgFillColor(vg, nvgTransRGBAf(DIAL_COLORS[0], 0.25f));
+		nvgFill(vg);
+		nvgBeginPath(vg);
+		for (int b = 0; b < PEAKS; b++) {
+			float x = w.pos.x + w.size.x * (b + 0.5f) / PEAKS, h = std::fmax(peaks[b] * w.size.y / 2, 0.1f);
+			nvgMoveTo(vg, x, mid - h);
+			nvgLineTo(vg, x, mid + h);
+		}
+		stroke(vg, DIM, 0.15f);
+		nvgBeginPath(vg);
+		for (const Kit::Slice& other : k.slices)
+			if (!other.empty()) {
+				nvgMoveTo(vg, wholeX(other.start), w.getBottom() - 1.f);
+				nvgLineTo(vg, wholeX(other.start), w.getBottom());
+			}
+		stroke(vg, INK, 0.2f);
+
+		math::Rect c = kitClose();
+		if (kitDrag != START && kitDrag != END)
+			frame(s);
+		auto closeX = [&](double at) { return c.pos.x + c.size.x * float((at - viewFrom) / (viewTo - viewFrom)); };
+		const int COLUMNS = 120;
+		float cmid = c.getCenter().y;
+		for (int pass = 0; pass < 2; pass++) {
+			nvgBeginPath(vg);
+			for (int col = 0; col < COLUMNS; col++) {
+				double from = viewFrom + (viewTo - viewFrom) * col / COLUMNS, to = viewFrom + (viewTo - viewFrom) * (col + 1) / COLUMNS;
+				bool inside = from >= s.start && from < s.end;
+				if (inside != (pass == 1))
+					continue;
+				long a = std::max(0L, (long) std::floor(from)), b = std::min((long) n, (long) std::ceil(to));
+				float lo = 0.f, hi = 0.f;
+				for (long i = a, stride = std::max(1L, (b - a) / 64); i < b; i += stride) {
+					lo = std::fmin(lo, k.samples[i]);
+					hi = std::fmax(hi, k.samples[i]);
+				}
+				float x = c.pos.x + c.size.x * (col + 0.5f) / COLUMNS;
+				nvgMoveTo(vg, x, cmid - clamp(hi, -1.f, 1.f) * c.size.y / 2 - 0.05f);
+				nvgLineTo(vg, x, cmid - clamp(lo, -1.f, 1.f) * c.size.y / 2 + 0.05f);
+			}
+			stroke(vg, pass ? nvgTransRGBAf(INK, 0.8f) : nvgTransRGBAf(DIM, 0.35f), 0.25f);
+		}
+		for (int e = 0; e < 2; e++) {
+			float x = closeX(e ? s.end : s.start);
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, x, c.pos.y);
+			nvgLineTo(vg, x, c.getBottom());
+			stroke(vg, DIAL_COLORS[e], 0.35f);
+			nvgBeginPath(vg);
+			nvgRoundedRect(vg, e ? x - 1.6f : x, c.pos.y, 1.6f, 2.2f, 0.4f);
+			nvgFillColor(vg, DIAL_COLORS[e]);
+			nvgFill(vg);
+		}
+		if (s.empty())
+			text(vg, c.getCenter().x, c.getCenter().y, 1.8f, DIM, NVG_ALIGN_CENTER, "drag the ends apart for a sound");
+
+		for (int i = 0; i < 4; i++) {
+			math::Rect f = kitField(i);
+			float cx = f.getCenter().x;
+			text(vg, cx, f.pos.y + 1.6f, 1.4f, DIM, NVG_ALIGN_CENTER, FIELDS[i]);
+			text(vg, cx, f.pos.y + 4.4f, 2.0f, INK, NVG_ALIGN_CENTER, fieldValue(i, s));
+			nvgBeginPath(vg);
+			nvgRoundedRect(vg, cx - 4.f, f.pos.y + 6.6f, 8.f, 0.5f, 0.25f);
+			nvgFillColor(vg, DIAL_COLORS[i]);
+			nvgFill(vg);
+		}
+	}
+
+	/** A slice's new settings, and the undo history's step for them when `from` is what they were. */
+	void editSlice(Track* track, const Kit::Slice& to, const Kit::Slice* from = nullptr) {
+		track->editSlice(slice, to);
+		if (!from)
+			return;
+		const Kit::Slice& now = track->kit()->slices[slice];
+		if (now.start == from->start && now.end == from->end && now.speed == from->speed && now.gain == from->gain
+			&& now.mode == from->mode && now.reverse == from->reverse)
+			return;
+		SliceChange* h = new SliceChange;
+		h->name = string::f("edit sound %d", slice + 1);
+		h->moduleId = track->id;
+		h->slice = slice;
+		h->before = *from;
+		h->after = now;
+		APP->history->push(h);
+	}
+
+	/** A press in the kit editor: KIT itself, a slice picked on the whole kit, or the play mode or direction. */
+	bool pressKit(Track* track) {
+		const Kit* k = track->kit();
+		if (!k)
+			return false;
+		if (kitChip().contains(pressed)) {
+			kitMode = !kitMode;
+			return true;
+		}
+		if (!kitMode)
+			return false;
+		math::Rect w = kitWhole();
+		if (w.contains(pressed)) {
+			double at = (pressed.x - w.pos.x) / w.size.x * k->samples.size();
+			for (int i = 0; i < Kit::SLICES; i++)
+				if (!k->slices[i].empty() && at >= k->slices[i].start && at < k->slices[i].end)
+					slice = i;
+			return true;
+		}
+		Kit::Slice s = k->slices[slice], was = s;
+		if (kitField(2).contains(pressed))
+			s.mode = s.mode == Kit::ONESHOT ? Kit::GATE : s.mode == Kit::GATE ? Kit::LOOP : Kit::ONESHOT;
+		else if (kitField(3).contains(pressed))
+			s.reverse = !s.reverse;
+		else
+			return kitClose().contains(pressed) || kitField(0).contains(pressed) || kitField(1).contains(pressed);
+		editSlice(track, s, &was);
+		return true;
 	}
 
 	/** A scope of the output, and the filter's response over it. */
@@ -535,7 +769,8 @@ struct Display : widget::OpaqueWidget {
 	void onButton(const ButtonEvent& e) override {
 		Track* track = module ? module->track() : nullptr;
 		if (track && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT) {
-			int page, param = dialAt(track, e.pos.div(mm2px(1.f)), &page);
+			pressed = e.pos.div(mm2px(1.f));
+			int page, param = pressKit(track) ? -1 : dialAt(track, pressed, &page);
 			if (param >= 0) {
 				focus = param;
 				if (page == PAGE_TRACK)
@@ -550,6 +785,26 @@ struct Display : widget::OpaqueWidget {
 
 	void onDragStart(const DragStartEvent& e) override {
 		Track* track = module ? module->track() : nullptr;
+		const Kit* k = track && kitMode ? track->kit() : nullptr;
+		if (k && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+			before = k->slices[slice];
+			math::Rect c = kitClose();
+			if (c.contains(pressed)) {
+				double at = viewFrom + (viewTo - viewFrom) * (pressed.x - c.pos.x) / c.size.x;
+				kitDrag = std::fabs(at - before.start) <= std::fabs(at - before.end) ? START : END;
+				dragged = kitDrag == START ? before.start : before.end;
+			}
+			else if (kitField(0).contains(pressed)) {
+				kitDrag = TUNE;
+				dragged = 12.0 * std::log2(before.speed);
+			}
+			else if (kitField(1).contains(pressed)) {
+				kitDrag = LEVEL;
+				dragged = before.gain;
+			}
+			if (kitDrag != NO_EDIT)
+				return;
+		}
 		if (!track || e.button != GLFW_MOUSE_BUTTON_LEFT || focus < 0)
 			return;
 		dragging = true;
@@ -559,11 +814,25 @@ struct Display : widget::OpaqueWidget {
 
 	void onDragMove(const DragMoveEvent& e) override {
 		Track* track = module ? module->track() : nullptr;
+		bool fine = (APP->window->getMods() & RACK_MOD_MASK) == RACK_MOD_CTRL;
+		if (track && kitDrag != NO_EDIT && track->kit()) {
+			// The ends follow the pointer across the close-up; tuning and level go 250 pixels up for 48 semitones or 200%.
+			Kit::Slice s = track->kit()->slices[slice];
+			float across = e.mouseDelta.x / getAbsoluteZoom() / mm2px(1.f) / kitClose().size.x, up = -e.mouseDelta.y / 250.f;
+			dragged += (kitDrag == START || kitDrag == END ? across * (viewTo - viewFrom) : kitDrag == TUNE ? 48.0 * up : 2.0 * up) * (fine ? 0.1 : 1.0);
+			if (kitDrag == START || kitDrag == END)
+				(kitDrag == START ? s.start : s.end) = (int) std::lround(dragged);
+			else if (kitDrag == TUNE)
+				s.speed = (float) std::exp2((dragged = std::clamp(dragged, -24.0, 24.0)) / 12.0);
+			else
+				s.gain = float(dragged = std::clamp(dragged, 0.0, 4.0));
+			return editSlice(track, s);
+		}
 		if (!track || !dragging)
 			return;
 		// 250 pixels of travel sweep the whole range, or a tenth of it with Ctrl held, like Rack's knobs.
 		float delta = -e.mouseDelta.y / 250.f;
-		if ((APP->window->getMods() & RACK_MOD_MASK) == RACK_MOD_CTRL)
+		if (fine)
 			delta /= 10.f;
 		dragValue = clamp(dragValue + delta, 0.f, 1.f);
 		track->paramQuantities[focus]->setScaledValue(dragValue);
@@ -571,6 +840,12 @@ struct Display : widget::OpaqueWidget {
 
 	void onDragEnd(const DragEndEvent& e) override {
 		Track* track = module ? module->track() : nullptr;
+		if (kitDrag != NO_EDIT) {
+			kitDrag = NO_EDIT;
+			if (track && track->kit())
+				editSlice(track, track->kit()->slices[slice], &before);
+			return;
+		}
 		if (!track || !dragging)
 			return;
 		dragging = false;

@@ -15,7 +15,7 @@
 | [Drum tracks](drum-tracks.md) | Drum, the kick, snare, perc and sample tracks: 24-sound kits, built in or loaded from files, and the drum note styles. |
 | [FX tracks](fx-tracks.md) | Delay, Reverb, Rymd, Chorus, Crush and Dist, the send effects on FX tracks 9 and 10. |
 | [Breakout and Drum Breakout](breakout.md) | A synth track and a drum track whose sounds are made of other modules. |
-| [Screen](screen.md) | The OP-Z's phone app, as an expander. |
+| [Screen](screen.md) | The OP-Z's phone app, as an expander, and a Drum's kit editor. |
 
 ## Getting it running
 
