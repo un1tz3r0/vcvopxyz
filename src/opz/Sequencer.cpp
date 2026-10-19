@@ -250,6 +250,7 @@ struct Sequencer : Module, BusNode {
 		LIGHTS_LEN
 	};
 	static constexpr float LONG_PRESS = 0.4f, CLEAR_HOLD = 1.f; // seconds
+	static constexpr float TURN_SETTLE = 0.5f; // seconds of still dials that end a recorded turn, for the undo history
 	static constexpr int SOURCES = KEYS + CHANNELS;             // live notes: the keys, then the GATE input's channels
 	static constexpr int ALL_KEYS = LOCK_PARAM - TRACK_PARAM + 1; // from TRACK_PARAM on, then MASTER_PARAM
 	enum { LATCH, FREE };                                         // the master track's note styles
@@ -498,7 +499,16 @@ struct Sequencer : Module, BusNode {
 	Punch punch;
 
 	KeyGesture gestures[ALL_KEYS]; // the keys', from TRACK_PARAM on
-	float clearing = -1.f;       // how long STOP has been held in track mode, or -1
+	float clearing = -1.f;       // how long STOP has been held to clear something, or -1
+	enum { PATTERNS, STEP_LOCKS, TRACK_LOCKS } clears = PATTERNS; // what: the track's or every pattern, or locks
+	int clearStep = -1;          // the held step whose locks it clears
+	// Dial turns recorded live as locks: the engine and params the dials turned at the last control step, their
+	// values then, and how long since a turn was recorded. A recalled scene moves the dials without a turn.
+	Track* watched = nullptr;
+	int watchedParams[4] = {-1, -1, -1, -1};
+	float watchedValues[4] = {};
+	bool rewatch = true;
+	float sinceTurned = INFINITY;
 	dsp::SchmittTrigger gates[CHANNELS], clockIn, runIn, resetIn, contIn, advanceIn;
 	dsp::PulseGenerator clockOut, resetOut, contOut;
 	bool external = false;
@@ -831,6 +841,7 @@ struct Sequencer : Module, BusNode {
 		}
 		muteGroup = scene.muteGroup;
 		readSettings();
+		rewatch = true;
 		held = -1;
 		selection = 0;
 		component = -1;
@@ -1232,16 +1243,24 @@ struct Sequencer : Module, BusNode {
 		}
 		if (clearing >= 0.f) {
 			const KeyGesture& stop = gestures[keyIndex(STOP_PARAM)];
-			if (!stop.down() || !(trackMode || projectMode))
+			if (!stop.down() || !clearable())
 				clearing = -1.f;
 			else if ((clearing = stop.held) >= CLEAR_HOLD) {
-				for (int t = 0; t < LANES; t++)
-					if (projectMode || t == track)
-						lanes[t].pattern.clear();
-				clearAll = projectMode && shifted;
+				if (clears == STEP_LOCKS)
+					lane().pattern.steps[held].clearLocks();
+				else if (clears == TRACK_LOCKS)
+					for (Step& s : lane().pattern.steps)
+						s.clearLocks();
+				else {
+					for (int t = 0; t < LANES; t++)
+						if (projectMode || t == track)
+							lanes[t].pattern.clear();
+					clearAll = projectMode && shifted;
+				}
 				clearing = -1.f;
 			}
 		}
+		recordDials(dt);
 
 		if (erasing) {
 			int step, ticks;
@@ -1252,6 +1271,37 @@ struct Sequencer : Module, BusNode {
 					if (n.on)
 						lane().pattern.steps[step].remove(n.pitch);
 		}
+	}
+
+	/** Whether holding STOP still clears what it started to: the pattern in track mode, every pattern in project
+	mode, the held step's locks, or while recording, the track's. */
+	bool clearable() const {
+		switch (clears) {
+			case STEP_LOCKS: return held >= 0 && held == clearStep && !modal();
+			case TRACK_LOCKS: return recording && !modal();
+			default: return trackMode || projectMode;
+		}
+	}
+
+	/** While recording and playing, a dial turned on the selected track's engine locks its value on the step under
+	the playhead, as the OP-Z records parameter locks live. The dial moves too, as it would without recording. */
+	void recordDials(float dt) {
+		sinceTurned += dt;
+		Track* e = recording && playing && held < 0 && !modal() && track != MASTER ? engine(track) : nullptr;
+		int step, ticks;
+		bool located = e && lane().player.locate(&step, &ticks);
+		for (int d = 0; d < 4; d++) {
+			int p = e ? e->dial(e->shownPage(), d) : -1;
+			float v = p >= 0 ? e->paramQuantities[p]->getScaledValue() : 0.f;
+			if (located && !rewatch && e == watched && p >= 0 && p == watchedParams[d] && v != watchedValues[d]) {
+				lane().pattern.steps[step].lock(p, v);
+				sinceTurned = 0.f;
+			}
+			watchedParams[d] = p;
+			watchedValues[d] = v;
+		}
+		watched = e;
+		rewatch = false;
 	}
 
 	/** Whether this press picks a key up: a long press, or a Ctrl+click, as the context menu allows. */
@@ -1384,9 +1434,18 @@ struct Sequencer : Module, BusNode {
 							s.clearComponents();
 						break;
 					}
-					if (!projectMode)
-						stop();
-					clearing = trackMode || projectMode ? 0.f : -1.f;
+					// Held, it clears a held step's locks, the pattern in track mode, every pattern in project mode, or
+					// while recording, the track's locks.
+					if (held >= 0 && !modal()) {
+						clears = STEP_LOCKS;
+						clearStep = held;
+					}
+					else {
+						if (!projectMode)
+							stop();
+						clears = trackMode || projectMode ? PATTERNS : TRACK_LOCKS;
+					}
+					clearing = clearable() ? 0.f : -1.f;
 					break;
 				case OCTAVE_DOWN_PARAM: shift(-1); break;
 				case OCTAVE_UP_PARAM: shift(1); break;
@@ -1688,7 +1747,7 @@ struct Sequencer : Module, BusNode {
 
 		// Steps: orange for notes, white for the playhead (red while recording), blue for how long the held step's
 		// notes last. In track mode, the tracks on the first eight, white for the one selected and orange while one
-		// plays; with SHIFT, white up to the step count. Holding STOP there fills them red until the pattern clears.
+		// plays; with SHIFT, white up to the step count. Holding STOP to clear something fills them red until it clears.
 		for (int i = 0; i < STEPS; i++) {
 			NVGcolor c = led::WHITE;
 			float b = 0.f;
@@ -2781,7 +2840,9 @@ struct SequencerWidget : ModuleWidget {
 			}
 			m->recall = Sequencer::SETTLED;
 		}
-		for (int t = 0; !m->turningLock && t < LANES; t++) {
+		// A turn of a dial, on a held step's lock or recorded live, is one edit when it's done.
+		bool turning = m->turningLock || m->sinceTurned < Sequencer::TURN_SETTLE;
+		for (int t = 0; !turning && t < LANES; t++) {
 			Sequencer::Lane& l = m->lanes[t];
 			if (l.pattern == l.recorded)
 				continue;

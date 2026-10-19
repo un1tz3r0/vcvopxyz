@@ -98,7 +98,7 @@ dials like any other. A patch saved before the arp opens with it off, so the arp
 
 | Engine | Sound | First dial | Second dial |
 | --- | --- | --- | --- |
-| Digital | Two binary-counter oscillators reading a 32-step, 4-bit sine with no interpolation, one frequency-modulating the other | **Octave**: the modulator's pitch, in octaves from the note | **Feedback**: FM depth |
+| Digital | A sine on a binary counter, driven past full scale so it wraps around like an overflowing integer | **Octave**: how many times each peak wraps, 0 to 7 | **Feedback**: how hard the sine modulates its own phase, leaning it towards a saw |
 | Analog | A saw, a square an octave below and noise, through a low-pass the amp envelope opens | **Mix**: saw, then saw and sub, then sub and noise | **Envelope**: how far the filter closes between notes, for the envelope to sweep it up to eight octaves |
 | Cluster | Seven detuned saws per note | **Tone**: a low-pass that follows the note, from a near sine to fully bright | **Gravity**: pulls the saws together, from almost two semitones each way to one saw |
 | Organ | Up to four sine carriers and one modulator, in eight algorithms | **Algorithm**: flute, jazz, full and gospel drawbars, reed, pipe, combo, bell | **Tweak**: FM depth, from pure drawbars to grit |
