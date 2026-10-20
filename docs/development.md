@@ -51,7 +51,7 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | `src/Digital.cpp`, `Analog.cpp`, `Cluster.cpp`, `Organ.cpp` | The engines. |
 | `src/Drum.cpp` | Drum, the drum track. |
 | `src/Delay.cpp`, `Reverb.cpp`, `Rymd.cpp`, `Chorus.cpp`, `Crush.cpp`, `Dist.cpp` | The FX modules. |
-| `src/Breakout.cpp`, `DrumBreakout.cpp` | Breakout and Drum Breakout, the synth and drum tracks for sounds made of other modules. |
+| `src/Breakout.cpp`, `DrumBreakout.cpp`, `FxBreakout.cpp` | Synth, Drum and Send FX Breakout, the synth, drum and FX tracks for sounds made of other modules. |
 | `src/opz/Screen.cpp` | The Screen expander. |
 | `src/Screen.*` | A reusable display widget whose readouts line up with the controls around it. |
 | `src/ui.hpp` | Panel layout lookup, plus the custom dials, keys, buttons and lights. |

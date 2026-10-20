@@ -19,7 +19,7 @@ track 5 (bass), the next track 6, and so on, and the first [Drum](drum-tracks.md
 and so on to track 4, wherever they sit in the row. The first [FX module](fx-tracks.md) plays FX 1, the next FX 2,
 and takes every engine's sends. Each track's notes, velocity and the tempo go to its engine over
 the bus, and engines with their own outputs unpatched are mixed into **L** and **R**. To play other modules from a
-synth track, use a [Breakout](breakout.md) for its engine, or a [Drum Breakout](breakout.md#drum-breakout) for a drum
+synth track, use a [Synth Breakout](breakout.md) for its engine, or a [Drum Breakout](breakout.md#drum-breakout) for a drum
 track: it sends the track's notes out as CV. A module from another
 plugin ends the chain. The engines have no dials of their own: the Sequencer's four turn them, and a Screen beside
 one shows every page.
@@ -32,7 +32,7 @@ the top under the track icons, the black keys numbered 1 to 0 on the column line
 bottom under the step component icons. Each key has an RGB LED that lights up its symbol. The OP-Z's four index keys,
 **PROJECT**, **MIXER**, **TEMPO** and **SCREEN**, sit on the face's top edge in its corner, as they sit on top of the
 hardware. Where the OP-Z's speaker is, beside the dials, are the keys the hardware has no room for: the display top
-left, the four page keys top right, and along the bottom a key per track with **MASTER** last. Under the face, one
+left, the four page keys top right, and along the bottom a key per track: the eight tracks, the two FX tracks, then **MASTER**. Under the face, one
 row of jacks: the transport's inputs, the notes to record, then the transport's outputs and the mix.
 
 ## Tracks and dials

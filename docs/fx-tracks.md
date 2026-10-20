@@ -8,7 +8,8 @@
 The OP-Z's send effects, as six modules: **Delay**, **Reverb**, **Rymd**, **Chorus**, **Crush** and **Dist**. Each
 plays one of the Sequencer's two FX tracks, the OP-Z's tracks 9 and 10, and takes what every engine sends it with its
 **FX 1** or **FX 2** dial. Its sound goes back into the Sequencer's **L** and **R**, effect only, alongside the
-tracks' own.
+tracks' own. For an effect made of other modules, use a [Send FX Breakout](breakout.md#send-fx-breakout) in place of
+one of them. Select an FX track with its key beside the Sequencer's dials, or with steps 9 and 10 in track mode.
 
 ## On the bus
 

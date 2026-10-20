@@ -29,7 +29,7 @@ An engine takes its track from its kind's count: the first drum engine plays tra
 track 4, the first synth engine track 5, and so on to track 8, and the first FX module FX 1 and the next FX 2, so
 the kinds can mix in any order. The sends travel left with the mix, and the master sends them right again on its next
 sample, so every FX module hears every engine wherever the two sit. The master
-has no CV outputs of its own for the tracks: a Breakout or Drum Breakout engine is the way out to other modules. A module from
+has no CV outputs of its own for the tracks: the three breakouts are the way out to other modules. A module from
 another plugin ends the bus, since `onBus` checks the plugin before casting. A Screen only relays.
 
 Expander messages are the only safe way to share state between modules that Rack may run on different threads, and
@@ -75,10 +75,12 @@ struct Analog {
 Model* modelAnalog = createModel<opz::SynthTrack<Analog>, opz::SynthTrackWidget<Analog>>(Analog::SLUG);
 ```
 
-Breakout is the exception that proves the split: it derives from `SynthTrack<BreakoutSound>` and overrides
-`process` to send each stage out as CV and skip the stages whose outputs are patched, with `lfoInside` turning the
-LFO's inside targets off. Drum and Drum Breakout share `DrumTrack` (src/opz/DrumTrack.hpp): the drum dials, note
-styles and keys. The two breakouts share `Track::emitReturn`, the return through whatever isn't patched out.
+Synth Breakout (slug `Breakout`, kept for old patches) is the exception that proves the split: it derives from
+`SynthTrack<BreakoutSound>` and overrides `process` to send each stage out as CV and skip the stages whose outputs
+are patched, with `lfoInside` turning the LFO's inside targets off. Drum and Drum Breakout share `DrumTrack` (src/opz/DrumTrack.hpp): the drum dials, note
+styles and keys. The synth and drum breakouts share `Track::emitReturn`, the return through whatever isn't patched
+out. Send FX Breakout derives from `FxTrack` and overrides `process` to send the bus's send out and take the effect
+back through the filter; it shares Delay's time keys through `opz::TempoTime`.
 
 The FM engines (Organ, Electric, Shade, Uranus, Volt, EP) share `xyz::sine` and `xyz::softClip` in
 `src/dsp/Sine.hpp`: a 4096-point table, linearly interpolated, and a rational tanh. The saws use `src/dsp/Blep.hpp`.
@@ -197,7 +199,8 @@ Panels are generated, never drawn by hand. `res-src/panel.py` builds every panel
 the kit, `synth_track.py` for the shared synth track layout, `opz.py` for the OP-Z's icons and keys) and writes
 light and dark SVGs into `res/`, with text converted to paths. A hidden `components` layer records where each widget
 goes, by its C++ enum name, and `PanelLayout` reads it back at runtime, so the panel is the only place the layout is
-written down.
+written down. Every track's panel carries its kind, SYNTH, DRUM or SEND FX, as an inverted tag between the top
+screws, so the three kinds tell apart at a glance in the module browser.
 
 The OP-Z's artwork, name and logo stay off the panels: the icons are redrawn, and the modules are named by what they
 do, so the plugin can go to the VCV Library some day.

@@ -78,12 +78,13 @@ def face(f):
         round_key(f, f'{name}_PARAM', cx, 0, symbol)
 
     # Beside the dials, where the OP-Z's speaker is: the display top left, the page keys top right, and a key per track
-    # along the bottom with the master track's last.
+    # along the bottom in the OP-Z's order: the eight tracks, the two FX tracks, then the master track.
     for i in range(4):
         round_key(f, f'PAGE{i}_PARAM', BLANK - 3.5 - KEY_PITCH * (3 - i), 3.5)
-    for t in range(9):
-        round_key(f, f'SELECT{t}_PARAM' if t < 8 else 'MASTER_PARAM', BLANK * (t + 0.5) / 9, CELL - 3.3,
-                  TRACKS[t] if t < 8 else 'master')
+    keys = [(f'SELECT{t}_PARAM', TRACKS[t]) for t in range(8)] + [('FX_SELECT0_PARAM', 'fx1'), ('FX_SELECT1_PARAM', 'fx2'),
+                                                                   ('MASTER_PARAM', 'master')]
+    for i, (name, symbol) in enumerate(keys):
+        round_key(f, name, BLANK * (i + 0.5) / len(keys), CELL - 3.3, symbol)
     display(f, 2.5, 3.4)
 
     # The dials, each with its LED in the corner of its cell.

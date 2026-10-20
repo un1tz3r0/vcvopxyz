@@ -5,28 +5,13 @@ the echoes stay as they do: a low-pass inside the loop darkens each repeat furth
 */
 #include "opz/FxTrack.hpp"
 
-struct Delay {
+struct Delay : opz::TempoTime {
 	static constexpr const char* SLUG = "Delay";
-	static constexpr int TIME_KEY = 11; // 3/16, a dotted eighth
 	static constexpr float LONGEST = 6.f; // seconds: the highest key at 40 BPM, an octave longer by the LFO
 
 	static void configSound(Module* m, int p1, int p2) {
 		m->configParam(p1, 0.f, 1.f, 0.4f, "Amount", "%", 0.f, 100.f)->description = "Feedback: how much of each echo repeats";
 		m->configParam(p2, 0.f, 1.f, 0.7f, "Cutoff", "%", 0.f, 100.f)->description = "How bright the repeats stay";
-	}
-
-	static float seconds(int key, float secondsPerBeat) {
-		return (key + 1) / 16.f * secondsPerBeat;
-	}
-
-	/** The key's time as a share of a bar, in lowest terms. */
-	static std::string timeName(int key) {
-		int n = key + 1, d = 64;
-		while (n % 2 == 0 && d > 1) {
-			n /= 2;
-			d /= 2;
-		}
-		return string::f("%d/%d", n, d);
 	}
 
 	struct Unit {

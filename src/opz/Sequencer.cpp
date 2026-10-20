@@ -232,6 +232,8 @@ struct Sequencer : Module, BusNode {
 		MASTER_PARAM, MASTER_LENGTH_PARAM, MASTER_QUANTIZE_PARAM, MASTER_STEP_COUNT_PARAM, MASTER_STEP_LENGTH_PARAM, MASTER_STYLE_PARAM,
 		// The FX tracks' settings, after those again.
 		ENUMS(FX_LENGTH_PARAM, FX_TRACKS), ENUMS(FX_QUANTIZE_PARAM, FX_TRACKS), ENUMS(FX_STEP_COUNT_PARAM, FX_TRACKS), ENUMS(FX_STEP_LENGTH_PARAM, FX_TRACKS),
+		// The FX tracks' keys, last of all.
+		ENUMS(FX_SELECT_PARAM, FX_TRACKS),
 		PARAMS_LEN
 	};
 	enum InputId { CLOCK_INPUT, RUN_INPUT, RESET_INPUT, CONT_INPUT, ADVANCE_INPUT, VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, INPUTS_LEN };
@@ -244,7 +246,7 @@ struct Sequencer : Module, BusNode {
 	};
 	static constexpr int JACKS = OLD_TRACK_OUTPUT; // the outputs on the panel
 	enum LightId {
-		ENUMS(KEY_LIGHT, 3 * (LOCK_PARAM - TRACK_PARAM + 1)), ENUMS(DIAL_LIGHT, 3 * 4),
+		ENUMS(KEY_LIGHT, 3 * (LOCK_PARAM - TRACK_PARAM + 1 + FX_TRACKS)), ENUMS(DIAL_LIGHT, 3 * 4),
 		INTERNAL_LIGHT, EXTERNAL_LIGHT,
 		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * JACKS),
 		LIGHTS_LEN
@@ -252,15 +254,20 @@ struct Sequencer : Module, BusNode {
 	static constexpr float LONG_PRESS = 0.4f, CLEAR_HOLD = 1.f; // seconds
 	static constexpr float TURN_SETTLE = 0.5f; // seconds of still dials that end a recorded turn, for the undo history
 	static constexpr int SOURCES = KEYS + CHANNELS;             // live notes: the keys, then the GATE input's channels
-	static constexpr int ALL_KEYS = LOCK_PARAM - TRACK_PARAM + 1; // from TRACK_PARAM on, then MASTER_PARAM
+	static constexpr int MASTER_KEY = LOCK_PARAM - TRACK_PARAM;   // the keys run from TRACK_PARAM on, then MASTER_PARAM,
+	static constexpr int ALL_KEYS = MASTER_KEY + 1 + FX_TRACKS;   // then the FX tracks'
 	enum { LATCH, FREE };                                         // the master track's note styles
 
 	/** A key's place among them all, for its gesture and its light, and back. */
 	static int keyIndex(int param) {
-		return param == MASTER_PARAM ? ALL_KEYS - 1 : param - TRACK_PARAM;
+		return param >= FX_SELECT_PARAM ? MASTER_KEY + 1 + param - FX_SELECT_PARAM : param == MASTER_PARAM ? MASTER_KEY : param - TRACK_PARAM;
 	}
 	static int keyParam(int index) {
-		return index == ALL_KEYS - 1 ? MASTER_PARAM : TRACK_PARAM + index;
+		return index > MASTER_KEY ? FX_SELECT_PARAM + index - MASTER_KEY - 1 : index == MASTER_KEY ? MASTER_PARAM : TRACK_PARAM + index;
+	}
+	/** A lane's key. */
+	static int selectKey(int t) {
+		return t == MASTER ? MASTER_PARAM : t >= FX1 ? FX_SELECT_PARAM + t - FX1 : SELECT_PARAM + t;
 	}
 	static int keyLight(int param) {
 		return KEY_LIGHT + 3 * keyIndex(param);
@@ -548,6 +555,8 @@ struct Sequencer : Module, BusNode {
 		for (int t = 0; t < TRACKS; t++)
 			configKey<TrackKeyQuantity>(this, SELECT_PARAM + t)->description = "Selects it for the keys, the steps and the dials. "
 				"On the master track with SHIFT latched, switches the master track's transposing of it";
+		for (int f = 0; f < FX_TRACKS; f++)
+			configKey(this, FX_SELECT_PARAM + f, trackName(FX1 + f))->description = "Selects it for the keys, the steps and the dials";
 		configKey(this, MASTER_PARAM, trackName(MASTER))->description = "Selects the master track, whose notes move the tracks it "
 			"transposes, in key. With it selected and SHIFT latched, the track keys pick which those are";
 		configSwitch(MASTER_STYLE_PARAM, LATCH, FREE, LATCH, "Master track note style", {"Latch", "Free"})->description =
@@ -1312,9 +1321,9 @@ struct Sequencer : Module, BusNode {
 	/** A step acts when it's let go, so the module can tell a click from a long press, which picks it up as soon as it's
 	long enough; a Ctrl+click picks it up straight away. SHIFT does the same. The other keys act as they go down. */
 	void onKey(int p, KeyGesture::Event e, KeyGesture& g) {
-		if (p == MASTER_PARAM) {
+		if (p == MASTER_PARAM || p >= FX_SELECT_PARAM) {
 			if (e == KeyGesture::PRESS)
-				select(MASTER);
+				select(p == MASTER_PARAM ? MASTER : FX1 + p - FX_SELECT_PARAM);
 		}
 		else if (p >= PAGE_PARAM) {
 			if (e == KeyGesture::PRESS)
@@ -1906,8 +1915,8 @@ struct Sequencer : Module, BusNode {
 		// The track keys: white for the one selected, orange while one is busy, or on the master track with SHIFT
 		// latched, green for the tracks it transposes. The page keys light in their colours, brightly for the page the
 		// selected track's engine is on.
-		for (int t = 0; t < FX1; t++) {
-			int key = t == MASTER ? MASTER_PARAM : SELECT_PARAM + t;
+		for (int t = 0; t < LANES; t++) {
+			int key = selectKey(t);
 			if (choosingTransposed() && t < TRACKS)
 				setKeyLight(key, led::GREEN, transposed >> t & 1);
 			else
@@ -2775,6 +2784,10 @@ struct SequencerWidget : ModuleWidget {
 			if (p == Sequencer::MASTER_PARAM) {
 				name = "MASTER";
 				symbol = "master";
+			}
+			else if (p >= Sequencer::FX_SELECT_PARAM) {
+				name = string::f("FX_SELECT%d", p - Sequencer::FX_SELECT_PARAM);
+				symbol = string::f("fx%d", p - Sequencer::FX_SELECT_PARAM + 1);
 			}
 			else if (p >= Sequencer::PAGE_PARAM)
 				name = string::f("PAGE%d", p - Sequencer::PAGE_PARAM);

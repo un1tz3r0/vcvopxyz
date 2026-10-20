@@ -123,7 +123,7 @@ struct TrackWidget : ModuleWidget {
 		static const char* const inputs[] = {"VOCT", "GATE", "VELOCITY", "CLOCK", "RESET", "EXT", "RETURN_L", "RETURN_R"};
 		static const char* const outputs[] = {"LEFT", "RIGHT", "FX1", "FX2",
 			"CV_VOCT", "CV_GATE", "CV_ENV", "CV_LFO", "CV_P1", "CV_P2", "CV_FILTER", "CV_RESONANCE", "CV_FX1", "CV_FX2",
-			"CV_TRIGGER", "CV_SOUND", "CV_VELOCITY"};
+			"CV_TRIGGER", "CV_SOUND", "CV_VELOCITY", "CV_SEND_L", "CV_SEND_R", "CV_TIME"};
 		for (int i = 0; i < Track::INPUTS_LEN; i++) {
 			std::string name = inputs[i];
 			if (!layout.has(name + "_INPUT"))
