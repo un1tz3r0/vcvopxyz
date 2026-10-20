@@ -1,6 +1,6 @@
 # Synth tracks
 
-Digital, Analog, Cluster, Organ, Bow, Electric, Saw, Shade, Uranus, Volt, EP and [Breakout](breakout.md) are all the
+Digital, Analog, Cluster, Organ, Bow, Electric, Saw, Shade, Uranus, Volt, EP and [Synth Breakout](breakout.md) are all the
 same OP-Z synth track around a different sound. Everything on this page but the last section applies to each of them; only their two sound dials differ. The
 [drum tracks](drum-tracks.md) share all of it but the note styles and portamento.
 

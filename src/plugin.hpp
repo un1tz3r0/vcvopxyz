@@ -21,6 +21,7 @@ extern Model* modelVolt;
 extern Model* modelEP;
 extern Model* modelBreakout;
 extern Model* modelDrumBreakout;
+extern Model* modelFxBreakout;
 extern Model* modelDelay;
 extern Model* modelReverb;
 extern Model* modelRymd;

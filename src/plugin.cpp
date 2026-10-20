@@ -20,6 +20,7 @@ void init(Plugin* p) {
 	p->addModel(modelEP);
 	p->addModel(modelBreakout);
 	p->addModel(modelDrumBreakout);
+	p->addModel(modelFxBreakout);
 	p->addModel(modelDelay);
 	p->addModel(modelReverb);
 	p->addModel(modelRymd);

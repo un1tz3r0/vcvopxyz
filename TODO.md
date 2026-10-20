@@ -51,4 +51,6 @@
       the saved chains.
 - [ ] A project switch's undo step holds the project either side, about 800 KB now that a slot has 16 patterns;
       a long session of switches adds up.
+- [ ] The docs' screenshots predate 2.0.21's kind tags, the Sequencer's FX track keys and Synth Breakout's name.
+      Reshoot them.
 - [ ] **Dead code:** `src/Screen.{hpp,cpp}` and the unused widgets in `src/ui.hpp`, with their SVGs.

@@ -1,7 +1,7 @@
 {
   "slug": "vcvopxyz",
   "name": "vcvopxyz",
-  "version": "2.0.20",
+  "version": "2.0.21",
   "license": "MIT",
   "brand": "un1tz3r0",
   "author": "Victor Condino",
@@ -208,7 +208,7 @@
     },
     {
       "slug": "Breakout",
-      "name": "Breakout",
+      "name": "Synth Breakout",
       "description": "An OP-Z synth track for a voice made of other modules: pitch, gate, envelope, LFO and dials out, the sound back in through its filter and envelope",
       "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/breakout.md",
       "tags": [
@@ -233,6 +233,19 @@
         "Polyphonic",
         "Filter",
         "Envelope generator",
+        "Low-frequency oscillator"
+      ]
+    },
+    {
+      "slug": "FxBreakout",
+      "name": "Send FX Breakout",
+      "description": "An OP-Z FX track for an effect made of other modules: the send, notes, time, LFO and dials out, the effect back in through its filter and level",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/breakout.md#send-fx-breakout",
+      "tags": [
+        "Effect",
+        "Hardware clone",
+        "Utility",
+        "Filter",
         "Low-frequency oscillator"
       ]
     },

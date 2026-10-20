@@ -22,6 +22,26 @@ reverb's predelay: the lowest key is the shortest. The effect is a struct with:
 */
 namespace opz {
 
+/** Delay's time keys, in sixty-fourths of a bar from 1/64 on the lowest key to 3/8 on the highest, starting on 3/16,
+a dotted eighth. Send FX Breakout's TIME follows the same keys. */
+struct TempoTime {
+	static constexpr int TIME_KEY = 11;
+
+	static float seconds(int key, float secondsPerBeat) {
+		return (key + 1) / 16.f * secondsPerBeat;
+	}
+
+	/** The key's time as a share of a bar, in lowest terms. */
+	static std::string timeName(int key) {
+		int n = key + 1, d = 64;
+		while (n % 2 == 0 && d > 1) {
+			n /= 2;
+			d /= 2;
+		}
+		return string::f("%d/%d", n, d);
+	}
+};
+
 /** The FX track's dials after the LFO, and the clock, for an effect. */
 struct FxControls {
 	float p1 = 0.f, p2 = 0.f;

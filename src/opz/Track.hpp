@@ -124,7 +124,7 @@ struct Track : Module, BusNode {
 		PARAMS_LEN
 	};
 	static_assert(PARAMS_LEN == SOUND_PARAMS && ARP_SPEED_PARAM == ARP_PARAMS, "a step locks any of a track's params");
-	// The return and the CV outputs belong to Breakout and Drum Breakout, which hand the voice to other modules; the
+	// The return and the CV outputs belong to the breakouts, which hand the voice or the effect to other modules; the
 	// other engines' panels leave them out. Ids are append-only, since patches save them.
 	enum InputId { VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, CLOCK_INPUT, RESET_INPUT, EXT_INPUT, RETURN_L_INPUT, RETURN_R_INPUT, INPUTS_LEN };
 	enum OutputId {
@@ -132,6 +132,7 @@ struct Track : Module, BusNode {
 		CV_VOCT_OUTPUT, CV_GATE_OUTPUT, CV_ENV_OUTPUT, CV_LFO_OUTPUT, CV_P1_OUTPUT, CV_P2_OUTPUT,
 		CV_FILTER_OUTPUT, CV_RESONANCE_OUTPUT, CV_FX1_OUTPUT, CV_FX2_OUTPUT,
 		CV_TRIGGER_OUTPUT, CV_SOUND_OUTPUT, CV_VELOCITY_OUTPUT,
+		CV_SEND_L_OUTPUT, CV_SEND_R_OUTPUT, CV_TIME_OUTPUT,
 		OUTPUTS_LEN
 	};
 	static constexpr int AUDIO_OUTPUTS = CV_VOCT_OUTPUT;
@@ -276,7 +277,8 @@ struct Track : Module, BusNode {
 		configInput(RETURN_R_INPUT, "Return right");
 		const char* const cvs[] = {"1V/octave pitch", "Gate", "Envelope (0-10V)", "LFO (±5V)", "", "",
 			"Filter (0-10V)", "Resonance (0-10V)", "FX 1 send (0-10V)", "FX 2 send (0-10V)",
-			"Trigger", "Sound (1/12V a sound, 0V for the first)", "Velocity (0-10V)"};
+			"Trigger", "Sound (1/12V a sound, 0V for the first)", "Velocity (0-10V)",
+			"Send left (±5V)", "Send right (±5V)", "Time (1V a second)"};
 		for (int i = CV_VOCT_OUTPUT; i < OUTPUTS_LEN; i++)
 			configOutput(i, cvs[i - CV_VOCT_OUTPUT]);
 		configOutput(CV_P1_OUTPUT, getParamQuantity(P1_PARAM)->name + " (0-10V)");
