@@ -208,8 +208,8 @@ do, so the plugin can go to the VCV Library some day.
 
 ## Where it differs from the OP-Z guide
 
-Checked against teenage engineering's OP-Z guide. Some differences are forced by a mouse, some are choices, and some
-are loose ends (in [TODO.md](TODO.md)).
+Checked against teenage engineering's OP-Z guide. Some differences are forced by a mouse, and the rest are choices
+Vic made to keep (2026-10-21).
 
 - **Held keys latch:** TRACK, REC and the index keys switch on and off with a click; a step and SHIFT latch with a long
   press or Ctrl+click. Index lock (triple-click) has nothing to do.

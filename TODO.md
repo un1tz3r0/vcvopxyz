@@ -51,10 +51,6 @@
       the saved chains.
 - [ ] A project switch's undo step holds the project either side, about 800 KB now that a slot has 16 patterns;
       a long session of switches adds up.
-- [ ] **Differences from the OP-Z guide** (see DESIGN.md): quantize acts on playback rather than on notes recorded
-      live; a sound mute stops a track's FX sends, where the guide says they carry on; TEMPO with − and + moves the
-      tempo a BPM rather than nudging it; step length is TRACK and a black key, not TRACK, SHIFT and a value key.
-      Decide which to bring in line.
 - [ ] In the light theme a white LED barely shows against the light keys, so TRACK, SHIFT, a selected track and
       the playhead are hard to see lit.
 - [ ] The manual's pictures come from `tools/docs-images` in a headless Rack; rerun them when a panel changes.
