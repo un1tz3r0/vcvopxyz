@@ -1,9 +1,6 @@
 # FX tracks
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/fx-dark.png">
-  <img alt="Delay and Reverb to the right of the engines, playing FX 1 and FX 2" src="assets/fx-light.png">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Delay-small-dark.png"><img alt="Delay" src="assets/modules/Delay-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Reverb-small-dark.png"><img alt="Reverb" src="assets/modules/Reverb-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Rymd-small-dark.png"><img alt="Rymd" src="assets/modules/Rymd-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Chorus-small-dark.png"><img alt="Chorus" src="assets/modules/Chorus-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Crush-small-dark.png"><img alt="Crush" src="assets/modules/Crush-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Dist-small-dark.png"><img alt="Dist" src="assets/modules/Dist-small-light.png"></picture>
 
 The OP-Z's send effects, as six modules: **Delay**, **Reverb**, **Rymd**, **Chorus**, **Crush** and **Dist**. Each
 plays one of the Sequencer's two FX tracks, the OP-Z's tracks 9 and 10, and takes what every engine sends it with its
@@ -39,8 +36,9 @@ the effect, from none to twice), the **pan** or the **volume**.
 
 ## Time
 
-The Delay's echo time and the Reverb's predelay are set by notes, as on the OP-Z: two octaves of keys from F3, the
-shortest on the lowest. Play a key while the FX track is selected, or put notes on its steps, and the effect's time
+The Delay's echo time and the Reverb's predelay are set by notes: two octaves of keys from F3, the shortest on the
+lowest. The OP-Z's guide says this of its reverb's predelay; the Delay doing the same is this plugin's choice.
+Play a key while the FX track is selected, or put notes on its steps, and the effect's time
 follows; the Sequencer lights the key it's on. The other effects have no time and ignore their notes.
 
 ## The effects

@@ -1,9 +1,6 @@
 # Screen
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/digital-screen-dark.png">
-  <img alt="A Screen beside Digital" src="assets/digital-screen-light.png" width="270">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/guide/digital-screen-dark.png"><img alt="A Screen beside Digital" src="assets/guide/digital-screen-light.png"></picture>
 
 The OP-Z's phone app, as an expander: the OP-Z famously has no screen, since you already carry one. Place it
 directly to the right of an OP-Z engine or [FX module](fx-tracks.md). Its top line names the engine, the page the dials are on and the tempo, and
@@ -26,10 +23,7 @@ turn it, finely with Ctrl, like the app's touch pad. Each drag is one undo step.
 
 ## Kit editor
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/kit-screen-dark.png">
-  <img alt="A Screen editing a Drum's kit" src="assets/kit-screen-light.png" width="270">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/guide/kit-screen-dark.png"><img alt="A Screen editing a Drum's kit" src="assets/guide/kit-screen-light.png"></picture>
 
 Beside a [Drum](drum-tracks.md), a **KIT** button sits by the dial's value. Click it to swap the page's picture for
 the kit, as teenage engineering's drum utility shows one, and again to go back.

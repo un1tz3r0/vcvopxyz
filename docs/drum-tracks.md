@@ -1,9 +1,6 @@
 # Drum tracks
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/drums-dark.png">
-  <img alt="Four Drums, playing tracks 1 to 4, with a Screen beside the kick" src="assets/drums-light.png" width="540">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Drum-large-dark.png"><img alt="Drum, playing the kick track" src="assets/modules/Drum-large-light.png"></picture>
 
 **Drum** is the OP-Z's drum track: a kit of 24 sounds, one per key. The first Drum to the right of a
 [Sequencer](sequencer.md) plays track 1 (kick), the next track 2 (snare), then 3 (perc) and 4 (sample), whatever

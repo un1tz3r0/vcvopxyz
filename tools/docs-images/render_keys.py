@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Close-ups of the Sequencer's keys and dials for the manual, light and dark, in the states the text talks about.
+Each state is one run of Rack with clicks played into it; every key named for the state is cut out with its icon:
+
+    docs/assets/keys/<key>-<state>-<theme>.png     at 125%
+    docs/assets/keys/face-<state>-<theme>.png      the whole face, at 100%
+
+    render_keys.py <rack-headless dir> <plugin dir> [state ...]
+"""
+import json, os, subprocess, sys, tempfile
+from pathlib import Path
+from PIL import Image, ImageStat
+
+sys.path.insert(0, str(Path(__file__).parent))
+from render_modules import BOXES, CENTRES, HP, PX_MM, RENDER, ROW, X0, Y0, at, clicks, hp, save, sequencer  # noqa: E402
+
+rack, plugin = Path(sys.argv[1]), Path(sys.argv[2])
+out = plugin / 'docs/assets/keys'
+out.mkdir(parents=True, exist_ok=True)
+version = json.loads((plugin / 'plugin.json').read_text())['version']
+ZOOM = 1.25
+
+STEPS = [f'STEP{i}' for i in range(16)]
+WHITE = [f'KEY{k}' for k in (0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 21, 23)]
+BLACK = [f'KEY{k}' for k in (1, 3, 5, 8, 10, 13, 15, 17, 20, 22)]
+FUNCTIONS = ['TRACK', 'REC', 'PLAY', 'STOP', 'OCTAVE_DOWN', 'OCTAVE_UP', 'SHIFT']
+INDEX = ['PROJECT', 'MIXER', 'METRONOME', 'SCREEN']
+PAGES = [f'PAGE{i}' for i in range(4)]
+TRACKS = [f'SELECT{i}' for i in range(8)] + ['FX_SELECT0', 'FX_SELECT1', 'MASTER']
+DIALS = [f'DIAL{d}' for d in range(4)]
+ALL = INDEX + PAGES + TRACKS + FUNCTIONS + STEPS + WHITE + BLACK + DIALS
+
+# state: (clicks, keys to cut out, playing, empty patterns). A click is a key, '~KEY' a long press.
+STATES = {
+    'off': ([], ALL, False, True),
+    'stopped': ([], STEPS + TRACKS + DIALS, False, False),
+    'playing': ([], ['PLAY'] + STEPS + TRACKS, True, False),
+    'rec': (['REC'], ['REC'], False, False),
+    'track': (['TRACK'], ['TRACK'] + STEPS + BLACK + DIALS, False, False),
+    'shift': (['~SHIFT'], ['SHIFT'] + STEPS + WHITE, False, False),
+    'held': (['~STEP0'], STEPS + WHITE + BLACK + DIALS, False, False),
+    'project': (['PROJECT'], ['PROJECT'] + STEPS + WHITE + BLACK, False, False),
+    'mixer': (['MIXER'], ['MIXER'] + STEPS + BLACK + DIALS, False, False),
+    'tempo': (['METRONOME'], ['METRONOME'] + DIALS, False, False),
+    'page': (['PAGE1'], PAGES + DIALS, False, False),
+    'master': (['MASTER'], ['MASTER'] + WHITE + BLACK, False, False),
+    'components': (['~SHIFT', 'STEP0', 'STEP4', 'STEP8', 'KEY4', 'KEY5', 'KEY14'], STEPS + WHITE + BLACK, False, False),
+}
+
+
+def box(name):
+    """A key with its icon, or a dial with its LED, in panel mm."""
+    if name.startswith('DIAL'):
+        cx, cy = CENTRES[f'{name}_WIDGET']
+        return cx - 14.5, cy - 14, cx + 14.5, cy + 21
+    x, y, w, h = BOXES[f'{name}_PARAM']
+    cx, cy = x + w / 2, y + h / 2
+    if name in STEPS or name in WHITE:
+        return cx - 6.3, cy - 10.8, cx + 6.3, cy + 6
+    return cx - 6, cy - 6, cx + 6, cy + 6
+
+
+def actions(keys):
+    lines = ['sleep 1.5'] + clicks(keys)
+    # Two frames apart, for keys that blink: each key comes from the frame it's brighter in.
+    lines.append(f'xdotool mousemove 5 {round(Y0 + ROW * PX_MM + 40)}; sleep 0.6; snap state.png; sleep 0.3; snap state2.png')
+    return '\n'.join(lines) + '\n'
+
+
+def render(state):
+    presses, keys, playing, empty = STATES[state]
+    seq = sequencer()
+    if empty:
+        for t in seq['data']['tracks']:
+            t['pattern'] = [[]] * 16
+    row = [seq, {'plugin': 'vcvopxyz', 'model': 'Drum', 'params': []}, {'plugin': 'vcvopxyz', 'model': 'Digital', 'params': []}]
+    x = 0
+    for i, m in enumerate(row):
+        m.update(id=i + 1, version=version, pos=[x, 0])
+        x += hp(m['model'])
+    cables = []
+    if playing:
+        row.append({'id': 99, 'plugin': 'Fundamental', 'model': '8vert', 'version': '2.6.4', 'pos': [0, 1],
+                    'params': [{'id': 0, 'value': 1.0}]})
+        cables.append({'id': 1, 'outputModuleId': 99, 'outputId': 0, 'inputModuleId': 1, 'inputId': 1, 'color': '#ff9352'})
+    window = f'{round(hp("Sequencer") * HP * PX_MM + 100)}x{round(ROW * PX_MM + 140)}'
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        (tmp / 'patch.json').write_text(json.dumps({'version': '2.6.6', 'modules': row, 'cables': cables}))
+        (tmp / 'actions.sh').write_text(actions(presses))
+        for theme, dark in (('light', '0'), ('dark', '1')):
+            subprocess.run([rack / 'shot.sh', plugin, tmp / 'patch.json', tmp / 'end.png', '2', window], check=True,
+                           env=dict(os.environ, ZOOM=str(RENDER), DARK=dark, CABLES='0', ACTIONS=str(tmp / 'actions.sh')),
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            shots = [Image.open(tmp / f).convert('RGB') for f in ('state.png', 'state2.png')]
+            shot = shots[0]
+            scale = ZOOM / RENDER
+            for name in keys:
+                l, t, r, b = box(name)
+                crops = [s.crop((round(X0 + l * PX_MM), round(Y0 + t * PX_MM), round(X0 + r * PX_MM), round(Y0 + b * PX_MM))) for s in shots]
+                image = max(crops, key=lambda c: sum(ImageStat.Stat(c).mean))
+                save(image.resize((round(image.width * scale), round(image.height * scale)), Image.LANCZOS),
+                     out / f'{name.lower()}-{state}-{theme}.png')
+            face = shot.crop((round(X0), round(Y0), round(X0 + hp('Sequencer') * HP * PX_MM), round(Y0 + ROW * PX_MM)))
+            save(face.resize((round(face.width / RENDER), round(face.height / RENDER)), Image.LANCZOS), out / f'face-{state}-{theme}.png')
+    print(state, flush=True)
+
+
+for state in sys.argv[3:] or STATES:
+    render(state)
