@@ -4,10 +4,7 @@ Digital, Analog, Cluster, Organ, Bow, Electric, Saw, Shade, Uranus, Volt, EP and
 same OP-Z synth track around a different sound. Everything on this page but the last section applies to each of them; only their two sound dials differ. The
 [drum tracks](drum-tracks.md) share all of it but the note styles and portamento.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/digital-screen-dark.png">
-  <img alt="Digital with a Screen beside it" src="assets/digital-screen-light.png" width="270">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/guide/digital-screen-dark.png"><img alt="Digital playing the bass track, with a Screen beside it" src="assets/guide/digital-screen-light.png"></picture>
 
 ## The panel
 
@@ -61,10 +58,7 @@ dials. It stands in for holding the hardware's track key.
 
 ## Arp
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/arp-screen-dark.png">
-  <img alt="Cluster on the arp track, with a Screen showing its arp" src="assets/arp-screen-light.png" width="270">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/guide/arp-screen-dark.png"><img alt="Cluster on the arp track, with a Screen showing its arp" src="assets/guide/arp-screen-light.png"></picture>
 
 On the arp track, track 7, the LFO page is the arpeggiator's, and the track has no LFO. Hold notes or a chord, from
 the steps, the keys or the inputs, and it plays them one at a time on the tempo's grid, in key: the master track
@@ -91,24 +85,21 @@ dials like any other. A patch saved before the arp opens with it off, so the arp
 
 ## The engines
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/engines-dark.png">
-  <img alt="Analog, Cluster and Organ" src="assets/engines-light.png" width="270">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Digital-small-dark.png"><img alt="Digital" src="assets/modules/Digital-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Analog-small-dark.png"><img alt="Analog" src="assets/modules/Analog-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Cluster-small-dark.png"><img alt="Cluster" src="assets/modules/Cluster-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Organ-small-dark.png"><img alt="Organ" src="assets/modules/Organ-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Bow-small-dark.png"><img alt="Bow" src="assets/modules/Bow-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Electric-small-dark.png"><img alt="Electric" src="assets/modules/Electric-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Saw-small-dark.png"><img alt="Saw" src="assets/modules/Saw-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Shade-small-dark.png"><img alt="Shade" src="assets/modules/Shade-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Uranus-small-dark.png"><img alt="Uranus" src="assets/modules/Uranus-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Volt-small-dark.png"><img alt="Volt" src="assets/modules/Volt-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/EP-small-dark.png"><img alt="EP" src="assets/modules/EP-small-light.png"></picture>
 
-| Engine | Sound | First dial | Second dial |
-| --- | --- | --- | --- |
-| Digital | A sine on a binary counter, driven past full scale so it wraps around like an overflowing integer | **Octave**: how many times each peak wraps, 0 to 7 | **Feedback**: how hard the sine modulates its own phase, leaning it towards a saw |
-| Analog | A saw, a square an octave below and noise, through a low-pass the amp envelope opens | **Mix**: saw, then saw and sub, then sub and noise | **Envelope**: how far the filter closes between notes, for the envelope to sweep it up to eight octaves |
-| Cluster | Seven detuned saws per note | **Tone**: a low-pass that follows the note, from a near sine to fully bright | **Gravity**: pulls the saws together, from almost two semitones each way to one saw |
-| Organ | Up to four sine carriers and one modulator, in eight algorithms | **Algorithm**: flute, jazz, full and gospel drawbars, reed, pipe, combo, bell | **Tweak**: FM depth, from pure drawbars to grit |
-| Bow | A bowed string as a waveguide; the bow's speed follows the amp envelope, so a note swells in and rings on | **Tension**: bow pressure and the string's brightness, from airy to biting | **Chorus**: a second string either side of the note, up to 9 cents each way |
-| Electric | Two sines modulating each other's phase, opened up by the amp envelope | **Cross mod**: how hard, from two pure tones to a snarl | **X mod**: the second sine's ratio to the note, 0.5 to 4 through the inharmonic ratios between |
-| Saw | Two saws a few cents apart through a resonant low-pass | **Envelope**: how far the amp envelope opens the filter, for plucks to swells | **Tone**: where the filter sits over the note, and how much it rings |
-| Shade | A soft FM piano, a sine modulated by another at its own pitch | **Detune**: a second piano against the first, from unison to a wide chorus | **Drive**: a soft clip, from clean to growling |
-| Uranus | A clean bass: a sine operator that feeds back on itself, as a DX7's does | **Tone**: adds the second and third harmonics | **Feedback**: from a sine towards a saw |
-| Volt | A saw, a pulse above it and a triangle sub | **Variation**: the pulse's interval above the saw, unison to two octaves, bringing the sub in as it goes | **Modulation**: a slow sweep of the pulse's width, and ring modulation of saw and pulse |
-| EP | An FM electric piano in eight algorithms, struck bright and mellowing as it fades | **Algorithm**: tine, bright tine, dyno, reed, soft, bell, glass, toy | **Tone**: how hard the hammer strikes |
+| | Engine | Sound | First dial | Second dial |
+| --- | --- | --- | --- | --- |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Digital-label-dark.png"><img alt="digital" src="assets/modules/Digital-label-light.png" height="56"></picture> | Digital | A sine on a binary counter, driven past full scale so it wraps around like an overflowing integer | **Octave**: how many times each peak wraps, 0 to 7 | **Feedback**: how hard the sine modulates its own phase, leaning it towards a saw |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Analog-label-dark.png"><img alt="analog" src="assets/modules/Analog-label-light.png" height="56"></picture> | Analog | A saw, a square an octave below and noise, through a low-pass the amp envelope opens | **Mix**: saw, then saw and sub, then sub and noise | **Envelope**: how far the filter closes between notes, for the envelope to sweep it up to eight octaves |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Cluster-label-dark.png"><img alt="cluster" src="assets/modules/Cluster-label-light.png" height="56"></picture> | Cluster | Seven detuned saws per note | **Tone**: a low-pass that follows the note, from a near sine to fully bright | **Gravity**: pulls the saws together, from almost two semitones each way to one saw |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Organ-label-dark.png"><img alt="organ" src="assets/modules/Organ-label-light.png" height="56"></picture> | Organ | Up to four sine carriers and one modulator, in eight algorithms | **Algorithm**: flute, jazz, full and gospel drawbars, reed, pipe, combo, bell | **Tweak**: FM depth, from pure drawbars to grit |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Bow-label-dark.png"><img alt="bow" src="assets/modules/Bow-label-light.png" height="56"></picture> | Bow | A bowed string as a waveguide; the bow's speed follows the amp envelope, so a note swells in and rings on | **Tension**: bow pressure and the string's brightness, from airy to biting | **Chorus**: a second string either side of the note, up to 9 cents each way |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Electric-label-dark.png"><img alt="electric" src="assets/modules/Electric-label-light.png" height="56"></picture> | Electric | Two sines modulating each other's phase, opened up by the amp envelope | **Cross mod**: how hard, from two pure tones to a snarl | **X mod**: the second sine's ratio to the note, 0.5 to 4 through the inharmonic ratios between |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Saw-label-dark.png"><img alt="saw" src="assets/modules/Saw-label-light.png" height="56"></picture> | Saw | Two saws a few cents apart through a resonant low-pass | **Envelope**: how far the amp envelope opens the filter, for plucks to swells | **Tone**: where the filter sits over the note, and how much it rings |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Shade-label-dark.png"><img alt="shade" src="assets/modules/Shade-label-light.png" height="56"></picture> | Shade | A soft FM piano, a sine modulated by another at its own pitch | **Detune**: a second piano against the first, from unison to a wide chorus | **Drive**: a soft clip, from clean to growling |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Uranus-label-dark.png"><img alt="uranus" src="assets/modules/Uranus-label-light.png" height="56"></picture> | Uranus | A clean bass: a sine operator that feeds back on itself, as a DX7's does | **Tone**: adds the second and third harmonics | **Feedback**: from a sine towards a saw |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Volt-label-dark.png"><img alt="volt" src="assets/modules/Volt-label-light.png" height="56"></picture> | Volt | A saw, a pulse above it and a triangle sub | **Variation**: the pulse's interval above the saw, unison to two octaves, bringing the sub in as it goes | **Modulation**: a slow sweep of the pulse's width, and ring modulation of saw and pulse |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/EP-label-dark.png"><img alt="ep" src="assets/modules/EP-label-light.png" height="56"></picture> | EP | An FM electric piano in eight algorithms, struck bright and mellowing as it fades | **Algorithm**: tine, bright tine, dyno, reed, soft, bell, glass, toy | **Tone**: how hard the hammer strikes |
 
 A Sequencer has four synth tracks, so four of these play at once; a fifth synth engine along the row has no track
 and shows a dash. The OP-Z's twelfth engine, Sample (a PCM sample player), isn't here yet.

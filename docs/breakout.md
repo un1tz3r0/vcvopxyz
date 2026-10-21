@@ -1,9 +1,6 @@
 # Synth Breakout, Drum Breakout and Send FX Breakout
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/breakout-dark.png">
-  <img alt="Synth Breakout, with Analog patched into RET L" src="assets/breakout-light.png" width="180">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Breakout-large-dark.png"><img alt="Synth Breakout" src="assets/modules/Breakout-large-light.png"></picture>
 
 Synth Breakout (called Breakout before 2.0.21; old patches load as they were) is a [synth track](synth-tracks.md)
 whose voice is made of other modules. It is 12 HP and has everything an engine has,
@@ -30,10 +27,7 @@ its track from a Sequencer to its left like any engine.
 
 ## Drum Breakout
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/drum-breakout-dark.png">
-  <img alt="Drum Breakout playing the kick track on an Analog, from GATE, SOUND and VEL, with its sound back at RET L" src="assets/drum-breakout-light.png" width="300">
-</picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/DrumBreakout-large-dark.png"><img alt="Drum Breakout" src="assets/modules/DrumBreakout-large-light.png"></picture>
 
 A [drum track](drum-tracks.md) whose sounds are made of other modules, as Synth Breakout is for a synth track. It is 14 HP
 and takes one of tracks 1 to 4 like a Drum, with the same dials, note styles and keys. Its return works exactly as
@@ -57,6 +51,8 @@ Synth Breakout's does: whatever goes out, the track stops doing itself.
    reach it.
 
 ## Send FX Breakout
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/FxBreakout-large-dark.png"><img alt="Send FX Breakout" src="assets/modules/FxBreakout-large-light.png"></picture>
 
 An [FX track](fx-tracks.md) whose effect is made of other modules. It is 12 HP and takes FX 1 or FX 2 like an FX
 module, by its place among them along the row, so the engines' **FX 1** or **FX 2** sends reach it over the bus.

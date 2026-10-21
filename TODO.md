@@ -51,6 +51,7 @@
       the saved chains.
 - [ ] A project switch's undo step holds the project either side, about 800 KB now that a slot has 16 patterns;
       a long session of switches adds up.
-- [ ] The docs' screenshots predate 2.0.21's kind tags, the Sequencer's FX track keys and Synth Breakout's name.
-      Reshoot them.
+- [ ] In the light theme a white LED barely shows against the light keys, so TRACK, SHIFT, a selected track and
+      the playhead are hard to see lit.
+- [ ] The manual's pictures come from `tools/docs-images` in a headless Rack; rerun them when a panel changes.
 - [ ] **Dead code:** `src/Screen.{hpp,cpp}` and the unused widgets in `src/ui.hpp`, with their SVGs.

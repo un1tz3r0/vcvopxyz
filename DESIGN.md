@@ -199,11 +199,35 @@ Panels are generated, never drawn by hand. `res-src/panel.py` builds every panel
 the kit, `synth_track.py` for the shared synth track layout, `opz.py` for the OP-Z's icons and keys) and writes
 light and dark SVGs into `res/`, with text converted to paths. A hidden `components` layer records where each widget
 goes, by its C++ enum name, and `PanelLayout` reads it back at runtime, so the panel is the only place the layout is
-written down. Every track's panel carries its kind, SYNTH, DRUM or SEND FX, as an inverted tag between the top
-screws, so the three kinds tell apart at a glance in the module browser.
+written down. Every track's panel carries its kind as a chip between the top screws, so the three kinds tell apart at
+a glance in the module browser: SYNTH in cyan with a wave, DRUM in orange with a drum, FX in magenta with a send.
+The colours come from the OP-Z's LEDs, away from the four dial colours that mean pages.
 
 The OP-Z's artwork, name and logo stay off the panels: the icons are redrawn, and the modules are named by what they
 do, so the plugin can go to the VCV Library some day.
+
+## Where it differs from the OP-Z guide
+
+Checked against teenage engineering's OP-Z guide. Some differences are forced by a mouse, and the rest are choices
+Vic made to keep (2026-10-21).
+
+- **Held keys latch:** TRACK, REC and the index keys switch on and off with a click; a step and SHIFT latch with a long
+  press or Ctrl+click. Index lock (triple-click) has nothing to do.
+- **Step length** is TRACK and a black key; the guide has TRACK, SHIFT and a value key, and TRACK and a black key
+  pick the plug, which has no meaning here. **Step count**, which the guide gives no combo for, is TRACK and SHIFT
+  and a step.
+- **Plugs** are modules: a track's engine is the module in its place on the bus, so there are no presets to store or
+  randomize.
+- **Quantize** pulls notes towards the grid as they play; the guide applies it to notes recorded live.
+- **Sound mutes** zero a track's level before its sends, so a sound-muted track stops feeding the FX tracks; the
+  guide says muted tracks still send to the effects.
+- **Tempo nudge:** TEMPO with − and + moves the tempo a BPM; the guide's nudge, for keeping time by ear with others,
+  may be a momentary push instead.
+- **Delay time** is set by notes, as the guide has the reverb's predelay set; the guide doesn't say this of the
+  delay.
+- **Not modelled:** tracks 11 and 13 to 16 (tape, perform, module, lights, motion), punch-in effects, linked tracks,
+  temporary tweaks with SHIFT, record arm, super panic, pitch bend, copying a pattern's settings or a track, bounce,
+  snapshots, tempo lock, the master track's effects page, sampling and MIDI settings.
 
 ## Choices made where the OP-Z guide is silent
 
