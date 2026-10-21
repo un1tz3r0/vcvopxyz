@@ -199,8 +199,9 @@ Panels are generated, never drawn by hand. `res-src/panel.py` builds every panel
 the kit, `synth_track.py` for the shared synth track layout, `opz.py` for the OP-Z's icons and keys) and writes
 light and dark SVGs into `res/`, with text converted to paths. A hidden `components` layer records where each widget
 goes, by its C++ enum name, and `PanelLayout` reads it back at runtime, so the panel is the only place the layout is
-written down. Every track's panel carries its kind, SYNTH, DRUM or SEND FX, as an inverted tag between the top
-screws, so the three kinds tell apart at a glance in the module browser.
+written down. Every track's panel carries its kind as a chip between the top screws, so the three kinds tell apart at
+a glance in the module browser: SYNTH in cyan with a wave, DRUM in orange with a drum, FX in magenta with a send.
+The colours come from the OP-Z's LEDs, away from the four dial colours that mean pages.
 
 The OP-Z's artwork, name and logo stay off the panels: the icons are redrawn, and the modules are named by what they
 do, so the plugin can go to the VCV Library some day.

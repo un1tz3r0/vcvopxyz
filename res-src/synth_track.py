@@ -5,13 +5,16 @@ So a track is a slim strip: a status screen (the Sequencer track it plays, its i
 an LED for when the Sequencer has it selected and one for when it plays, then its jacks. The three breakouts are
 wider, for the jacks that take their voice out to other modules and back. The FX modules have the same strip, with
 the jacks of a send effect."""
+from opz import icon
 from panelkit import HP, LABEL, NUNITO, Panel
 
 HEIGHT = 128.5
 SCREEN_TOP, SCREEN_HEIGHT = 12.6, 30.0
 LED_ROW = 47.2
 PITCH = 12.5                  # between the jacks' columns
-TAG = 1.8                     # the kind tag's text size
+TAG = 1.6                     # the kind tag's text size
+# Each kind of track's tag: its caption, its icon, and its colour, from the OP-Z's LEDs rather than its dials'.
+KINDS = dict(synth=('SYNTH', 'synth', '#2FC6E0'), drum=('DRUM', 'drum', '#FF8A3D'), fx=('FX', 'send', '#E25BD6'))
 LABELS = dict(VOCT='V/OCT', VELOCITY='VEL', LEFT='L', RIGHT='R', FX1='FX 1', FX2='FX 2', RETURN_L='RET L',
               RETURN_R='RET R', CV_VOCT='V/OCT', CV_GATE='GATE', CV_ENV='ENV', CV_LFO='LFO', CV_FILTER='FILTER',
               CV_RESONANCE='RESO', CV_FX1='FX 1', CV_FX2='FX 2', CV_P1='CV 1', CV_P2='CV 2', CV_TRIGGER='TRIG',
@@ -19,14 +22,18 @@ LABELS = dict(VOCT='V/OCT', VELOCITY='VEL', LEFT='L', RIGHT='R', FX1='FX 1', FX2
 
 
 def status(slug, hp, kind, active='NOTE'):
-    """The panel down to the LEDs: the kind of track as a tag between the top screws, the title, the status screen,
-    and SEL and NOTE (or `active`) under it."""
+    """The panel down to the LEDs: the kind of track as a coloured tag between the top screws, the title, the status
+    screen, and SEL and NOTE (or `active`) under it."""
     width = hp * HP
     p = Panel(width, HEIGHT)
     p.rect(0, 0, width, HEIGHT, 0, 'panel')
-    tag = NUNITO.width(kind, TAG) + 1.8
-    p.rect((width - tag) / 2, 0.75, tag, 2.9, 1.45, 'ink')
-    p.text(kind, width / 2, 2.2, size=TAG, fill='panel')
+    caption, symbol, color = KINDS[kind]
+    text = NUNITO.width(caption, TAG)
+    tag = text + 3.7
+    left = (width - tag) / 2
+    p.art.append(f'<rect x="{left:.3f}" y="0.75" width="{tag:.3f}" height="2.9" rx="1.45" fill="{color}"/>')
+    p.art.append(icon(symbol, left + 1.5, 2.2, 1.6, '#2B2B2D', color))
+    p.art.append(f'<path d="{NUNITO.path(caption, left + 2.6, 2.2, TAG, "start")}" fill="#2B2B2D"/>')
     p.title(slug)
     p.rect(2.2, SCREEN_TOP, width - 4.4, SCREEN_HEIGHT, 1.5, 'box')
     p.place('STATUS_WIDGET', 2.2, SCREEN_TOP, width - 4.4, SCREEN_HEIGHT)
@@ -54,7 +61,7 @@ def box(p, columns, first, last, top, bottom=None):
     p.rect(columns[first] - 5.9, top - 8.4, columns[last] - columns[first] + 11.8, (bottom or top) - top + 14.8, 2.0, 'box')
 
 
-def synth_track_panel(slug, kind='SYNTH'):
+def synth_track_panel(slug, kind='synth'):
     """6 HP: the inputs in three rows of two, the outputs in a dark box below."""
     p = status(slug, 6, kind)
     columns = [3 * HP - PITCH / 2, 3 * HP + PITCH / 2]
@@ -70,7 +77,7 @@ def synth_track_panel(slug, kind='SYNTH'):
 def fx_track_panel(slug):
     """6 HP: IN for use off the bus, the notes that set the time, the LFO's clock, reset and EXT, then the outputs
     in a dark box."""
-    p = status(slug, 6, 'SEND FX', active='OUT')
+    p = status(slug, 6, 'fx', active='OUT')
     columns = [3 * HP - PITCH / 2, 3 * HP + PITCH / 2]
     inputs = [('RETURN_L', 'RETURN_R'), ('VOCT', 'GATE'), ('CLOCK', 'RESET'), ('EXT', None)]
     rows = [59.0, 71.5, 84.0, 96.5, 113.0]
@@ -82,7 +89,7 @@ def fx_track_panel(slug):
 
 def breakout_panel():
     """12 HP: the voice going out in a dark box, the notes coming in with the return, then the outputs."""
-    p = status('Breakout', 12, 'SYNTH')
+    p = status('Breakout', 12, 'synth')
     columns = [6 * HP + 11.2 * (i - 2) for i in range(5)]
     rows = [59.5, 72.5, 87.5, 100.5, 115.0]
     box(p, columns, 0, 4, rows[0], rows[1])
@@ -98,7 +105,7 @@ def breakout_panel():
 
 def drum_breakout_panel():
     """14 HP: Breakout's layout, six jacks wide for the drum track's extra outputs."""
-    p = status('DrumBreakout', 14, 'DRUM')
+    p = status('DrumBreakout', 14, 'drum')
     columns = [7 * HP + 10.8 * (i - 2.5) for i in range(6)]
     rows = [59.5, 72.5, 89.5, 107.0]
     box(p, columns, 0, 5, rows[0], rows[1])
@@ -114,7 +121,7 @@ def drum_breakout_panel():
 
 def fx_breakout_panel():
     """12 HP: Synth Breakout's layout, the send and the effect's controls going out, the notes and the return coming in."""
-    p = status('FxBreakout', 12, 'SEND FX', active='OUT')
+    p = status('FxBreakout', 12, 'fx', active='OUT')
     columns = [6 * HP + 11.2 * (i - 2) for i in range(5)]
     rows = [59.5, 72.5, 89.5, 107.0]
     box(p, columns, 0, 4, rows[0], rows[1])

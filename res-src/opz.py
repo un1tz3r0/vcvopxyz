@@ -51,6 +51,10 @@ ICONS = {
     'module': [line('M-0.7 -0.75H0.2L0.7 -0.25V0.9H-0.7Z'), line('M0.2 -0.75V-0.25H0.7'), text('C', -0.05, 0.15, 1.0)],
     'lights': ['<circle cx="0" cy="-0.35" r="0.5"/>', line('M-0.22 0.15V0.5H0.22V0.15M-0.15 0.85H0.15')],
     'motion': [solid('M-0.95 -0.5H0.3V0.5H-0.95Z'), solid('M0.3 0L0.95 -0.45V0.45Z')],
+    # The kinds of track module, on their panels' tags: a synth voice's wave, a drum, and a send out and back.
+    'synth': [line('M-1 0C-0.75 -1.1 -0.25 -1.1 0 0S0.75 1.1 1 0')],
+    'drum': [line('M-0.85 -0.35V0.45A0.85 0.35 0 0 0 0.85 0.45V-0.35'), '<ellipse cx="0" cy="-0.35" rx="0.85" ry="0.35"/>'],
+    'send': [line('M-1 0H-0.6M0.6 0H1'), line('M-0.6 -0.75H0.6V0.75H-0.6Z')],
     # The step components, over the white keys.
     'pulse': [dot(-0.35, 0, 0.18), dot(0.35, 0, 0.18)],
     'pulse_hold': [line('M-0.75 0H0.75')],
