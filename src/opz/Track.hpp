@@ -113,7 +113,7 @@ struct Meter {
 
 
 /** What every track has in common, whatever its engine, and all a Screen beside it needs to know. */
-struct Track : Module, BusNode {
+struct Track : Module {
 	enum ParamId {
 		P1_PARAM, P2_PARAM, FILTER_PARAM, RESONANCE_PARAM,
 		ATTACK_PARAM, DECAY_PARAM, SUSTAIN_PARAM, RELEASE_PARAM,
@@ -194,6 +194,10 @@ struct Track : Module, BusNode {
 	int page = PAGE_SOUND;
 	bool trackMode = false;
 	int busTrack = -1;           // the Sequencer's track this engine plays, or -1 off the bus
+	Hub* hub = nullptr;          // the Sequencer to its left, or null off the bus
+	uint32_t layoutSeen = ~0u;   // the bus layout its hub and track were found in
+	int64_t frame = 0;
+	const Downstream* bus = nullptr; // what the hub sent in the frame before, or null off the bus
 	bool selected = false;       // the Sequencer's keys and dials are on this engine's track
 
 	int style = 0;               // the note style playing, which a change of the dial lets every note go for
@@ -224,7 +228,6 @@ struct Track : Module, BusNode {
 
 	Track() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		attach(this);
 		controlDivider.setDivision(16);
 		lightDivider.setDivision(64);
 	}
@@ -413,51 +416,56 @@ struct Track : Module, BusNode {
 		pageRequests = bus->pageRequests;
 	}
 
-	/** Takes this engine's track from the bus, the next drum or synth track along, and passes the bus on with this
-	engine counted. The UI thread reads busTrack too, so it's written once a sample: a -1 written first and the track
-	after would show, now and then, as a dash on the status screen. */
-	const Downstream* joinBus() {
-		const Downstream* bus = fromLeft(this);
-		int track = -1;
-		if (bus) {
-			int taken = effect ? bus->effects : drum ? bus->drums : bus->synths;
-			if (taken < (effect ? FX_TRACKS : drum ? DRUM_TRACKS : SYNTH_TRACKS))
-				track = (effect ? FX1 : drum ? 0 : DRUM_TRACKS) + taken;
-			if (Downstream* out = toRight(this)) {
-				*out = *bus;
-				(effect ? out->effects : drum ? out->drums : out->synths)++;
-			}
-		}
-		busTrack = track;
-		return bus;
+	/** Drum, synth or FX: an engine takes the next track of its kind along the bus. */
+	int kind() const {
+		return effect ? 2 : drum ? 1 : 0;
 	}
 
-	/** Sends the mix of the engines to the right on to the left, with this one's sound and FX sends added while its
-	outputs are unpatched, and its page and dials. */
+	/** Finds its hub, the first Sequencer to its left across this plugin's modules, and its track, by the engines of
+	its kind in between. The UI thread reads busTrack too, so it's written once. */
+	void findPlace() {
+		Hub* found = nullptr;
+		int taken = 0;
+		for (Module* m = leftExpander.module; onBus(m) && !(found = dynamic_cast<Hub*>(m)); m = m->leftExpander.module)
+			if (Track* t = dynamic_cast<Track*>(m))
+				taken += t->kind() == kind();
+		hub = found;
+		busTrack = found && taken < (effect ? FX_TRACKS : drum ? DRUM_TRACKS : SYNTH_TRACKS)
+			? (effect ? FX1 : drum ? 0 : DRUM_TRACKS) + taken : -1;
+	}
+
+	/** Reads the bus for this frame, finding its place first if modules have moved since it last looked. */
+	void joinBus(int64_t now) {
+		uint32_t layout = busLayout.load(std::memory_order_relaxed);
+		if (layout != layoutSeen) {
+			layoutSeen = layout;
+			findPlace();
+		}
+		frame = now;
+		bus = hub ? &hub->lastDownstream(frame) : nullptr;
+	}
+
+	void onExpanderChange(const ExpanderChangeEvent& e) override {
+		busMoved();
+	}
+
+	/** Its track's slot on the hub: its sound and FX sends while its outputs are unpatched, its page and dials. */
 	void sendUpstream(float left, float right, float mono) {
-		Upstream* out = toLeft(this);
-		if (!out)
+		if (!hub || busTrack < 0)
 			return;
-		const Upstream* u = fromRight(this);
-		*out = u ? *u : Upstream();
-		if (busTrack < 0)
-			return;
-		out->page[busTrack] = trackMode ? -1 : page;
+		Slot& s = hub->slot(busTrack, frame);
+		s.frame = frame;
+		bool mixed = !outputs[LEFT_OUTPUT].isConnected() && !outputs[RIGHT_OUTPUT].isConnected();
+		s.left = mixed ? left : 0.f;
+		s.right = mixed ? right : 0.f;
+		for (int k = 0; k < FX_TRACKS; k++)
+			s.send[k] = effect || outputs[FX1_OUTPUT + k].isConnected() ? 0.f : mono * (k ? controls.fx2 : controls.fx1);
+		s.page = trackMode ? -1 : page;
+		s.timeKey = effect ? timeKey : -1;
+		std::copy(std::begin(dialValues), std::end(dialValues), s.dials);
 		if (arp())
 			for (int i = 0; i < 4; i++)
-				out->arp[i] = params[ARP_SPEED_PARAM + i].getValue();
-		if (!outputs[LEFT_OUTPUT].isConnected() && !outputs[RIGHT_OUTPUT].isConnected()) {
-			out->left += left;
-			out->right += right;
-		}
-		if (effect)
-			out->timeKey[busTrack - FX1] = (int8_t) timeKey;
-		else
-			for (int k = 0; k < FX_TRACKS; k++)
-				if (!outputs[FX1_OUTPUT + k].isConnected())
-					out->send[k] += mono * (k ? controls.fx2 : controls.fx1);
-		if (selected)
-			std::copy(std::begin(dialValues), std::end(dialValues), out->dials);
+				s.arp[i] = params[ARP_SPEED_PARAM + i].getValue();
 	}
 
 	void trackTempo(float sampleTime, const Downstream* bus) {
@@ -528,7 +536,7 @@ struct Track : Module, BusNode {
 
 	/** Everything up to the voices, once a sample: the bus, the tempo, the keys, the notes, the LFO and the dials. */
 	void prepare(const ProcessArgs& args) {
-		const Downstream* bus = joinBus();
+		joinBus(args.frame);
 		trackTempo(args.sampleTime, bus);
 		if (reset.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f))
 			lfo.restart();

@@ -32,7 +32,6 @@ struct FxBreakout : opz::FxTrack<FxBreakoutSound> {
 	}
 
 	void process(const ProcessArgs& args) override {
-		bus = fromLeft(this);
 		lfoInside = !outputs[CV_LFO_OUTPUT].isConnected();
 		prepare(args);
 		float offset = lfoInside ? controls.lfo : 0.f;

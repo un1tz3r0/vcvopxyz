@@ -1,17 +1,24 @@
 #pragma once
 #include "../plugin.hpp"
 #include "Sequence.hpp"
+#include <atomic>
 
 /*
 The bus that runs along a row of OP-Z modules: the Sequencer at its left end as the master, then the engines it
-plays and any Screens beside them. The master sends every track's notes, the tempo and its controls rightward; the
-engines send their audio and state back leftward. Each module passes on what it gets, a sample later, through
-Rack's expander messages, so the bus is safe however Rack spreads modules over threads. A module from another
-plugin ends it.
+plays and any Screens beside them. A module from another plugin ends it.
 
 The engines take their tracks by kind and order: the first drum engine plays track 1 (kick), the next track 2, and
 so on to track 4, the first synth engine plays track 5 (bass), the next track 6, and so on to track 8, and the first
 FX module plays FX 1, the next FX 2.
+
+The master holds the bus itself (Hub): what it sends every engine, and a slot per track for what that track's engine
+sends back. Both are double-buffered by Rack's frame count: in frame n the master writes the n & 1 copy of each and
+reads the other, written in frame n - 1, and the engines do the same from their side. Rack finishes every module's
+frame before it starts the next, so no copy is ever written and read at once, however it spreads modules over
+threads, and nothing is copied along the row: every engine is one sample behind the master, wherever it sits.
+
+Which master and track an engine has only changes when modules move, so each engine walks left to find them again
+only after Rack has given some module on a bus a new neighbour.
 
 The engines' FX sends come back with their sound, and the master sends them on to the FX modules, whose sound joins
 the mix, so a module's place on the bus doesn't matter.
@@ -21,7 +28,7 @@ namespace opz {
 constexpr int PAGES = 4;              // pages of dials per track
 constexpr int NEXT_PAGE = -1;         // a page request that steps on to the next one
 
-/** What the master sends rightward. */
+/** What the master sends every engine. */
 struct Downstream {
 	struct Lane {
 		int channels = 0;             // the track's polyphony; 0 until the master first writes it
@@ -39,17 +46,27 @@ struct Downstream {
 	bool trackMode = false;
 	int page = NEXT_PAGE;             // the page last asked of the selected track's engine
 	uint32_t pageRequests = 0;        // counts the requests, so each one is seen once
-	int drums = 0, synths = 0, effects = 0; // drum and synth engines and FX modules passed so far
 };
 
-/** What the engines send leftward. */
+/** What a track's engine sends the master. */
+struct Slot {
+	int64_t frame = -1;               // when it was written: an older slot's engine has since left the track
+	float left = 0.f, right = 0.f;    // its sound, while its own outputs are unpatched
+	float send[FX_TRACKS] = {};       // its FX sends, while its own FX outputs are unpatched
+	int8_t page = -1;                 // its page, or -1 in track mode
+	int8_t timeKey = -1;              // the key an FX module's notes last set its time with, or -1
+	float dials[4] = {-1.f, -1.f, -1.f, -1.f}; // its dials, 0 to 1, or -1 for none
+	float arp[4] = {};                // its arp dials, as turned (the master applies a step's locks)
+};
+
+/** What every engine sent back, gathered by the master. */
 struct Upstream {
 	float left = 0.f, right = 0.f;    // the mix of every engine whose own outputs are unpatched
 	float send[FX_TRACKS] = {};       // the FX sends of every engine whose own FX outputs are unpatched
 	int8_t page[LANES];               // each engine's page, or -1 for a track without one
 	int8_t timeKey[FX_TRACKS];        // the key each FX module's notes last set its time with, or -1
 	float dials[4] = {-1.f, -1.f, -1.f, -1.f}; // the selected track's dials, 0 to 1, or -1 for none
-	float arp[4] = {};                // the arp track's engine's arp dials, as turned (the master applies a step's locks); off with no engine
+	float arp[4] = {};                // the arp track's engine's arp dials, as turned; off with no engine
 
 	Upstream() {
 		std::fill(std::begin(page), std::end(page), -1);
@@ -57,55 +74,52 @@ struct Upstream {
 	}
 };
 
-/** A module on the bus. It owns the buffers Rack flips: its left side receives Downstream, its right side Upstream. */
-struct BusNode {
+/** Whether a neighbour carries the bus on: every module in this plugin does, and checking the plugin is cheaper than
+a dynamic_cast. */
+inline bool onBus(Module* m) {
+	return m && m->model->plugin == pluginInstance;
+}
+
+/** Counts the times Rack has given a module on a bus a new neighbour, which it does between blocks, never mid-frame. */
+inline std::atomic<uint32_t> busLayout{0};
+
+/** For every module on a bus: when its neighbours change, every engine finds its place again. */
+inline void busMoved() {
+	busLayout.fetch_add(1, std::memory_order_relaxed);
+}
+
+/** The bus, held by the master. */
+struct Hub {
 	Downstream down[2];
-	Upstream up[2];
+	Slot up[2][LANES];
 
-	void attach(Module* m) {
-		m->leftExpander.producerMessage = &down[0];
-		m->leftExpander.consumerMessage = &down[1];
-		m->rightExpander.producerMessage = &up[0];
-		m->rightExpander.consumerMessage = &up[1];
-	}
+	/** Where the master writes in this frame, and where the engines read what it wrote in the frame before. */
+	Downstream& downstream(int64_t frame) { return down[frame & 1]; }
+	const Downstream& lastDownstream(int64_t frame) const { return down[(frame + 1) & 1]; }
 
-	/** Whether a neighbour is on the bus. Every module in this plugin is a BusNode, so the plugin is enough: a
-	dynamic_cast here, dozens of times a sample, cost more than the rest of the bus. */
-	static bool onBus(Module* m) { return m && m->model->plugin == pluginInstance; }
+	/** Where a track's engine writes in this frame. */
+	Slot& slot(int track, int64_t frame) { return up[frame & 1][track]; }
 
-	/** What came from the left, or null off the bus. */
-	static const Downstream* fromLeft(Module* m) {
-		return onBus(m->leftExpander.module) ? static_cast<const Downstream*>(m->leftExpander.consumerMessage) : nullptr;
-	}
-	static const Upstream* fromRight(Module* m) {
-		return onBus(m->rightExpander.module) ? static_cast<const Upstream*>(m->rightExpander.consumerMessage) : nullptr;
-	}
-
-	/** Where to write what goes right, or null with no module there to take it. */
-	static Downstream* toRight(Module* m) {
-		Module* r = m->rightExpander.module;
-		if (!onBus(r))
-			return nullptr;
-		r->leftExpander.requestMessageFlip();
-		return static_cast<Downstream*>(r->leftExpander.producerMessage);
-	}
-	static Upstream* toLeft(Module* m) {
-		Module* l = m->leftExpander.module;
-		if (!onBus(l))
-			return nullptr;
-		l->rightExpander.requestMessageFlip();
-		return static_cast<Upstream*>(l->rightExpander.producerMessage);
-	}
-
-	/** Passes both directions on unchanged, for a module that only sits on the bus. */
-	static void relay(Module* m) {
-		const Downstream* d = fromLeft(m);
-		if (Downstream* out = d ? toRight(m) : nullptr)
-			*out = *d;
-		if (Upstream* out = toLeft(m)) {
-			const Upstream* u = fromRight(m);
-			*out = u ? *u : Upstream();
+	/** What the engines wrote in the frame before. */
+	Upstream gather(int64_t frame, int selected) const {
+		Upstream u;
+		for (int t = 0; t < LANES; t++) {
+			const Slot& s = up[(frame + 1) & 1][t];
+			if (s.frame != frame - 1)
+				continue;
+			u.left += s.left;
+			u.right += s.right;
+			for (int k = 0; k < FX_TRACKS; k++)
+				u.send[k] += s.send[k];
+			u.page[t] = s.page;
+			if (t >= FX1)
+				u.timeKey[t - FX1] = s.timeKey;
+			if (t == selected)
+				std::copy(std::begin(s.dials), std::end(s.dials), u.dials);
+			if (t == ARP_TRACK)
+				std::copy(std::begin(s.arp), std::end(s.arp), u.arp);
 		}
+		return u;
 	}
 };
 
