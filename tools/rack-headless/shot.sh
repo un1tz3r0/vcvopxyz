@@ -20,13 +20,14 @@
 #   CABLES=0.5    cable opacity (0 hides them)
 #   ACTIONS=f    source script f after zooming (xdotool clicks; "snap name.png" captures)
 #   KEEP=1        keep the temporary work dir (user folder, log.txt) and print its path
+#   THREADS=n     engine threads (default 1), to test modules across cores
 #   RACK_DIR=...  Rack build to use (default: ./Rack next to this script)
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RACK_DIR=${RACK_DIR:-$HERE/Rack}
 
-usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---------------------------------------------------------------------------
 # Inner part: runs inside xvfb-run (DISPLAY is set).
@@ -184,6 +185,7 @@ cat >"$U/settings.json" <<EOF
   "pixelRatio": 0.0,
   "tooltips": false,
   "cpuMeter": false,
+  "threadCount": ${THREADS:-1},
   "cableOpacity": ${CABLES:-0.5},
   "preferDarkPanels": $([ "${DARK:-0}" = 1 ] && echo true || echo false),
   "frameRateLimit": 60.0,
