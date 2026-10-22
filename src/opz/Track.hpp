@@ -414,19 +414,21 @@ struct Track : Module, BusNode {
 	}
 
 	/** Takes this engine's track from the bus, the next drum or synth track along, and passes the bus on with this
-	engine counted. */
+	engine counted. The UI thread reads busTrack too, so it's written once a sample: a -1 written first and the track
+	after would show, now and then, as a dash on the status screen. */
 	const Downstream* joinBus() {
 		const Downstream* bus = fromLeft(this);
-		busTrack = -1;
+		int track = -1;
 		if (bus) {
 			int taken = effect ? bus->effects : drum ? bus->drums : bus->synths;
 			if (taken < (effect ? FX_TRACKS : drum ? DRUM_TRACKS : SYNTH_TRACKS))
-				busTrack = (effect ? FX1 : drum ? 0 : DRUM_TRACKS) + taken;
+				track = (effect ? FX1 : drum ? 0 : DRUM_TRACKS) + taken;
 			if (Downstream* out = toRight(this)) {
 				*out = *bus;
 				(effect ? out->effects : drum ? out->drums : out->synths)++;
 			}
 		}
+		busTrack = track;
 		return bus;
 	}
 
