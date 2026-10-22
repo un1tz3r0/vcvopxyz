@@ -4,19 +4,28 @@
 
 ## What is it?
 
-An ode to the [Teenage Engineering OP-Z](https://teenage.engineering/products/op-z), this project is a [VCV Rack](http://vcvrack.com/) plugin that adds a set of modules and expanders which work together to take the magic and fun of the OP-Z out of your pocket and put it into to your (virtual) eurorack modular system.
+An ode to the [Teenage Engineering OP-Z](https://teenage.engineering/products/op-z), this project is a [VCV Rack](http://vcvrack.com/) plugin that adds a set of modules and expanders which work together to bring the magic and fun of the OP-Z from your pocket into to your (virtual) eurorack modular system.
 
 ## What it is not
 
 Rather than try and make a sample-perfect clone of each sound and FX engine, the goal was to build something similar *enough* to be instantly usable by anyone who is familiar with the original. What it lacks in sounding exactly like the hardware, it makes up for by allowing the sequencer tracks to be diverted to 1v/oct pitch and gate/trig outputs so that they can control chains of external modules whose output can then be routed back into the OP-Z's track-fx and mixer. 
 
 #### This project is not affiliated with or endorsed by teenage engineering. OP-Z and OP-XY are their trademarks.
+
+## Intros
+
+These two documents will be helpful for those with no prior experience with the OP-Z or those with some experience who could use a reminder.
+
+- [Beginner's Guide](docs/guide.md): steo-by-step instructions starting with an empty rack to making a simple loop, with screenshots, for those without any experience with the OP-Z.
+- [Quickstart](docs/quickstart.md): a cheatsheet running down most of the core features for those with some OP-Z experience who just need a refresher to jog their memory.
+
 ## Modules
 
-The Sequencer module is the master. The modules to its right are its tracks' voices: up to four drum tracks, four
-synth engines and two send effects, which pick up the tracks in the order they appear and show the track's number,
-symbol and name on their status screens, with Screens beside any of them to show their pages. The Sequencer has
-V/OCT, GATE and velocity inputs for recording notes, clock and transport inputs and outputs, and clocks itself when
+The **Sequencer** module is the master. The modules to its right are its tracks' voices: up to four drum tracks, four synth engines and two send effects, which are assigned to the compatible tracks of the sequencer in the order they appear, showing the track number, symbol and name on their status screens. They also show when their track is selected for editing in the sequencer, and when there is note activity, showing the voice allocation at the bottom of the screen, for polyphonic tracks.
+
+Each track engine expander has inputs for triggering notes on the track externally, and for modulating it's engine specific parameters (the green and blue knobs on the track's first parameter page). The track engines also have stereo audio output in case you want to bypass the Sequencer's built-in mixer, and route individual tracks out to somewhere else. There are also the two effects sends, in case those should be useful, which will disable sending the track's audio to the Sequencer's send effect tracks. Note that the whole thing works just fine without patching any of the inputs or outputs on the engine modules, so long as they are part of a chain that starts with a Sequencer, they'll play through the sequencer's mixer and outputs if left unpatched.
+
+The Sequencer has V/OCT, GATE and velocity inputs for recording notes, clock and transport inputs and outputs, and clocks itself when
 no clock is patched, at a tempo set in its tempo mode as on the OP-Z. The tracks reach other modules through the
 breakouts, not through cables from the Sequencer. New to it? Start with [your first sound](docs/guide.md).
 
@@ -40,19 +49,20 @@ breakouts, not through cables from the Sequencer. New to it? Start with [your fi
 | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/modules/DrumBreakout-label-dark.png"><img alt="Drum Breakout" src="docs/assets/modules/DrumBreakout-label-light.png" height="56"></picture> | [Drum Breakout](docs/breakout.md#drum-breakout) | A drum track that sends its triggers, sounds, velocity, envelope, LFO and dials out as CV and takes its sound back in. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/modules/FxBreakout-label-dark.png"><img alt="Send FX Breakout" src="docs/assets/modules/FxBreakout-label-light.png" height="56"></picture> | [Send FX Breakout](docs/breakout.md#send-fx-breakout) | An FX track that sends its send, notes, time, LFO and dials out and takes an outside effect back in. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/modules/Delay-label-dark.png"><img alt="Delay, Reverb, Rymd, Chorus, Crush, Dist" src="docs/assets/modules/Delay-label-light.png" height="56"></picture> | [Delay, Reverb, Rymd, Chorus, Crush, Dist](docs/fx-tracks.md) | The OP-Z's send effects, on FX tracks 9 and 10: every engine's FX 1 and FX 2 sends reach them over the bus. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/modules/Screen-label-dark.png"><img alt="Screen" src="docs/assets/modules/Screen-label-light.png" height="56"></picture> | [Screen](docs/screen.md) | The OP-Z's phone app: a picture of the page, and every dial as a touch arc. |
-
-
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/modules/Screen-label-dark.png"><img alt="Screen" src="docs/assets/modules/Screen-label-light.png" height="56"></picture> | [Screen](docs/screen.md) | Place this extender to the right of a drum or synth engine to see a waveform scope/envelope shape, voice allocation, and all of it's knob parameters pages at once. **Also allows editing drum kits** when placed next to a drum voice (click the "Kit" button in the top right corner). |
 
 ## Holding keys
 
-Much of the OP-Z works by holding one key while pressing others, and a mouse can't. So a key the OP-Z holds latches
-here instead: **TRACK**, **REC** and the index keys switch on and off with a click; a step or **SHIFT**, which also
-do something on a click, latch with a long press or a Ctrl+click (⌘+click on a Mac). Either way can be turned off in
-the context menu. The [quickstart](docs/quickstart.md) has the details, and the OP-Z's combos side by side with the
-clicks here.
+Much of the OP-Z's features are accessed by holding a modifier key to temporarily switch the behavior of the other keys, or, in other words, key combinations. Since you can't click on more than one thing at a time (at least, not without a second mouse plugged in), we needed a workaround, so keys that can be held on the real OP-Z can be *latched* here, instead.
 
-## Documentation
+- **TRACK**, **REC** and the index keys switch on and off with a click
+- a step or **SHIFT**, which also
+do something on a click, latch with a long press or a Ctrl+click (⌘+click on a Mac)
+- Either behavior can be turned off in the context menu.
+
+The [quickstart](docs/quickstart.md) has complete descriptions of the recognized combinations and their equivalents on the real OP-Z.
+
+## Further Reading
 
 - [Your first sound](docs/guide.md): a walk from an empty rack to a beat, with screenshots.
 - [Quickstart](docs/quickstart.md): the face, clicks and holds, modes and colours.
