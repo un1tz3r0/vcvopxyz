@@ -217,7 +217,7 @@ struct Punch {
 };
 
 
-struct Sequencer : Module, BusNode {
+struct Sequencer : Module, Hub {
 	enum ParamId {
 		TEMPO_PARAM, SWING_PARAM,
 		ENUMS(LENGTH_PARAM, TRACKS), ENUMS(QUANTIZE_PARAM, TRACKS), ENUMS(STEP_COUNT_PARAM, TRACKS), ENUMS(STEP_LENGTH_PARAM, TRACKS),
@@ -528,7 +528,6 @@ struct Sequencer : Module, BusNode {
 
 	Sequencer() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		attach(this);
 		ParamQuantity* q = configParam(TEMPO_PARAM, 40.f, 200.f, 120.f, "Tempo", " BPM");
 		q->snapEnabled = true;
 		q->randomizeEnabled = false;
@@ -1634,8 +1633,8 @@ struct Sequencer : Module, BusNode {
 	}
 
 	/** Each lane to the bus for its engine, then the mix and the transport to the jacks. */
-	void writeOutputs(float dt) {
-		Downstream* bus = toRight(this);
+	void writeOutputs(float dt, int64_t frame) {
+		Downstream* bus = onBus(rightExpander.module) ? &downstream(frame) : nullptr;
 		for (int t = 0; t < LANES; t++) {
 			if (t == MASTER)
 				continue;
@@ -1673,11 +1672,9 @@ struct Sequencer : Module, BusNode {
 			bus->trackMode = trackMode;
 			bus->page = page;
 			bus->pageRequests = pageRequests;
-			bus->drums = bus->synths = bus->effects = 0;
 			std::copy(std::begin(engines.send), std::end(engines.send), bus->send);
 		}
-		const Upstream* up = fromRight(this);
-		engines = up ? *up : Upstream();
+		engines = bus ? gather(frame, track) : Upstream();
 		// The mix: punch, the metronome while playing, then the master level.
 		float left = engines.left, right = engines.right;
 		punch.process(left, right, params[LEVEL_PARAM + PUNCH].getValue(), dt);
@@ -1699,7 +1696,7 @@ struct Sequencer : Module, BusNode {
 		handleInputs();
 		handleTransport();
 		runClock(args.sampleTime);
-		writeOutputs(args.sampleTime);
+		writeOutputs(args.sampleTime, args.frame);
 		if (lightDivider.process())
 			updateLights(args.sampleTime * lightDivider.getDivision());
 	}
@@ -2427,6 +2424,10 @@ struct Sequencer : Module, BusNode {
 			if (system::isFile(path))
 				projects[i].opz = system::readFile(path);
 		}
+	}
+
+	void onExpanderChange(const ExpanderChangeEvent& e) override {
+		busMoved();
 	}
 };
 

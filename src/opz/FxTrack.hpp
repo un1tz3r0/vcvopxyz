@@ -54,7 +54,6 @@ struct FxTrack : Track {
 	typename Effect::Unit unit;
 	FxControls fx;
 	float rate = 0.f;
-	const Downstream* bus = nullptr;
 
 	FxTrack() {
 		effect = true;
@@ -100,7 +99,6 @@ struct FxTrack : Track {
 			rate = args.sampleRate;
 			unit.prepare(rate);
 		}
-		bus = fromLeft(this);
 		prepare(args);
 		float offset = lfoInside ? controls.lfo : 0.f;
 		int target = (int) value(LFO_TARGET_PARAM);
