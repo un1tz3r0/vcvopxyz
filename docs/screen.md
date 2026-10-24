@@ -1,5 +1,10 @@
 # Screen
 
+> **Changed in 2.1.0:** the engines and send effects are no longer modules. They are plugs inside the Sequencer,
+> ten slots a track, picked with TRACK latched and a black key, and filled from its context menu (**Plug slots**).
+> A breakout on a track plays the track's plug when its audio outputs are patched, or hands the track to outside
+> modules when only its note CVs are. This page still describes the modules and is being rewritten.
+
 <picture><source media="(prefers-color-scheme: dark)" srcset="assets/guide/digital-screen-dark.png"><img alt="A Screen beside Digital" src="assets/guide/digital-screen-light.png"></picture>
 
 The OP-Z's phone app, as an expander: the OP-Z famously has no screen, since you already carry one. Place it

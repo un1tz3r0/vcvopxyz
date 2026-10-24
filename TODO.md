@@ -3,7 +3,7 @@
 ## Next
 
 The engine move, planned in Vic's "Plan: engines into the Sequencer" doc (2026-10-24), one PR each: OP-Z kits
-(2.0.25), the engine core split (2.0.26), the row record's dials (2.0.27), engines in the Sequencer, presets, the display, docs.
+(2.0.25), the engine core split (2.0.26), the row record's dials (2.0.27), engines in the Sequencer (2.1.0), presets, the display, docs.
 
 - [ ] **Re-sample the flagged pads** with track 4's kits: pad 16 of every snare and hat kit (the bounces stop 8 ms
       into it), Hat 5's pads 4, 6, 8, 10 and 12 (nothing played), and the sounds still ringing when the next one
@@ -23,6 +23,14 @@ The engine move, planned in Vic's "Plan: engines into the Sequencer" doc (2026-1
 ## Found during the engine move
 
 Whatever turns up off the plan's path, each for a PR of its own afterwards.
+
+- [ ] Editing a track's plug slots from the context menu isn't undoable.
+- [ ] A plug switched in while notes are held doesn't start them: it plays from the next note on.
+- [ ] Every track now runs in the Sequencer's process, on one engine thread, where the engine modules could spread
+      across Rack's threads.
+- [ ] Kits loaded from files into old Drum modules aren't migrated (a warning is logged); the OP-Z's and the
+      built-in kits are.
+- [ ] The docs' screenshots and the first-sound guide still show the engine modules (the docs PR).
 
 ## Loose ends
 
@@ -55,8 +63,8 @@ Whatever turns up off the plan's path, each for a PR of its own afterwards.
 - [ ] **FX:** check the six effects against the hardware: Delay's key times and feedback ceiling, the reverbs'
       sizes and predelay, Chorus-80's depth and rate range, Crush's rate and bit range, Dist's drive and tone. Which
       LFO targets the FX tracks really have is a guess (time and send stand in for attack and pitch).
-- [ ] The FX modules' plug ids aren't written to exported project files, so the OP-Z keeps whatever effects the
-      imported file had, or its defaults.
+- [ ] Analog, Organ, EP and Rymd have no OP-Z plug id, so an exported project file keeps whatever the imported
+      one had on their tracks, or the OP-Z's defaults.
 - [ ] **Patterns and chains:** check against the hardware where a chain's pattern ends (the longest track here),
       whether a pattern never played keeps the sound before it, and what PROJECT with the white keys does beyond
       the saved chains.

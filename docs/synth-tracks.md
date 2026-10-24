@@ -1,5 +1,10 @@
 # Synth tracks
 
+> **Changed in 2.1.0:** the engines and send effects are no longer modules. They are plugs inside the Sequencer,
+> ten slots a track, picked with TRACK latched and a black key, and filled from its context menu (**Plug slots**).
+> A breakout on a track plays the track's plug when its audio outputs are patched, or hands the track to outside
+> modules when only its note CVs are. This page still describes the modules and is being rewritten.
+
 Digital, Analog, Cluster, Organ, Bow, Electric, Saw, Shade, Uranus, Volt, EP and [Synth Breakout](breakout.md) are all the
 same OP-Z synth track around a different sound. Everything on this page but the last section applies to each of them; only their two sound dials differ. The
 [drum tracks](drum-tracks.md) share all of it but the note styles and portamento.

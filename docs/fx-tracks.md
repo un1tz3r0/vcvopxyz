@@ -1,5 +1,10 @@
 # FX tracks
 
+> **Changed in 2.1.0:** the engines and send effects are no longer modules. They are plugs inside the Sequencer,
+> ten slots a track, picked with TRACK latched and a black key, and filled from its context menu (**Plug slots**).
+> A breakout on a track plays the track's plug when its audio outputs are patched, or hands the track to outside
+> modules when only its note CVs are. This page still describes the modules and is being rewritten.
+
 <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Delay-small-dark.png"><img alt="Delay" src="assets/modules/Delay-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Reverb-small-dark.png"><img alt="Reverb" src="assets/modules/Reverb-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Rymd-small-dark.png"><img alt="Rymd" src="assets/modules/Rymd-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Chorus-small-dark.png"><img alt="Chorus" src="assets/modules/Chorus-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Crush-small-dark.png"><img alt="Crush" src="assets/modules/Crush-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Dist-small-dark.png"><img alt="Dist" src="assets/modules/Dist-small-light.png"></picture>
 
 The OP-Z's send effects, as six modules: **Delay**, **Reverb**, **Rymd**, **Chorus**, **Crush** and **Dist**. Each
