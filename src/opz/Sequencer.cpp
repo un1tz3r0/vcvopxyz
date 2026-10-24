@@ -886,7 +886,7 @@ struct Sequencer : Module, Hub {
 		if (h.shown == h.breakoutCore() || !p) {
 			icon = "plug_Breakout";
 			name = "Breakout";
-			detail = "NOTES OUT, SOUND BACK IN";
+			detail = "PLAYED OUTSIDE";
 			return;
 		}
 		icon = "plug_" + (h.kind == DRUM ? std::string("Drum") : p->slug);

@@ -277,7 +277,8 @@ Vic made to keep (2026-10-21).
 - **Step length** is TRACK, SHIFT and a black key, and TRACK and a black key pick the plug, as in the guide; on the
   master track, which has no plugs, TRACK and a black key set it too. **Step count**, which the guide gives no
   combo for, is TRACK and SHIFT and a step.
-- **Plugs** come from ten slots per track, filled from the context menu; presets aren't stored or randomized yet.
+- **Plugs** come from ten slots per track, filled from the context menu. **Presets**, 14 per plug, are stored with a
+  long press on a white key in track mode, and TRACK and REC randomizes the sound, envelope and LFO pages.
 - **Quantize** pulls notes towards the grid as they play; the guide applies it to notes recorded live.
 - **Sound mutes** zero a track's level before its sends, so a sound-muted track stops feeding the FX tracks; the
   guide says muted tracks still send to the effects.

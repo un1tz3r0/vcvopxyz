@@ -1,6 +1,6 @@
 # vcvopxyz
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/guide/voices-dark.png"><img alt="A Sequencer playing two Drums, Digital, Analog, Organ and EP, with a Delay and a Reverb" src="docs/assets/guide/voices-light.png"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/guide/band-dark.png"><img alt="A Sequencer playing kick, snare, bass and chords, with a Screen beside it" src="docs/assets/guide/band-light.png"></picture>
 
 ## What is it?
 
@@ -44,7 +44,7 @@ The engines and send effects are the tracks' **plugs**, inside the Sequencer: ea
 
 | Plug | |
 | --- | --- |
-| [Drum](docs/drum-tracks.md) | The four drum tracks: 24 sounds a kit: the OP-Z's own, sampled, synthesized ones, or loaded from OP-1 and OP-Z kits, AIFF and WAV, with the drum note styles. |
+| [Drum](docs/drum-tracks.md) | The four drum tracks: 24 sounds a [kit](docs/kits.md): the OP-Z's own, sampled, synthesized ones, or loaded from OP-1 and OP-Z kits, AIFF and WAV, with the drum note styles. |
 | [Digital](docs/synth-tracks.md#the-engines) | A sine driven past full scale so it wraps like an overflowing integer, with phase feedback. |
 | [Analog](docs/synth-tracks.md#the-engines) | Saw, sub and noise through an enveloped low-pass. |
 | [Cluster](docs/synth-tracks.md#the-engines) | Seven detuned saws per note. |
@@ -71,7 +71,7 @@ The [quickstart](docs/quickstart.md) has complete descriptions of the recognized
 
 ## Further Reading
 
-- [Your first sound](docs/guide.md): a walk from an empty rack to a beat, with screenshots.
+- [Your first sound](docs/guide.md): a walk from an empty rack to a beat and a voice of your own, with screenshots.
 - [Quickstart](docs/quickstart.md): the face, clicks and holds, modes and colours.
 - [The manual](docs/README.md): every module, page and key.
 - Installing: [Linux](INSTALL.linux.md), [macOS](INSTALL.macos.md) (Intel and Apple silicon),
