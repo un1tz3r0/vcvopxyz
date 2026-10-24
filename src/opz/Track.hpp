@@ -75,9 +75,12 @@ struct Track : Module, TrackIds {
 	}
 
 	/** What plays its track, for the Sequencer's record of its row, which a version without engine modules picks the
-	same sounds from. */
+	same sounds from: its slug, its dials as shares of their travel, and its settings. */
 	virtual json_t* rowJson() {
-		return json_pack("{s:s}", "slug", model->slug.c_str());
+		json_t* sound = json_array();
+		for (int i = 0; i < PARAMS_LEN; i++)
+			json_array_append_new(sound, json_real(paramQuantities[i]->getScaledValue()));
+		return json_pack("{s:s, s:o, s:o}", "slug", model->slug.c_str(), "sound", sound, "data", dataToJson());
 	}
 
 	void onReset(const ResetEvent& e) override {

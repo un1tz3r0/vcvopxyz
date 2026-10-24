@@ -65,8 +65,8 @@ params are configured on a module it is given, from a base param (`configure(m, 
 through `dataToJson`/`dataFromJson` on the core. `Track` (`src/opz/Track.hpp`) is the module around one:
 `TrackModule<Core>` binds the core to the module's own params and jacks, configures them, and each frame hands it
 the bus (`joinBus`): what the hub sent (`bus`), its track (`busTrack`) and the slot its sound goes back into
-(`slot`). The module keeps what only a module has: its place on the bus, the panel's port names, its slug in the
-Sequencer's row record, and patch storage, which Drum's core reaches through a `kitFile` callback. The UI reaches
+(`slot`). The module keeps what only a module has: its place on the bus, the panel's port names, its entry in the
+Sequencer's row record (its slug, its dials as shares of their travel and its settings), and patch storage, which Drum's core reaches through a `kitFile` callback. The UI reaches
 an engine through its core too (`Track::getCore()`), and the Sequencer's dials turn `paramQuantities[p]->module`'s
 param `paramQuantities[p]->paramId`, so none of it cares which module holds a core's params. This is the step
 before the engines play inside the Sequencer itself: each hosted core will be bound to a block of the Sequencer's

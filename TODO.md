@@ -3,7 +3,7 @@
 ## Next
 
 The engine move, planned in Vic's "Plan: engines into the Sequencer" doc (2026-10-24), one PR each: OP-Z kits
-(2.0.25), the engine core split (this one, 2.0.26), engines in the Sequencer, presets, the display, docs.
+(2.0.25), the engine core split (2.0.26), the row record's dials (2.0.27), engines in the Sequencer, presets, the display, docs.
 
 - [ ] **Re-sample the flagged pads** with track 4's kits: pad 16 of every snare and hat kit (the bounces stop 8 ms
       into it), Hat 5's pads 4, 6, 8, 10 and 12 (nothing played), and the sounds still ringing when the next one
