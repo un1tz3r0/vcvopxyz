@@ -30,17 +30,20 @@ of round keys. **TRACK**, **REC** and **−**, **PLAY** and **+**, **STOP** and 
 the top under the track icons, the black keys numbered 1 to 0 on the column lines, and the white keys along the
 bottom under the step component icons. Each key has an RGB LED that lights up its symbol. The OP-Z's four index keys,
 **PROJECT**, **MIXER**, **TEMPO** and **SCREEN**, sit on the face's top edge in its corner, as they sit on top of the
-hardware. Where the OP-Z's speaker is, beside the dials, are the keys the hardware has no room for: the display top
-left, the four page keys top right, and along the bottom a key per track: the eight tracks, the two FX tracks, then **MASTER**. Under the face, one
+hardware. Where the OP-Z's speaker is, beside the dials, is the display the hardware has no room for, standing in for
+the phone app: the selected track's plug with its icon, slot and preset, the tempo with **INT** and **EXT**, the four
+pages down the right, and along the bottom a key per track: the eight tracks, the two FX tracks, then **MASTER**. A
+track's key glows orange with its loudest voice, flashes cyan at each note, is outlined while selected, and shows a
+jack while a breakout has the track; its name is in its tooltip. Under the face, one
 row of jacks: the transport's inputs, the notes to record, then the transport's outputs and the mix.
 
 ## Tracks and dials
 
-- <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/select4-playing-dark.png"><img alt="The bass track's key, selected" src="assets/keys/select4-playing-light.png" height="32"></picture> **Selecting a track:** click its key beside the dials (white while selected, orange while it plays), or switch
+- <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/select4-playing-dark.png"><img alt="The bass track's key, selected" src="assets/keys/select4-playing-light.png" height="32"></picture> **Selecting a track:** click its key on the display, or switch
   **TRACK** on and click one of steps 1 to 8, 9 or 10 for an FX track, or 12 for the master track. The keys, steps, dials and recording all work on the selected track.
 - <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page1-page-dark.png"><img alt="The second page key, lit" src="assets/keys/page1-page-light.png" height="32"></picture> **Dials:** they are the selected track's engine's dials, so turning one turns that parameter on the engine, with
-  its own tooltip, undo and MIDI mapping. Click **SHIFT**, or one of the four page keys, to change the page; the
-  page keys and the dials' LEDs show it in its colour. In track, tempo and mixer mode they set those modes' own
+  its own tooltip, undo and MIDI mapping. Click **SHIFT**, or one of the four pages on the display, to change the page;
+  the display and the dials' LEDs show it in its colour. In track, tempo and mixer mode they set those modes' own
   values instead.
 
 ## Steps

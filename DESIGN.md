@@ -255,6 +255,15 @@ written down. Every track's panel carries its kind as a chip between the top scr
 a glance in the module browser: SYNTH in cyan with a wave, DRUM in orange with a drum, FX in magenta with a send.
 The colours come from the OP-Z's LEDs, away from the four dial colours that mean pages.
 
+The Sequencer's display is a dark box on the panel with boxes in the components layer for what goes in it, and the
+module draws the rest on Rack's light layer, so it reads like a screen in a dark room. `PlugDisplay` names the
+selected track's plug with its icon, slot and preset; `TempoDisplay` is the seven-segment tempo; the track keys
+(`TrackKey`) and pages (`PageKey`) are `PressKey`s, the round keys' press handling without their drawing, bound to the
+same params the round keys were, so patches, MIDI maps and the keys' gestures carry over. A track key's icon takes its
+colour from the key's three lights, as a round key's symbol does, so the module still decides every key's colour in
+one place; `BOUND_LIGHT` tells it a breakout has the track. The plug icons are white symbols from `opz.py`, like the
+lit key symbols, tinted as they're drawn.
+
 The OP-Z's artwork, name and logo stay off the panels: the icons are redrawn, and the modules are named by what they
 do, so the plugin can go to the VCV Library some day.
 

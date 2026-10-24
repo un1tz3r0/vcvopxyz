@@ -233,6 +233,7 @@ struct TrackCore : TrackIds {
 
 	int style = 0;               // the note style playing, which a change of the dial lets every note go for
 	int channels = 0;            // the note source's channels
+	int notesStarted = 0;        // ever, for the Sequencer's track keys to flash at
 	dsp::SchmittTrigger gates[PORT_MAX_CHANNELS];
 	uint32_t notesPlayed = 0;
 	bool lfoInside = true;       // false while the LFO goes out to other modules instead
@@ -398,7 +399,7 @@ struct TrackCore : TrackIds {
 		for (int c = 0; c < PORT_MAX_CHANNELS; c++) {
 			float gate = c >= channels ? 0.f : lane ? 10.f * lane->gate[c] : inputs[GATE_INPUT].getVoltage(c);
 			switch (gates[c].processEvent(gate, 0.1f, 1.f)) {
-				case dsp::SchmittTrigger::TRIGGERED: noteOn(c); break;
+				case dsp::SchmittTrigger::TRIGGERED: noteOn(c); notesStarted++; break;
 				case dsp::SchmittTrigger::UNTRIGGERED: noteOff(c); break;
 				default: break;
 			}

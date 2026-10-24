@@ -242,30 +242,43 @@ struct SymbolLight : app::ModuleLightWidget {
 	}
 };
 
-/** An OP-Z key: round and momentary, with an RGB LED in its middle that lights up its symbol. Its ring and symbol
-are printed on the panel, so it draws only how far it's pushed in. A press sets the param to how it was pressed (see
-KeyPress), and it springs back on release, but not before the module has had a frame to see it. Pass
-createLightParam the first of its three light ids, then place it with setRing. */
-struct RoundKey : app::ParamWidget {
-	SymbolLight* light = new SymbolLight;
-	float radius = 0.f;     // the printed ring's
+/** A white symbol from res/components/symbols, `size` across, centred on `c`, in `color`. */
+inline void drawSymbol(NVGcontext* vg, const std::shared_ptr<window::Svg>& symbol, math::Vec c, float size, NVGcolor color) {
+	if (!symbol || !symbol->handle || color.a <= 0.f)
+		return;
+	math::Vec s = symbol->getSize();
+	nvgSave(vg);
+	nvgTranslate(vg, c.x - size / 2, c.y - size * s.y / s.x / 2);
+	nvgScale(vg, size / s.x, size / s.x);
+	nvgTint(vg, color);
+	window::svgDraw(vg, symbol->handle);
+	nvgRestore(vg);
+}
+
+inline std::shared_ptr<window::Svg> loadSymbol(const std::string& name) {
+	return window::Svg::load(asset::plugin(pluginInstance, "res/components/symbols/" + name + ".svg"));
+}
+
+/** A momentary key as the OP-Z's work: a press sets the param to how it was pressed (see KeyPress), and it springs
+back on release, but not before the module has had a frame to see it. It draws nothing; RoundKey and the
+Sequencer's display keys do. */
+struct PressKey : app::ParamWidget {
 	int frames = -1;        // frames since the press, or -1 while up
 	bool released = false;
+	bool hovered = false;
 
-	RoundKey() {
-		addChild(light);
+	void onEnter(const EnterEvent& e) override {
+		hovered = true;
+		ParamWidget::onEnter(e);
+	}
+	void onLeave(const LeaveEvent& e) override {
+		hovered = false;
+		ParamWidget::onLeave(e);
 	}
 
-	/** Puts the key over its printed ring, taking clicks a little way outside it too. */
-	void setRing(math::Rect ring, const std::string& symbol) {
-		box = ring.grow(mm2px(math::Vec(1.1f, 1.1f)));
-		radius = ring.size.x / 2;
-		light->box.size = box.size;
-		light->window = 0.64f * radius;
-		light->symbol = window::Svg::load(asset::plugin(pluginInstance, "res/components/symbols/" + symbol + ".svg"));
-	}
-	app::ModuleLightWidget* getLight() {
-		return light;
+	bool pressed() {
+		engine::ParamQuantity* pq = getParamQuantity();
+		return pq && pq->getValue() > 0.f;
 	}
 
 	void initParamQuantity() override {
@@ -308,10 +321,33 @@ struct RoundKey : app::ParamWidget {
 		}
 		ParamWidget::step();
 	}
+};
+
+/** An OP-Z key: round, with an RGB LED in its middle that lights up its symbol. Its ring and symbol are printed on
+the panel, so it draws only how far it's pushed in. Pass createLightParam the first of its three light ids, then
+place it with setRing. */
+struct RoundKey : PressKey {
+	SymbolLight* light = new SymbolLight;
+	float radius = 0.f;     // the printed ring's
+
+	RoundKey() {
+		addChild(light);
+	}
+
+	/** Puts the key over its printed ring, taking clicks a little way outside it too. */
+	void setRing(math::Rect ring, const std::string& symbol) {
+		box = ring.grow(mm2px(math::Vec(1.1f, 1.1f)));
+		radius = ring.size.x / 2;
+		light->box.size = box.size;
+		light->window = 0.64f * radius;
+		light->symbol = loadSymbol(symbol);
+	}
+	app::ModuleLightWidget* getLight() {
+		return light;
+	}
 
 	void draw(const DrawArgs& args) override {
-		engine::ParamQuantity* pq = getParamQuantity();
-		if (pq && pq->getValue() > 0.f) {
+		if (pressed()) {
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, box.size.x / 2, box.size.y / 2, radius);
 			nvgFillColor(args.vg, settings::preferDarkPanels ? nvgRGBAf(1.f, 1.f, 1.f, 0.2f) : nvgRGBAf(0.f, 0.f, 0.f, 0.18f));
