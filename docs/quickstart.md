@@ -15,8 +15,8 @@ so is the idea that holding one key changes what the others do. What's new is ho
 | | Where | What it does |
 | --- | --- | --- |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/project-off-dark.png"><img alt="PROJECT" src="assets/keys/project-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/mixer-off-dark.png"><img alt="MIXER" src="assets/keys/mixer-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/metronome-off-dark.png"><img alt="TEMPO" src="assets/keys/metronome-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/screen-off-dark.png"><img alt="SCREEN" src="assets/keys/screen-off-light.png" height="36"></picture> | Top left corner | The four index keys: modes that change what the other keys do. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page0-off-dark.png"><img alt="Page 1" src="assets/keys/page0-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page1-off-dark.png"><img alt="Page 2" src="assets/keys/page1-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page2-off-dark.png"><img alt="Page 3" src="assets/keys/page2-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page3-off-dark.png"><img alt="Page 4" src="assets/keys/page3-off-light.png" height="36"></picture> | Beside the display | The dials' four pages: sound, envelope, LFO, mix. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/select4-off-dark.png"><img alt="Bass" src="assets/keys/select4-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/fx_select0-off-dark.png"><img alt="FX 1" src="assets/keys/fx_select0-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/master-off-dark.png"><img alt="MASTER" src="assets/keys/master-off-light.png" height="36"></picture> | The row under the display | A key per track: the eight tracks, the two FX tracks, then the master track. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page0-off-dark.png"><img alt="Page 1" src="assets/keys/page0-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page1-off-dark.png"><img alt="Page 2" src="assets/keys/page1-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page2-off-dark.png"><img alt="Page 3" src="assets/keys/page2-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page3-off-dark.png"><img alt="Page 4" src="assets/keys/page3-off-light.png" height="36"></picture> | Down the display's right | The dials' four pages: sound, envelope, LFO, mix. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/select4-off-dark.png"><img alt="Bass" src="assets/keys/select4-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/fx_select0-off-dark.png"><img alt="FX 1" src="assets/keys/fx_select0-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/master-off-dark.png"><img alt="MASTER" src="assets/keys/master-off-light.png" height="36"></picture> | Along the display's bottom | A key per track: the eight tracks, the two FX tracks, then the master track. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/dial0-off-dark.png"><img alt="Green dial" src="assets/keys/dial0-off-light.png" height="60"></picture> | Top right | Four dials, green, blue, yellow and red, for the selected track's sound. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/track-off-dark.png"><img alt="TRACK" src="assets/keys/track-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/rec-off-dark.png"><img alt="REC" src="assets/keys/rec-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/octave_down-off-dark.png"><img alt="−" src="assets/keys/octave_down-off-light.png" height="36"></picture> | The left column | Track mode, recording, and an octave down. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/play-off-dark.png"><img alt="PLAY" src="assets/keys/play-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/stop-off-dark.png"><img alt="STOP" src="assets/keys/stop-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/octave_up-off-dark.png"><img alt="+" src="assets/keys/octave_up-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/shift-off-dark.png"><img alt="SHIFT" src="assets/keys/shift-off-light.png" height="36"></picture> | The second column | The transport, an octave up, and SHIFT. |
@@ -80,8 +80,8 @@ The keys' LEDs keep the OP-Z's colours. On a step:
 | Green | Steps with step components; the rest of a chain; the battery |
 | Blinking | A held step, or one picked for components |
 
-The track keys are white for the one selected and orange while one plays. The page keys light in their page's colour
-and the dials' small LEDs follow; a dial's LED turns white while the held step locks it.
+The track keys are white and outlined for the one selected, orange with a playing track's loudest voice and cyan for a
+moment at each note. The pages light in their colour and the dials' small LEDs follow; a dial's LED turns white while the held step locks it.
 
 ## For OP-Z owners
 
@@ -90,7 +90,7 @@ keys, and a long press or Ctrl+click for SHIFT and the steps.
 
 | On the OP-Z | Here |
 | --- | --- |
-| Hold track, press a step to select a track | Click the track's key beside the dials, or latch TRACK and click the step |
+| Hold track, press a step to select a track | Click the track's key on the display, or latch TRACK and click the step |
 | Hold track, turn a dial | Latch TRACK, turn the dial |
 | Hold track, press a value key: pick the plug in that slot | Latch TRACK, click a black key |
 | Hold track and shift, press a value key: step length | Latch TRACK and SHIFT, click a black key |
@@ -100,7 +100,7 @@ keys, and a long press or Ctrl+click for SHIFT and the steps.
 | Step count (no combo on the OP-Z) | Latch TRACK and SHIFT, click a step |
 | Hold track, press −/+: shift the pattern | Latch TRACK, click − or + |
 | Hold track, hold stop: clear the track | Latch TRACK, hold STOP a second |
-| Press shift: next page | Click SHIFT, or a page key |
+| Press shift: next page | Click SHIFT, or a page on the display |
 | Hold shift, press steps, then a white key and a value key: step components | Latch SHIFT, click steps, then a white key and a black key |
 | Hold shift, press stop: clear the components | Latch SHIFT, click STOP |
 | Hold a step, play keys: edit its notes | Latch the step, play keys |

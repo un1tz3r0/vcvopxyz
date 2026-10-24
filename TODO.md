@@ -3,7 +3,7 @@
 ## Next
 
 The engine move, planned in Vic's "Plan: engines into the Sequencer" doc (2026-10-24), one PR each: OP-Z kits
-(2.0.25), the engine core split (2.0.26), the row record's dials (2.0.27), engines in the Sequencer (2.1.0), presets (2.1.1), the display, docs.
+(2.0.25), the engine core split (2.0.26), the row record's dials (2.0.27), engines in the Sequencer (2.1.0), presets (2.1.1), the display (2.1.2), docs.
 
 - [ ] **Re-sample the flagged pads** with track 4's kits: pad 16 of every snare and hat kit (the bounces stop 8 ms
       into it), Hat 5's pads 4, 6, 8, 10 and 12 (nothing played), and the sounds still ringing when the next one
@@ -32,7 +32,8 @@ Whatever turns up off the plan's path, each for a PR of its own afterwards.
       across Rack's threads.
 - [ ] Kits loaded from files into old Drum modules aren't migrated (a warning is logged); the OP-Z's and the
       built-in kits are.
-- [ ] The docs' screenshots and the first-sound guide still show the engine modules (the docs PR).
+- [ ] The docs' screenshots and the first-sound guide still show the engine modules and the round track and page keys
+      (the docs PR).
 
 ## Loose ends
 

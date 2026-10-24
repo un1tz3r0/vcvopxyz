@@ -119,7 +119,8 @@ inline std::string noteName(int pitch) {
 
 /** The keys' LED colours, besides the notes' orange. */
 namespace led {
-const NVGcolor WHITE = nvgRGBf(1.f, 1.f, 1.f), RED = nvgRGBf(1.f, 0.1f, 0.06f), GREEN = nvgRGBf(0.15f, 1.f, 0.3f), BLUE = nvgRGBf(0.2f, 0.4f, 1.f);
+const NVGcolor WHITE = nvgRGBf(1.f, 1.f, 1.f), RED = nvgRGBf(1.f, 0.1f, 0.06f), GREEN = nvgRGBf(0.15f, 1.f, 0.3f), BLUE = nvgRGBf(0.2f, 0.4f, 1.f),
+	CYAN = nvgRGBf(0.1f, 0.85f, 1.f);
 }
 
 static const char* const TRACK_NAMES[LANES] = {"Kick", "Snare", "Perc", "Sample", "Bass", "Lead", "Arp", "Chord", "Master", "FX 1", "FX 2"};
@@ -253,6 +254,7 @@ struct Sequencer : Module, Hub {
 		ENUMS(KEY_LIGHT, 3 * (LOCK_PARAM - TRACK_PARAM + 1 + FX_TRACKS)), ENUMS(DIAL_LIGHT, 3 * 4),
 		INTERNAL_LIGHT, EXTERNAL_LIGHT,
 		ENUMS(INPUT_LIGHT, 2 * INPUTS_LEN), ENUMS(OUTPUT_LIGHT, 2 * JACKS),
+		ENUMS(BOUND_LIGHT, LANES),   // a breakout has the track, for its key on the display
 		LIGHTS_LEN
 	};
 	static constexpr float LONG_PRESS = 0.4f, CLEAR_HOLD = 1.f; // seconds
@@ -542,6 +544,8 @@ struct Sequencer : Module, Hub {
 	float sincePulse = 0.f, pulsePeriod = 0.f; // seconds; a period of 0 is unknown
 	HostedTrack hosted[LANES];   // every track's cores, by lane; the master track has none
 	std::atomic<int> presetLoaded[LANES]; // the preset each track last loaded or stored, or -1
+	float flashes[LANES] = {};   // how much of each track key's flash at its last note is left
+	int notesSeen[LANES] = {};   // the notes each track had started then
 	/** A track's plug or dials changed at once from the keys, for the widget to make a step of the undo history: its
 	slot, preset and dials before and after. */
 	struct SoundEdit {
@@ -859,6 +863,36 @@ struct Sequencer : Module, Hub {
 
 	int selectedTrack() override {
 		return track;
+	}
+
+	/** A page's name on the display, or nothing for one the selected track hasn't. */
+	std::string pageName(int p) {
+		TrackCore* e = track == MASTER ? nullptr : engine(track);
+		return e && e->hasDials(p) ? e->pageName(p) : "";
+	}
+
+	/** What the display says the selected track plays, for the UI thread: an icon, a name, and the slot and preset
+	it plays, or what takes it instead. */
+	void plugShown(std::string& icon, std::string& name, std::string& detail) {
+		int t = track;
+		if (t == MASTER) {
+			icon = "master";
+			name = "Master";
+			detail = "TRANSPOSES IN KEY";
+			return;
+		}
+		HostedTrack& h = hosted[t];
+		const Plug* p = h.plug;
+		if (h.shown == h.breakoutCore() || !p) {
+			icon = "plug_Breakout";
+			name = "Breakout";
+			detail = "NOTES OUT, SOUND BACK IN";
+			return;
+		}
+		icon = "plug_" + (h.kind == DRUM ? std::string("Drum") : p->slug);
+		name = plugName(t);
+		int preset = presetLoaded[t];
+		detail = string::f("SLOT %d", (h.slot + 1) % 10) + (preset >= 0 ? string::f("   PRESET %d", preset + 1) : "");
 	}
 
 	/** What a track's slot holds, for menus and labels on the UI thread: a plug or a kit, or nothing. */
@@ -2161,15 +2195,24 @@ struct Sequencer : Module, Hub {
 		for (int k = 0; k < KEYS; k++)
 			setKeyLight(KEY_PARAM + k, keyColor, level[k]);
 
-		// The track keys: white for the one selected, orange while one is busy, or on the master track with SHIFT
-		// latched, green for the tracks it transposes. The page keys light in their colours, brightly for the page the
-		// selected track's engine is on.
+		// The track keys: white for the one selected, orange with the loudest voice of one playing, cyan for a moment
+		// at each of its notes, or on the master track with SHIFT latched, green for the tracks it transposes. The
+		// page keys light in their colours, brightly for the page the selected track's engine is on.
 		for (int t = 0; t < LANES; t++) {
+			int notes = t == MASTER ? (int) lanes[MASTER].player.notes : hosted[t].active->notesStarted;
+			if (notes != notesSeen[t])
+				flashes[t] = 1.f;
+			notesSeen[t] = notes;
+			flashes[t] = std::max(flashes[t] - 6.f * dt, 0.f);
+			lights[BOUND_LIGHT + t].setBrightness(t != MASTER && hosted[t].bound);
 			int key = selectKey(t);
+			float glow = t == MASTER ? (busy(t) ? 0.8f : 0.f) : 0.85f * hosted[t].active->activity();
 			if (choosingTransposed() && t < TRACKS)
 				setKeyLight(key, led::GREEN, transposed >> t & 1);
+			else if (flashes[t] > 0.f)
+				setKeyLight(key, led::CYAN, std::max(flashes[t], t == track ? 1.f : glow));
 			else
-				setKeyLight(key, t == track ? led::WHITE : NOTE_COLOR, t == track ? 1.f : busy(t) ? 0.8f : 0.f);
+				setKeyLight(key, t == track ? led::WHITE : NOTE_COLOR, t == track ? 1.f : glow);
 		}
 		int shown = modal() || track == MASTER ? -1 : hosted[track].active->page;
 		for (int p = 0; p < PAGES; p++)
@@ -2985,7 +3028,7 @@ struct StepKey : RoundKey {
 };
 
 
-/** Three seven-segment characters: the tempo, or whatever the mode keys show. */
+/** Three seven-segment characters on the display: the tempo, or whatever the mode keys show. */
 struct TempoDisplay : widget::Widget {
 	Sequencer* module = nullptr;
 
@@ -2995,10 +3038,6 @@ struct TempoDisplay : widget::Widget {
 	}
 
 	void draw(const DrawArgs& args) override {
-		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, 0, 0, box.size.x, box.size.y, mm2px(1.f));
-		nvgFillColor(args.vg, nvgRGB(0x14, 0x15, 0x17));
-		nvgFill(args.vg);
 		SevenSegment::draw(args.vg, digits(), "888", false, nvgTransRGBAf(NOTE_COLOR, 0.08f));
 	}
 
@@ -3010,6 +3049,133 @@ struct TempoDisplay : widget::Widget {
 };
 
 
+
+
+namespace display {
+
+const NVGcolor INK = nvgRGB(0xf2, 0xf1, 0xee), DIM = nvgRGBA(0xf2, 0xf1, 0xee, 0x90);
+
+std::shared_ptr<window::Font> font() {
+	return APP->window->loadFont(asset::system("res/fonts/Nunito-Bold.ttf"));
+}
+
+/** A key's LED colour from its three lights, as SymbolLight takes it. */
+NVGcolor lit(engine::Module* m, int light) {
+	if (!m)
+		return nvgRGBAf(0.f, 0.f, 0.f, 0.f);
+	float c[3];
+	for (int i = 0; i < 3; i++)
+		c[i] = clamp(m->lights[light + i].getBrightness(), 0.f, 1.f);
+	float top = std::max({c[0], c[1], c[2]});
+	return top > 0.f ? nvgRGBAf(c[0] / top, c[1] / top, c[2] / top, std::sqrt(top)) : nvgRGBAf(0.f, 0.f, 0.f, 0.f);
+}
+
+} // namespace display
+
+/** A track's key on the display: its icon, grey at rest and lighter under the pointer, lit as its LED says (white
+while selected, orange with the track's loudest voice, cyan for a moment at each note), outlined while selected,
+and with a jack beside it while a breakout has the track. Its name is in its tooltip. */
+struct TrackKey : PressKey {
+	int lane = 0, light = 0;
+	std::shared_ptr<window::Svg> icon, jack = loadSymbol("plug_Breakout");
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		if (layer == 1) {
+			NVGcontext* vg = args.vg;
+			Sequencer* m = dynamic_cast<Sequencer*>(module);
+			math::Vec c = box.size.div(2);
+			float size = 1.35f * box.size.x, r = 0.14f * box.size.x; // a track symbol fills 55% of its canvas
+			drawSymbol(vg, icon, c, size, nvgTransRGBAf(display::INK, hovered ? 0.85f : 0.45f));
+			NVGcolor color = display::lit(module, light);
+			if (color.a > 0.f) {
+				nvgBeginPath(vg);
+				nvgCircle(vg, c.x, c.y, 0.5f * box.size.x);
+				nvgFillPaint(vg, nvgRadialGradient(vg, c.x, c.y, 0.f, 0.5f * box.size.x, nvgTransRGBAf(color, 0.3f * color.a), nvgTransRGBAf(color, 0.f)));
+				nvgFill(vg);
+				drawSymbol(vg, icon, c, size, color);
+			}
+			if (m ? m->track == lane : lane == DRUM_TRACKS) {
+				nvgBeginPath(vg);
+				nvgRoundedRect(vg, 1.f, 1.f, box.size.x - 2.f, box.size.y - 2.f, r);
+				nvgStrokeColor(vg, display::INK);
+				nvgStrokeWidth(vg, mm2px(0.3f));
+				nvgStroke(vg);
+			}
+			if (pressed()) {
+				nvgBeginPath(vg);
+				nvgRoundedRect(vg, 1.f, 1.f, box.size.x - 2.f, box.size.y - 2.f, r);
+				nvgFillColor(vg, nvgTransRGBAf(display::INK, 0.15f));
+				nvgFill(vg);
+			}
+			if (m && m->lights[Sequencer::BOUND_LIGHT + lane].getBrightness() > 0.f)
+				drawSymbol(vg, jack, box.size.mult(0.84f), 0.34f * box.size.x, display::INK);
+		}
+		ParamWidget::drawLayer(args, layer);
+	}
+};
+
+/** A page on the display: a dot in its colour, lit as its LED says, and its name, bright for the page showing and
+gone for one the track hasn't. */
+struct PageKey : PressKey {
+	int page = 0, light = 0;
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		std::shared_ptr<window::Font> font = display::font();
+		if (layer == 1 && font) {
+			NVGcontext* vg = args.vg;
+			Sequencer* m = dynamic_cast<Sequencer*>(module);
+			std::string name = m ? m->pageName(page) : TrackCore::PAGE_NAMES[page];
+			float h = box.size.y, b = m ? m->lights[light].getBrightness() + m->lights[light + 1].getBrightness() + m->lights[light + 2].getBrightness() : 0.f;
+			bool showing = b > 0.5f;
+			nvgBeginPath(vg);
+			nvgCircle(vg, 0.3f * h, h / 2, (showing ? 0.17f : 0.13f) * h);
+			nvgFillColor(vg, nvgTransRGBAf(PAGE_COLORS[page], name.empty() ? 0.15f : showing ? 1.f : 0.45f));
+			nvgFill(vg);
+			if (pressed() || hovered) {
+				nvgBeginPath(vg);
+				nvgRoundedRect(vg, 0.f, 0.08f * h, box.size.x, 0.84f * h, 0.2f * h);
+				nvgFillColor(vg, nvgTransRGBAf(display::INK, pressed() ? 0.15f : 0.07f));
+				nvgFill(vg);
+			}
+			nvgFontFaceId(vg, font->handle);
+			nvgFontSize(vg, 0.5f * h);
+			nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+			nvgFillColor(vg, showing ? display::INK : display::DIM);
+			nvgText(vg, 0.62f * h, h / 2, name.c_str(), nullptr);
+		}
+		ParamWidget::drawLayer(args, layer);
+	}
+};
+
+/** The selected track's plug on the display: its icon and name, and under them its slot and preset, or what a
+breakout or the master track does instead. */
+struct PlugDisplay : widget::Widget {
+	Sequencer* module = nullptr;
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		std::shared_ptr<window::Font> font = display::font();
+		if (layer == 1 && font) {
+			std::string icon = "plug_Saw", name = "Saw", detail = "SLOT 1";
+			if (module)
+				module->plugShown(icon, name, detail);
+			NVGcontext* vg = args.vg;
+			float h = box.size.y;
+			nvgSave(vg);
+			nvgScissor(vg, 0, 0, box.size.x, box.size.y);
+			drawSymbol(vg, loadSymbol(icon), math::Vec(0.4f * h, 0.42f * h), 0.62f * h, display::INK);
+			nvgFontFaceId(vg, font->handle);
+			nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_BASELINE);
+			nvgFontSize(vg, 0.42f * h);
+			nvgFillColor(vg, display::INK);
+			nvgText(vg, 0.86f * h, 0.56f * h, name.c_str(), nullptr);
+			nvgFontSize(vg, 0.22f * h);
+			nvgFillColor(vg, display::DIM);
+			nvgText(vg, 0.86f * h, 0.9f * h, detail.c_str(), nullptr);
+			nvgRestore(vg);
+		}
+		Widget::drawLayer(args, layer);
+	}
+};
 
 
 /** One of the four dials. It turns whatever the master says it does now, mostly a param of the selected track's
@@ -3185,6 +3351,10 @@ struct SequencerWidget : ModuleWidget {
 
 		PanelLayout layout(panel);
 #define AT(ID) layout.center(#ID), module, Sequencer::ID
+		PlugDisplay* plug = createWidget<PlugDisplay>(math::Vec());
+		plug->box = layout.box("PLUG_WIDGET");
+		plug->module = module;
+		addChild(plug);
 		TempoDisplay* display = createWidget<TempoDisplay>(math::Vec());
 		display->box = layout.box("TEMPO_WIDGET");
 		display->module = module;
@@ -3236,6 +3406,23 @@ struct SequencerWidget : ModuleWidget {
 			else {
 				name = functions[p - Sequencer::TRACK_PARAM][0];
 				symbol = functions[p - Sequencer::TRACK_PARAM][1];
+			}
+			if (p >= Sequencer::PAGE_PARAM && p < Sequencer::LOCK_PARAM) {
+				PageKey* page = createParam<PageKey>(math::Vec(), module, p);
+				page->box = layout.box(name + "_PARAM");
+				page->page = p - Sequencer::PAGE_PARAM;
+				page->light = light;
+				addParam(page);
+				continue;
+			}
+			if (p == Sequencer::MASTER_PARAM || p >= Sequencer::FX_SELECT_PARAM || (p >= Sequencer::SELECT_PARAM && p < Sequencer::PAGE_PARAM)) {
+				TrackKey* track = createParam<TrackKey>(math::Vec(), module, p);
+				track->box = layout.box(name + "_PARAM");
+				track->lane = p == Sequencer::MASTER_PARAM ? MASTER : p >= Sequencer::FX_SELECT_PARAM ? FX1 + p - Sequencer::FX_SELECT_PARAM : p - Sequencer::SELECT_PARAM;
+				track->light = light;
+				track->icon = loadSymbol(symbol);
+				addParam(track);
+				continue;
 			}
 			if (p >= Sequencer::STEP_PARAM && p < Sequencer::KEY_PARAM)
 				key = createLightParam<StepKey>(math::Vec(), module, p, light);

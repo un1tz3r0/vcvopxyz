@@ -4,8 +4,8 @@ in and out, the notes to record, and the engines' mix.
 The face copies the OP-Z's: four dials over 17 columns of round keys. TRACK, REC and −, PLAY and +, STOP and SHIFT
 on the left; the steps along the top under the track icons; the numbered black keys on the column lines; the white
 keys along the bottom under the step component icons. The index keys sit on its top edge, as the OP-Z's do on top of
-it. Beside the dials, where the OP-Z's speaker is, go the keys the hardware has no room for: the four page keys and a
-key per track. It is drawn at the size of the 24 HP panel it was first made for, then scaled up by SCALE."""
+it. Beside the dials, where the OP-Z's speaker is, goes the display the hardware has no room for, standing in for the
+phone app: the track's plug, the tempo, a key per track and the four pages. It is drawn at the size of the 24 HP panel it was first made for, then scaled up by SCALE."""
 from opz import COMPONENTS, KEY, SCALE, TRACKS, icon, number_key, round_key
 from panelkit import HP, LABEL, NUNITO, Panel, num
 
@@ -17,10 +17,13 @@ FACE_TOP = 10.5
 TOP, MID, BOTTOM = CELL + 7.6, CELL + 7.6 + ROW, CELL + 7.6 + 2 * ROW
 BLANK = 8 * COLUMN                           # the blank space left of the dials
 ICON = 4.1                                   # how far an icon sits above its key
-KEY_PITCH = 5.2                              # between the index keys, and between the page keys
+KEY_PITCH = 5.2                              # between the index keys
 BLACK = [1, 3, 5, 8, 10]                     # the black keys' semitones above F
 WHITE = [0, 2, 4, 6, 7, 9, 11]
-DISPLAY_W, DISPLAY_H = 25.0, 8.5             # the tempo display's box, in the face's millimetres
+DISPLAY_LEFT, DISPLAY_TOP = 1.6, 3.2         # the display's box, in the face's millimetres
+DISPLAY_W, DISPLAY_H = BLANK - 2 * DISPLAY_LEFT, CELL - 1.4 - DISPLAY_TOP
+PAGE_LEFT, PAGE_ROW = 39.6, 3.1              # the page list's left edge, from the display's, and its rows' pitch
+TRACK_ROW, TRACK_PITCH, TRACK_KEY = 10.9, 3.55, 3.3   # the track keys' row, from the display's top, pitch and size
 
 JACK_ROW = 117.5
 PITCH = 11.6                                 # between the jacks' columns
@@ -53,12 +56,22 @@ def x(column):
 
 
 def display(f, left, top):
-    """The tempo display's box, with INT and EXT beside the digits."""
+    """The display: the plug top left, the tempo with INT and EXT under it beside that, the track keys along the
+    bottom and the pages down the right. The module draws all of it but the box and the INT and EXT labels; the keys
+    and pages are boxes for it to take clicks in."""
     f.art.append(f'<rect x="{num(left)}" y="{num(top)}" width="{num(DISPLAY_W)}" height="{num(DISPLAY_H)}" rx="1.2" fill="{{box}}"/>')
-    f.place('TEMPO_WIDGET', left + 0.6, top + 0.6, 14.4, DISPLAY_H - 1.2)
-    for y, name, label in [(top + 2.6, 'INTERNAL', 'INT'), (top + DISPLAY_H - 2.6, 'EXTERNAL', 'EXT')]:
-        f.place(f'{name}_LIGHT', left + 17.0, y)
-        f.art.append(f'<path d="{NUNITO.path(label, left + 21.2, y, 1.8)}" fill="{{box_ink}}"/>')
+    f.place('PLUG_WIDGET', left + 0.8, top + 0.6, 22.4, 7.6)
+    f.place('TEMPO_WIDGET', left + 24.2, top + 0.6, 12.6, 5.8)
+    for x, name, label in [(left + 25.0, 'INTERNAL', 'INT'), (left + 31.4, 'EXTERNAL', 'EXT')]:
+        f.place(f'{name}_LIGHT', x, top + 7.6)
+        f.art.append(f'<path d="{NUNITO.path(label, x + 2.6, top + 7.6, 1.5)}" fill="{{box_ink}}"/>')
+    keys = [f'SELECT{t}_PARAM' for t in range(8)] + ['FX_SELECT0_PARAM', 'FX_SELECT1_PARAM', 'MASTER_PARAM']
+    for i, name in enumerate(keys):
+        cx = left + 2.2 + TRACK_PITCH * i
+        f.place(name, cx - TRACK_KEY / 2, top + TRACK_ROW - TRACK_KEY / 2, TRACK_KEY, TRACK_KEY)
+    for i in range(4):
+        cy = top + 2.0 + PAGE_ROW * i
+        f.place(f'PAGE{i}_PARAM', left + PAGE_LEFT, cy - PAGE_ROW / 2, DISPLAY_W - PAGE_LEFT - 0.6, PAGE_ROW)
 
 
 def face(f):
@@ -77,15 +90,9 @@ def face(f):
         f.art.append(f'<circle cx="{num(cx)}" cy="0" r="{num(KEY / 2 + 0.5)}" fill="{{panel}}"/>')
         round_key(f, f'{name}_PARAM', cx, 0, symbol)
 
-    # Beside the dials, where the OP-Z's speaker is: the display top left, the page keys top right, and a key per track
-    # along the bottom in the OP-Z's order: the eight tracks, the two FX tracks, then the master track.
-    for i in range(4):
-        round_key(f, f'PAGE{i}_PARAM', BLANK - 3.5 - KEY_PITCH * (3 - i), 3.5)
-    keys = [(f'SELECT{t}_PARAM', TRACKS[t]) for t in range(8)] + [('FX_SELECT0_PARAM', 'fx1'), ('FX_SELECT1_PARAM', 'fx2'),
-                                                                   ('MASTER_PARAM', 'master')]
-    for i, (name, symbol) in enumerate(keys):
-        round_key(f, name, BLANK * (i + 0.5) / len(keys), CELL - 3.3, symbol)
-    display(f, 2.5, 3.4)
+    # Beside the dials, where the OP-Z's speaker is: the display, its track keys in the OP-Z's order, the eight tracks,
+    # the two FX tracks, then the master track.
+    display(f, DISPLAY_LEFT, DISPLAY_TOP)
 
     # The dials, each with its LED in the corner of its cell.
     for d in range(4):
