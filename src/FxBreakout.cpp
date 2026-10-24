@@ -25,12 +25,7 @@ struct FxBreakoutSound : opz::TempoTime {
 };
 
 
-struct FxBreakout : opz::FxTrack<FxBreakoutSound> {
-	FxBreakout() {
-		configInput(RETURN_L_INPUT, "Return left, or mono");
-		configInput(RETURN_R_INPUT, "Return right");
-	}
-
+struct FxBreakoutCore : opz::FxCore<FxBreakoutSound> {
 	void process(const ProcessArgs& args) override {
 		lfoInside = !outputs[CV_LFO_OUTPUT].isConnected();
 		prepare(args);
@@ -69,6 +64,14 @@ struct FxBreakout : opz::FxTrack<FxBreakoutSound> {
 			out[s] = x * gain;
 		}
 		emit(out[0], out[1], 0.f, 0.f, args.sampleTime);
+	}
+};
+
+
+struct FxBreakout : opz::FxTrack<FxBreakoutSound, FxBreakoutCore> {
+	FxBreakout() {
+		configInput(RETURN_L_INPUT, "Return left, or mono");
+		configInput(RETURN_R_INPUT, "Return right");
 	}
 };
 

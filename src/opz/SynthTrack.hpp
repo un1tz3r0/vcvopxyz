@@ -3,7 +3,7 @@
 #include "NoteStack.hpp"
 
 /*
-An OP-Z synth track (Track.hpp), whatever its engine: note styles, portamento and polyphony. The engine supplies
+An OP-Z synth track (TrackCore.hpp), whatever its engine: note styles, portamento and polyphony. The engine supplies
 only the sound, through two dials of its own. It is a struct with:
 
 	static constexpr const char* SLUG;                     // module slug, and the name of its panel in res/
@@ -32,7 +32,7 @@ struct SoundSince<Engine, std::void_t<decltype(Engine::SOUND_SINCE)>> {
 };
 
 template <class Engine>
-struct SynthTrack : Track {
+struct SynthCore : TrackCore {
 
 	struct Voice {
 		typename Engine::Voice sound;
@@ -46,19 +46,10 @@ struct SynthTrack : Track {
 	Voice voices[PORT_MAX_CHANNELS];
 	NoteStack held;
 
-	SynthTrack() {
-		Engine::configSound(this, P1_PARAM, P2_PARAM);
-		configTrack({"Poly", "Mono", "Legato"},
+	void configure(Module* m, int base) {
+		Engine::configSound(m, base + P1_PARAM, base + P2_PARAM);
+		configTrack(m, base, {"Poly", "Mono", "Legato"},
 			"Mono plays the newest held note and retriggers on every change; legato slides between held notes without retriggering");
-	}
-
-	void fromJson(json_t* root) override {
-		Track::fromJson(root);
-		const char* version = json_string_value(json_object_get(root, "version"));
-		if (SoundSince<Engine>::value && (!version || string::Version(version) < string::Version(SoundSince<Engine>::value))) {
-			paramQuantities[P1_PARAM]->reset();
-			paramQuantities[P2_PARAM]->reset();
-		}
 	}
 
 	const xyz::Adsr* envelope(int voice, float* velocity) const override {
@@ -115,9 +106,9 @@ struct SynthTrack : Track {
 		}
 	}
 
-	/** Track::prepare, then mono and legato's portamento. */
+	/** TrackCore::prepare, then mono and legato's portamento. */
 	void prepare(const ProcessArgs& args) {
-		Track::prepare(args);
+		TrackCore::prepare(args);
 		if (style != POLY) {
 			Voice& v = voices[0];
 			if (!held.empty())
@@ -146,6 +137,19 @@ struct SynthTrack : Track {
 		}
 		float x = filter(mix);
 		emit(x, x, controls.fx1, controls.fx2, args.sampleTime);
+	}
+};
+
+/** A synth engine's module. */
+template <class Engine>
+struct SynthTrack : TrackModule<SynthCore<Engine>> {
+	void fromJson(json_t* root) override {
+		Track::fromJson(root);
+		const char* version = json_string_value(json_object_get(root, "version"));
+		if (SoundSince<Engine>::value && (!version || string::Version(version) < string::Version(SoundSince<Engine>::value))) {
+			this->paramQuantities[Track::P1_PARAM]->reset();
+			this->paramQuantities[Track::P2_PARAM]->reset();
+		}
 	}
 };
 

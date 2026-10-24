@@ -355,7 +355,7 @@ struct Sequencer : Module, Hub {
 					: t.semitones ? string::f("%+d semitone%s", t.semitones, std::abs(t.semitones) > 1 ? "s" : "") : "no move";
 				return noteName(pitch) + ": " + move + ", to " + scaleName(t.moved());
 			}
-			Track* e = m->engine(m->track);
+			TrackCore* e = m->engine(m->track);
 			std::string sound = e ? e->soundName(pitch) : "";
 			return noteName(pitch) + (sound.empty() ? "" : ": " + sound);
 		}
@@ -380,8 +380,11 @@ struct Sequencer : Module, Hub {
 			return static_cast<Sequencer*>(module);
 		}
 
-		ParamQuantity* target() {
-			std::pair<Track*, int> t = sequencer()->lockTarget(paramId - LOCK_PARAM);
+		/** The engine dial it locks, or null; and in `param`, that dial among its track's params, as steps lock it. */
+		ParamQuantity* target(int* param = nullptr) {
+			std::pair<TrackCore*, int> t = sequencer()->lockTarget(paramId - LOCK_PARAM);
+			if (param)
+				*param = t.second;
 			return t.first ? t.first->paramQuantities[t.second] : nullptr;
 		}
 
@@ -390,23 +393,26 @@ struct Sequencer : Module, Hub {
 		}
 
 		bool locked() {
-			ParamQuantity* q = target();
-			return q && step().locked(q->paramId);
+			int p;
+			return target(&p) && step().locked(p);
 		}
 
 		float getValue() override {
-			ParamQuantity* q = target();
-			return !q ? 0.f : step().locked(q->paramId) ? step().lockValues[q->paramId] : q->getScaledValue();
+			int p;
+			ParamQuantity* q = target(&p);
+			return !q ? 0.f : step().locked(p) ? step().lockValues[p] : q->getScaledValue();
 		}
 
 		void setValue(float value) override {
-			if (ParamQuantity* q = target())
-				step().lock(q->paramId, value);
+			int p;
+			if (target(&p))
+				step().lock(p, value);
 		}
 
 		void unlock() {
-			if (ParamQuantity* q = target())
-				step().unlock(q->paramId);
+			int p;
+			if (target(&p))
+				step().unlock(p);
 		}
 
 		std::string getLabel() override {
@@ -511,7 +517,7 @@ struct Sequencer : Module, Hub {
 	int clearStep = -1;          // the held step whose locks it clears
 	// Dial turns recorded live as locks: the engine and params the dials turned at the last control step, their
 	// values then, and how long since a turn was recorded. A recalled scene moves the dials without a turn.
-	Track* watched = nullptr;
+	TrackCore* watched = nullptr;
 	int watchedParams[4] = {-1, -1, -1, -1};
 	float watchedValues[4] = {};
 	bool rewatch = true;
@@ -659,22 +665,23 @@ struct Sequencer : Module, Hub {
 		return external && pulsePeriod > 0.f ? 60.f / (pulsePeriod * ppqn) : params[TEMPO_PARAM].getValue();
 	}
 
-	/** The engine playing a track, found as the bus finds it; for the UI thread. None plays the master track. */
-	Track* engine(int t) {
-		static const int first[3] = {0, DRUM_TRACKS, FX1}, kinds[3] = {DRUM_TRACKS, SYNTH_TRACKS, FX_TRACKS};
+	/** The core of the engine playing a track, found as the bus finds it; for the UI thread. None plays the master
+	track. */
+	TrackCore* engine(int t) {
 		int taken[3] = {};
 		for (Module* m = rightExpander.module; onBus(m); m = m->rightExpander.module)
 			if (Track* e = dynamic_cast<Track*>(m)) {
-				int k = e->effect ? 2 : e->drum ? 0 : 1;
-				if (taken[k] < kinds[k] && first[k] + taken[k]++ == t)
-					return e;
+				TrackCore& c = e->getCore();
+				int& k = taken[c.kind()];
+				if (k < c.tracks() && c.firstTrack() + k++ == t)
+					return &c;
 			}
 		return nullptr;
 	}
 
 	/** The engine dial `d` locks on the held step: the selected track's, on its page. */
-	std::pair<Track*, int> lockTarget(int d) {
-		Track* e = held >= 0 && !modal() ? engine(track) : nullptr;
+	std::pair<TrackCore*, int> lockTarget(int d) {
+		TrackCore* e = held >= 0 && !modal() ? engine(track) : nullptr;
 		int p = e ? e->dial(e->shownPage(), d) : -1;
 		return {p >= 0 ? e : nullptr, p};
 	}
@@ -699,9 +706,12 @@ struct Sequencer : Module, Hub {
 		}
 		if (lockTarget(d).first)
 			return {this, LOCK_PARAM + d};
-		Track* e = engine(track);
+		TrackCore* e = engine(track);
 		int p = e ? e->dial(trackMode ? PAGE_TRACK : e->shownPage(), d) : -1;
-		return p < 0 ? std::make_pair<Module*, int>(nullptr, -1) : std::make_pair<Module*, int>(e, int(p));
+		if (p < 0)
+			return {nullptr, -1};
+		ParamQuantity* q = e->paramQuantities[p];
+		return {q->module, q->paramId};
 	}
 
 	void restart() {
@@ -819,7 +829,7 @@ struct Sequencer : Module, Hub {
 			part.noteLength = (int) params[laneParam(LENGTH_PARAM, t)].getValue();
 			part.quantize = params[laneParam(QUANTIZE_PARAM, t)].getValue();
 			part.channels = lanes[t].settings.channels;
-			Track* e = engine(t);
+			TrackCore* e = engine(t);
 			part.hasSound = e;
 			for (int i = 0; e && i < SOUND_PARAMS; i++)
 				part.sound[i] = e->paramQuantities[i]->getScaledValue();
@@ -840,7 +850,7 @@ struct Sequencer : Module, Hub {
 			params[laneParam(STEP_LENGTH_PARAM, t)].setValue(part.stepLength);
 			params[laneParam(LENGTH_PARAM, t)].setValue(part.noteLength);
 			params[laneParam(QUANTIZE_PARAM, t)].setValue(part.quantize);
-			Track* e = engine(t);
+			TrackCore* e = engine(t);
 			for (int i = 0; e && part.hasSound && i < SOUND_PARAMS; i++) {
 				ParamQuantity* q = e->paramQuantities[i];
 				float v = math::rescale(part.sound[i], 0.f, 1.f, q->getMinValue(), q->getMaxValue());
@@ -1295,7 +1305,7 @@ struct Sequencer : Module, Hub {
 	the playhead, as the OP-Z records parameter locks live. The dial moves too, as it would without recording. */
 	void recordDials(float dt) {
 		sinceTurned += dt;
-		Track* e = recording && playing && held < 0 && !modal() && track != MASTER ? engine(track) : nullptr;
+		TrackCore* e = recording && playing && held < 0 && !modal() && track != MASTER ? engine(track) : nullptr;
 		int step, ticks;
 		bool located = e && lane().player.locate(&step, &ticks);
 		for (int d = 0; d < 4; d++) {
@@ -2314,8 +2324,8 @@ struct Sequencer : Module, Hub {
 			json_array_append_new(row, json_null());
 		for (Module* m = rightExpander.module; onBus(m); m = m->rightExpander.module)
 			if (Track* e = dynamic_cast<Track*>(m))
-				if (e->hub == this && e->busTrack >= 0)
-					json_array_set_new(row, e->busTrack, e->rowJson());
+				if (int t = e->getCore().busTrack; e->hub == this && t >= 0)
+					json_array_set_new(row, t, e->rowJson());
 		return row;
 	}
 

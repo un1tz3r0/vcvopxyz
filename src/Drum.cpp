@@ -12,13 +12,14 @@ then plays it out. A kit sound that plays gated or loops does so whatever the st
 #include "opz/DrumTrack.hpp"
 #include "opz/TrackWidget.hpp"
 #include "opz/Kit.hpp"
+#include <functional>
 #include <mutex>
 #include <osdialog.h>
 
 namespace opz {
 
-struct Drum : DrumTrack {
-	static constexpr const char* SLUG = "Drum";
+/** Drum's core: the kit and the voices playing it. */
+struct KitCore : DrumCore {
 	static_assert(SOUNDS == Kit::SLICES, "a kit has a sound for each key");
 	static constexpr float CHOKE = 0.003f; // seconds a cut-off sound takes to fade
 
@@ -56,15 +57,18 @@ struct Drum : DrumTrack {
 	std::atomic<const Kit*> factory{nullptr};   // and the kit itself, once the UI thread has read it
 	const Kit* playing = nullptr;  // the kit the voices are playing
 	std::atomic<int> lastSound{0}; // the slice played last, for the kit editor
-	json_t* savedKit = nullptr;    // a patch's kit, from dataFromJson until onAdd reads its samples
+	json_t* savedKit = nullptr;    // a patch's kit, from dataFromJson until readSavedKit() reads its samples
+	// The file a kit from a file keeps its samples in beside the patch, as its module gives it; `make` makes the
+	// file's directory first.
+	std::function<std::string(bool make)> kitFile;
 
-	Drum() {
+	KitCore() {
 		// Made here, on the UI thread, rather than when the audio thread first wants one.
 		for (int t = 0; t < DRUM_TRACKS; t++)
 			builtinKit(t);
 	}
 
-	~Drum() {
+	~KitCore() {
 		json_decref(savedKit);
 	}
 
@@ -113,10 +117,10 @@ struct Drum : DrumTrack {
 		handing = true;
 	}
 
-	/** For the UI thread: plays a kit from a file, and keeps its sound in the patch's storage at once, so that an
-	autosave, which saves the kit's JSON without an onSave, has it too. */
+	/** For the UI thread: plays a kit from a file, and keeps its sound beside the patch at once, so that an autosave,
+	which saves the kit's JSON without an onSave, has it too. */
 	void useKit(std::unique_ptr<Kit> kit) {
-		system::writeFile(system::join(createPatchStorageDirectory(), "kit.wav"), kit->toWav());
+		system::writeFile(kitFile(true), kit->toWav());
 		setKit(std::move(kit));
 	}
 
@@ -278,20 +282,8 @@ struct Drum : DrumTrack {
 		emit(x, x, controls.fx1, controls.fx2, args.sampleTime);
 	}
 
-	json_t* rowJson() override {
-		json_t* root = Track::rowJson();
-		int f = factoryIndex;
-		if (f >= 0)
-			json_object_set_new(root, "opz", json_string(factoryKits()[f].id.c_str()));
-		else
-			json_object_set_new(root, "builtin", json_integer(builtin));
-		std::lock_guard<std::mutex> lock(kitMutex);
-		json_object_set_new(root, "file", json_boolean(fileKit()));
-		return root;
-	}
-
-	json_t* dataToJson() override {
-		json_t* root = Track::dataToJson();
+	void dataToJson(json_t* root) override {
+		DrumCore::dataToJson(root);
 		json_object_set_new(root, "builtin", json_integer(builtin));
 		int f = factoryIndex;
 		if (f >= 0)
@@ -299,11 +291,10 @@ struct Drum : DrumTrack {
 		std::lock_guard<std::mutex> lock(kitMutex);
 		if (const Kit* k = fileKit())
 			json_object_set_new(root, "kit", k->toJson());
-		return root;
 	}
 
 	void dataFromJson(json_t* root) override {
-		Track::dataFromJson(root);
+		DrumCore::dataFromJson(root);
 		if (json_t* j = json_object_get(root, "builtin"))
 			builtin = clamp((int) json_integer_value(j), -1, DRUM_TRACKS - 1);
 		const char* opz = json_string_value(json_object_get(root, "opz"));
@@ -318,12 +309,13 @@ struct Drum : DrumTrack {
 			setKit(nullptr);
 	}
 
-	/** A file's kit lives in the patch's storage, as kit.wav, beside the slices in its JSON. A pasted Drum has no
-	storage of its own yet, and a patch can lose the file, so without it the built-in kit plays. */
-	void onAdd(const AddEvent& e) override {
+	/** Once its module is added: a file's kit keeps its samples beside the patch, in kitFile, and its slices in the
+	JSON. A pasted Drum has no storage of its own yet, and a patch can lose the file, so without it the built-in kit
+	plays. */
+	void readSavedKit() {
 		if (!savedKit)
 			return;
-		std::string path = system::join(getPatchStorageDirectory(), "kit.wav");
+		std::string path = kitFile(false);
 		std::unique_ptr<Kit> k;
 		try {
 			if (system::isFile(path))
@@ -338,10 +330,11 @@ struct Drum : DrumTrack {
 		savedKit = nullptr;
 	}
 
-	void onSave(const SaveEvent& e) override {
+	/** When the patch is saved: a file's kit's samples into kitFile, or no file without one. */
+	void saveKit() {
 		std::lock_guard<std::mutex> lock(kitMutex);
 		const Kit* k = fileKit();
-		std::string path = system::join(k ? createPatchStorageDirectory() : getPatchStorageDirectory(), "kit.wav");
+		std::string path = kitFile(k != nullptr);
 		if (k)
 			system::writeFile(path, k->toWav());
 		else if (system::isFile(path))
@@ -350,10 +343,41 @@ struct Drum : DrumTrack {
 };
 
 
+struct Drum : TrackModule<KitCore> {
+	static constexpr const char* SLUG = "Drum";
+
+	Drum() {
+		core.kitFile = [this](bool make) {
+			return system::join(make ? createPatchStorageDirectory() : getPatchStorageDirectory(), "kit.wav");
+		};
+	}
+
+	json_t* rowJson() override {
+		json_t* root = Track::rowJson();
+		int f = core.factoryIndex;
+		if (f >= 0)
+			json_object_set_new(root, "opz", json_string(factoryKits()[f].id.c_str()));
+		else
+			json_object_set_new(root, "builtin", json_integer(core.builtin));
+		std::lock_guard<std::mutex> lock(core.kitMutex);
+		json_object_set_new(root, "file", json_boolean(core.fileKit()));
+		return root;
+	}
+
+	void onAdd(const AddEvent& e) override {
+		core.readSavedKit();
+	}
+
+	void onSave(const SaveEvent& e) override {
+		core.saveKit();
+	}
+};
+
+
 struct DrumWidget : TrackWidget {
 	DrumWidget(Drum* module) : TrackWidget(module, Drum::SLUG) {}
 
-	static void load(Drum* m, bool folder) {
+	static void load(KitCore* m, bool folder) {
 		osdialog_filters* filters = folder ? nullptr : osdialog_filters_parse("Kits and sounds:aif,aiff,aifc,wav");
 		char* chosen = osdialog_file(folder ? OSDIALOG_OPEN_DIR : OSDIALOG_OPEN, nullptr, nullptr, filters);
 		if (filters)
@@ -373,7 +397,7 @@ struct DrumWidget : TrackWidget {
 	}
 
 	/** The kit playing as an OP-1 or OP-Z kit file, built in or not. */
-	static void save(Drum* m) {
+	static void save(KitCore* m) {
 		std::vector<uint8_t> file;
 		std::string name;
 		bool cut = false;
@@ -405,7 +429,7 @@ struct DrumWidget : TrackWidget {
 
 	void appendContextMenu(Menu* menu) override {
 		TrackWidget::appendContextMenu(menu);
-		Drum* m = getModule<Drum>();
+		KitCore* m = &getModule<Drum>()->core;
 		std::string name;
 		{
 			std::lock_guard<std::mutex> lock(m->kitMutex);

@@ -53,11 +53,24 @@ so a turn is that param's own, with its tooltip, undo and MIDI mapping.
 
 ## Tracks
 
-`src/opz/Track.hpp`. `Track` is every track, drum or synth: the bus, the tempo, gate edges, the LFO, the filter,
-the mix, the meters and the state published for the UI through a `TripleBuffer`, which the status screen and a
-Screen read. A track supplies its voices through `noteOn`, `noteOff`, `releaseAll` and `envelope`, and may hide a
-dial (`dial`) or name a key's sound (`soundName`). `SynthTrack<Engine>` (`src/opz/SynthTrack.hpp`) adds poly, mono
-and legato voices with portamento around an engine; `Drum` (`src/Drum.cpp`) plays a kit.
+`src/opz/TrackCore.hpp`. `TrackCore` is every track, drum, synth or FX: the tempo, gate edges, the LFO, the
+filter, the mix, the meters and the state published for the UI through a `TripleBuffer`, which the status screen and
+a Screen read. A core supplies its voices through `noteOn`, `noteOff`, `releaseAll` and `envelope`, and may hide a
+dial (`dial`) or name a key's sound (`soundName`). `SynthCore<Engine>` (`src/opz/SynthTrack.hpp`) adds poly, mono
+and legato voices with portamento around an engine; `KitCore` (`src/Drum.cpp`) plays a kit.
+
+A core holds no `Module`. It reads and writes params, jacks and lights through pointers (`params`, `inputs`,
+`outputs`, `lights`, `paramQuantities`), by the ids in `TrackIds`, so its code reads as a module's would. Its
+params are configured on a module it is given, from a base param (`configure(m, base)`), and patch data goes
+through `dataToJson`/`dataFromJson` on the core. `Track` (`src/opz/Track.hpp`) is the module around one:
+`TrackModule<Core>` binds the core to the module's own params and jacks, configures them, and each frame hands it
+the bus (`joinBus`): what the hub sent (`bus`), its track (`busTrack`) and the slot its sound goes back into
+(`slot`). The module keeps what only a module has: its place on the bus, the panel's port names, its slug in the
+Sequencer's row record, and patch storage, which Drum's core reaches through a `kitFile` callback. The UI reaches
+an engine through its core too (`Track::getCore()`), and the Sequencer's dials turn `paramQuantities[p]->module`'s
+param `paramQuantities[p]->paramId`, so none of it cares which module holds a core's params. This is the step
+before the engines play inside the Sequencer itself: each hosted core will be bound to a block of the Sequencer's
+own params.
 
 - **Per sample:** the bus, the tempo, the notes, and each voice's envelope and sound. Voices are summed
   before the filter: the filter has one cutoff for the whole track and is linear, so filtering the mix sounds the
@@ -89,12 +102,13 @@ struct Analog {
 Model* modelAnalog = createModel<opz::SynthTrack<Analog>, opz::SynthTrackWidget<Analog>>(Analog::SLUG);
 ```
 
-Synth Breakout (slug `Breakout`, kept for old patches) is the exception that proves the split: it derives from
-`SynthTrack<BreakoutSound>` and overrides `process` to send each stage out as CV and skip the stages whose outputs
-are patched, with `lfoInside` turning the LFO's inside targets off. Drum and Drum Breakout share `DrumTrack` (src/opz/DrumTrack.hpp): the drum dials, note
-styles and keys. The synth and drum breakouts share `Track::emitReturn`, the return through whatever isn't patched
-out. Send FX Breakout derives from `FxTrack` and overrides `process` to send the bus's send out and take the effect
-back through the filter; it shares Delay's time keys through `opz::TempoTime`.
+Synth Breakout (slug `Breakout`, kept for old patches) is the exception that proves the split: its core derives
+from `SynthCore<BreakoutSound>` and overrides `process` to send each stage out as CV and skip the stages whose
+outputs are patched, with `lfoInside` turning the LFO's inside targets off. Drum and Drum Breakout share `DrumCore`
+(`src/opz/DrumTrack.hpp`): the drum dials, note styles and keys. The synth and drum breakouts share
+`TrackCore::emitReturn`, the return through whatever isn't patched out. Send FX Breakout's core derives from
+`FxCore` and overrides `process` to send the bus's send out and take the effect back through the filter; it shares
+Delay's time keys through `opz::TempoTime`.
 
 The FM engines (Organ, Electric, Shade, Uranus, Volt, EP) share `xyz::sine` and `xyz::softClip` in
 `src/dsp/Sine.hpp`: a 4096-point table, linearly interpolated, and a rational tanh. The saws use `src/dsp/Blep.hpp`.
@@ -104,7 +118,7 @@ delay is shortened by the low-pass's phase delay to keep it in tune.
 
 ### FX modules
 
-`src/opz/FxTrack.hpp`. `FxTrack<Effect>` is a `Track` with `effect` set, around an effect's `Unit` (`src/Delay.cpp`
+`src/opz/FxTrack.hpp`. `FxCore<Effect>` is a `TrackCore` with `effect` set, around an effect's `Unit` (`src/Delay.cpp`
 and the rest), which takes a stereo sample and returns the effect alone. It has no voices and only the sound and LFO
 pages, so `dial` hides the rest and `nextPage` skips them. Its notes set `timeKey`, which the effect turns into
 seconds against the tempo; the LFO's attack and pitch target slots stand in for time and send. The return goes

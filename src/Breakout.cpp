@@ -25,7 +25,7 @@ struct BreakoutSound {
 };
 
 
-struct Breakout : opz::SynthTrack<BreakoutSound> {
+struct BreakoutCore : opz::SynthCore<BreakoutSound> {
 	void process(const ProcessArgs& args) override {
 		lfoInside = !outputs[CV_LFO_OUTPUT].isConnected();
 		prepare(args);
@@ -54,5 +54,7 @@ struct Breakout : opz::SynthTrack<BreakoutSound> {
 	}
 };
 
+
+using Breakout = opz::TrackModule<BreakoutCore>;
 
 Model* modelBreakout = createModel<Breakout, opz::SynthTrackWidget<BreakoutSound>>(BreakoutSound::SLUG);

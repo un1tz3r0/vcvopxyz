@@ -41,7 +41,7 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | --- | --- |
 | `plugin.json` | The manifest: plugin and module metadata, and the version. |
 | `src/plugin.*` | The plugin's entry point, which registers each module's `Model`. |
-| `src/opz/` | The OP-Z track every engine shares (`Track.hpp`), its panel and status screen (`TrackWidget.hpp`), the synth track's voices around an engine (`SynthTrack.hpp`), the drum track's dials and keys (`DrumTrack.hpp`), and the FX track around an effect (`FxTrack.hpp`). |
+| `src/opz/` | The OP-Z track every engine shares, as a core with no module of its own (`TrackCore.hpp`) and as the module around it (`Track.hpp`), its panel and status screen (`TrackWidget.hpp`), the synth track's voices around an engine (`SynthTrack.hpp`), the drum track's dials and keys (`DrumTrack.hpp`), and the FX track around an effect (`FxTrack.hpp`). |
 | `src/opz/Kit.*`, `BuiltinKits.cpp`, `FactoryKits.cpp` | Drum kits: the OP-1/OP-Z kit, AIFF and WAV readers, the synthesized built-in kits, and the OP-Z kits in `res/kits`. |
 | `res/kits/`, `tools/kits/split.py` | The OP-Z's own drum kits, cut by the script from the bounces in `samples/`: `python3 tools/kits/split.py samples res/kits`. |
 | `src/opz/Sequence.hpp` | The sequencer's steps, components and the player that schedules them, knowing nothing of Rack. |

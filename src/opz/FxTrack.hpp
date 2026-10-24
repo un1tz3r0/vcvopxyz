@@ -3,7 +3,7 @@
 #include "../dsp/Delay.hpp"
 
 /*
-An OP-Z FX track (Track.hpp): a send effect playing FX 1 or FX 2, the OP-Z's tracks 9 and 10. It takes what the
+An OP-Z FX track (TrackCore.hpp): a send effect playing FX 1 or FX 2, the OP-Z's tracks 9 and 10. It takes what the
 engines send it over the bus, or with IN patched its inputs, and returns the effect alone, through the filter, to the
 mix. Its dials have the OP-Z's two pages: the effect's two dials and the filter, then the LFO. Its notes, from the
 keys while it's selected or from its track's steps, set the effect's time where it has one, the delay's or the
@@ -50,24 +50,22 @@ struct FxControls {
 };
 
 template <class Effect>
-struct FxTrack : Track {
+struct FxCore : TrackCore {
 	typename Effect::Unit unit;
 	FxControls fx;
 	float rate = 0.f;
 
-	FxTrack() {
+	FxCore() {
 		effect = true;
 		timeKey = Effect::TIME_KEY;
-		Effect::configSound(this, P1_PARAM, P2_PARAM);
-		configTrack({"None"}, "FX tracks have no note style", {getParamQuantity(P1_PARAM)->name, getParamQuantity(P2_PARAM)->name,
+	}
+
+	void configure(Module* m, int base) {
+		Effect::configSound(m, base + P1_PARAM, base + P2_PARAM);
+		configTrack(m, base, {"None"}, "FX tracks have no note style", {paramQuantities[P1_PARAM]->name, paramQuantities[P2_PARAM]->name,
 			"Filter", "Resonance", "Time", "Send", "Pan", "Volume"});
-		getParamQuantity(LFO_TARGET_PARAM)->description = "Time moves the delay or predelay up to an octave either way; send is the level into the effect";
+		paramQuantities[LFO_TARGET_PARAM]->description = "Time moves the delay or predelay up to an octave either way; send is the level into the effect";
 		configDefault(LEVEL_PARAM, 1.f);
-		configInput(RETURN_L_INPUT, "Left, or mono, in place of the bus's send");
-		configInput(RETURN_R_INPUT, "Right");
-		configInput(VOCT_INPUT, "1V/octave pitch: a note sets the time, from F3 up");
-		configInput(GATE_INPUT, "Gate, in place of the bus's notes");
-		configOutput(LEFT_OUTPUT, "Left, or mono while right is unpatched, in place of the bus's mix");
 	}
 
 	/** The sound page and the LFO page, and no others. */
@@ -130,27 +128,38 @@ struct FxTrack : Track {
 		emit(out[0], out[1], 0.f, 0.f, args.sampleTime);
 	}
 
-	void onReset(const ResetEvent& e) override {
-		Track::onReset(e);
+	void resetSettings() override {
+		TrackCore::resetSettings();
 		timeKey = Effect::TIME_KEY;
 	}
 
-	json_t* dataToJson() override {
-		json_t* root = Track::dataToJson();
+	void dataToJson(json_t* root) override {
+		TrackCore::dataToJson(root);
 		json_object_set_new(root, "timeKey", json_integer(timeKey));
-		return root;
 	}
 
 	void dataFromJson(json_t* root) override {
-		Track::dataFromJson(root);
+		TrackCore::dataFromJson(root);
 		if (json_t* j = json_object_get(root, "timeKey"); j && Effect::TIME_KEY >= 0)
 			timeKey = clamp((int) json_integer_value(j), 0, FX_KEYS - 1);
 	}
 };
 
+/** An FX module, playing an FX core: by default, the effect's own. */
+template <class Effect, class Core = FxCore<Effect>>
+struct FxTrack : TrackModule<Core> {
+	FxTrack() {
+		this->configInput(Track::RETURN_L_INPUT, "Left, or mono, in place of the bus's send");
+		this->configInput(Track::RETURN_R_INPUT, "Right");
+		this->configInput(Track::VOCT_INPUT, "1V/octave pitch: a note sets the time, from F3 up");
+		this->configInput(Track::GATE_INPUT, "Gate, in place of the bus's notes");
+		this->configOutput(Track::LEFT_OUTPUT, "Left, or mono while right is unpatched, in place of the bus's mix");
+	}
+};
+
 template <class Effect>
 struct FxTrackWidget : TrackWidget {
-	FxTrackWidget(FxTrack<Effect>* module) : TrackWidget(module, Effect::SLUG) {}
+	FxTrackWidget(Track* module) : TrackWidget(module, Effect::SLUG) {}
 };
 
 } // namespace opz
