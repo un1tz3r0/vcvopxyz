@@ -1,10 +1,12 @@
 /*
-Send FX Breakout: an OP-Z FX track whose effect is made of other modules, as Synth Breakout is for a synth track. It
-sends out what the engines send its FX track over the bus, at SEND, with the track's notes, the time they set (the
+Send FX Breakout: hands one of the Sequencer's FX tracks to other modules, as Synth Breakout does a synth track.
+Patched at L and R, the effect's sound leaves there; patched at SEND instead, the effect is made of other modules,
+played by the breakout's core inside the Sequencer. It sends out what the tracks send its FX track, at SEND, with the track's notes, the time they set (the
 Delay's keys, in seconds), the LFO, both sound dials and the filter; and it takes the effect back in at RETURN,
 through the filter unless FILTER or RESO is patched, at the track's level, into the mix.
 */
 #include "opz/FxTrack.hpp"
+#include "opz/Breakout.hpp"
 
 struct FxBreakoutSound : opz::TempoTime {
 	static constexpr const char* SLUG = "FxBreakout";
@@ -32,7 +34,7 @@ struct FxBreakoutCore : opz::FxCore<FxBreakoutSound> {
 		float offset = lfoInside ? controls.lfo : 0.f;
 		int target = (int) value(LFO_TARGET_PARAM);
 
-		float send = busTrack >= 0 && bus ? bus->send[busTrack - opz::FX1] : 0.f;
+		float send = !silenced && busTrack >= 0 && bus ? bus->send[busTrack - opz::FX1] : 0.f;
 		send = std::isfinite(send) ? send * (target == opz::TARGET_PITCH ? clamp(1.f + offset, 0.f, 2.f) : 1.f) : 0.f;
 		outputs[CV_SEND_L_OUTPUT].setVoltage(send);
 		outputs[CV_SEND_R_OUTPUT].setVoltage(send);
@@ -68,12 +70,18 @@ struct FxBreakoutCore : opz::FxCore<FxBreakoutSound> {
 };
 
 
-struct FxBreakout : opz::FxTrack<FxBreakoutSound, FxBreakoutCore> {
-	FxBreakout() {
-		configInput(RETURN_L_INPUT, "Return left, or mono");
-		configInput(RETURN_R_INPUT, "Return right");
+static opz::PlugRegistration fxBreakoutPlug({FxBreakoutSound::SLUG, opz::FX, 0, true, FxBreakoutSound::configSound, opz::makeCore<FxBreakoutCore>});
+
+
+struct FxBreakout : opz::BreakoutModule {
+	FxBreakout() : BreakoutModule(opz::FX) {
+		configInput(VOCT_INPUT, "1V/octave pitch: a note sets the time, from F3 up");
+		configOutput(LEFT_OUTPUT, "Left, or mono while right is unpatched, in place of the mix");
 	}
 };
 
+struct FxBreakoutWidget : opz::BreakoutWidget {
+	FxBreakoutWidget(FxBreakout* module) : opz::BreakoutWidget(module, FxBreakoutSound::SLUG) {}
+};
 
-Model* modelFxBreakout = createModel<FxBreakout, opz::FxTrackWidget<FxBreakoutSound>>(FxBreakoutSound::SLUG);
+Model* modelFxBreakout = createModel<FxBreakout, FxBreakoutWidget>(FxBreakoutSound::SLUG);

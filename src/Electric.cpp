@@ -4,7 +4,7 @@ hard, from two pure tones to a snarl that never quite settles; the amp envelope 
 it starts and calms as it fades. X MOD tunes the second sine against the first, from an octave below to two above,
 through the inharmonic ratios between. It runs at twice the sample rate, to keep the sidebands from folding back.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
 #include "dsp/Sine.hpp"
 
 struct Electric {
@@ -39,4 +39,4 @@ struct Electric {
 };
 
 
-Model* modelElectric = createModel<opz::SynthTrack<Electric>, opz::SynthTrackWidget<Electric>>(Electric::SLUG);
+static opz::SynthPlug<Electric> electricPlug(98);

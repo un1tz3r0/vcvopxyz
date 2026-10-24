@@ -6,27 +6,9 @@ Plugin* pluginInstance;
 // with a matching slug, or Rack refuses to load the plugin.
 void init(Plugin* p) {
 	pluginInstance = p;
-	p->addModel(modelDrum);
-	p->addModel(modelDigital);
-	p->addModel(modelAnalog);
-	p->addModel(modelCluster);
-	p->addModel(modelOrgan);
-	p->addModel(modelBow);
-	p->addModel(modelElectric);
-	p->addModel(modelSaw);
-	p->addModel(modelShade);
-	p->addModel(modelUranus);
-	p->addModel(modelVolt);
-	p->addModel(modelEP);
 	p->addModel(modelBreakout);
 	p->addModel(modelDrumBreakout);
 	p->addModel(modelFxBreakout);
-	p->addModel(modelDelay);
-	p->addModel(modelReverb);
-	p->addModel(modelRymd);
-	p->addModel(modelChorus);
-	p->addModel(modelCrush);
-	p->addModel(modelDist);
 	p->addModel(modelScreen);
 	p->addModel(modelSequencer);
 }

@@ -1,5 +1,7 @@
 /*
-Breakout: an OP-Z synth track whose voice is made of other modules. It sends out what the track would play with,
+Synth Breakout: hands one of the Sequencer's synth tracks to other modules (opz/Breakout.hpp). Patched at L and R,
+the track's sound leaves there instead of the mix. Patched at V/OCT or GATE instead, the track's voice is made of other
+modules, played by the breakout's core inside the Sequencer: it sends out what the track would play with,
 each note's pitch, gate and envelope, the LFO, both sound dials, the filter and the FX sends, and takes the sound
 back in at RETURN. Whatever it sends out, it stops doing itself: with ENV patched the return isn't enveloped, with
 FILTER or RESO patched it isn't filtered, with an FX amount patched that FX output carries the full signal for an
@@ -7,7 +9,8 @@ outside VCA, and with LFO patched the LFO moves nothing inside. The level and th
 
 A polyphonic return is enveloped channel by channel, one voice each; a mono one by the loudest voice.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
+#include "opz/Breakout.hpp"
 
 struct BreakoutSound {
 	static constexpr const char* SLUG = "Breakout";
@@ -54,7 +57,15 @@ struct BreakoutCore : opz::SynthCore<BreakoutSound> {
 	}
 };
 
+static opz::PlugRegistration synthBreakoutPlug({BreakoutSound::SLUG, opz::SYNTH, 0, true, BreakoutSound::configSound, opz::makeCore<BreakoutCore>});
 
-using Breakout = opz::TrackModule<BreakoutCore>;
 
-Model* modelBreakout = createModel<Breakout, opz::SynthTrackWidget<BreakoutSound>>(BreakoutSound::SLUG);
+struct Breakout : opz::BreakoutModule {
+	Breakout() : BreakoutModule(opz::SYNTH) {}
+};
+
+struct BreakoutWidget : opz::BreakoutWidget {
+	BreakoutWidget(Breakout* module) : opz::BreakoutWidget(module, BreakoutSound::SLUG) {}
+};
+
+Model* modelBreakout = createModel<Breakout, BreakoutWidget>(BreakoutSound::SLUG);

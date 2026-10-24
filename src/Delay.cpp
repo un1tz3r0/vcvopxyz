@@ -40,4 +40,4 @@ struct Delay : opz::TempoTime {
 };
 
 
-Model* modelDelay = createModel<opz::FxTrack<Delay>, opz::FxTrackWidget<Delay>>(Delay::SLUG);
+static opz::FxPlug<Delay> delayPlug(34);

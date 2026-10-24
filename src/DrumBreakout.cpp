@@ -1,6 +1,7 @@
 /*
-Drum Breakout: an OP-Z drum track whose sounds are made of other modules, as Breakout is for a synth track. It sends
-out what the track would play: each note's trigger, gate, sound (which of the 24 its key picks), velocity and
+Drum Breakout: hands one of the Sequencer's drum tracks to other modules, as Synth Breakout does a synth track. Patched
+at L and R, the track's sound leaves there; patched at TRIG or GATE instead, its sounds are made of other modules,
+played by the breakout's core inside the Sequencer. It sends out what the track would play: each note's trigger, gate, sound (which of the 24 its key picks), velocity and
 envelope, the LFO, PITCH and REVERSE, the filter and the FX sends; and it takes the sound back in at RETURN, through
 whatever it doesn't send out, as Breakout does.
 
@@ -9,7 +10,7 @@ style: retrig and mono leave it open, at the sustain level, for the sound outsid
 release it with the note.
 */
 #include "opz/DrumTrack.hpp"
-#include "opz/TrackWidget.hpp"
+#include "opz/Breakout.hpp"
 
 namespace opz {
 
@@ -93,13 +94,21 @@ struct DrumBreakoutCore : DrumCore {
 };
 
 
-struct DrumBreakout : TrackModule<DrumBreakoutCore> {
+static PlugRegistration drumBreakoutPlug({"DrumBreakout", DRUM, 0, true, DrumCore::configSound, makeCore<DrumBreakoutCore>});
+
+
+struct DrumBreakout : BreakoutModule {
 	static constexpr const char* SLUG = "DrumBreakout";
+
+	DrumBreakout() : BreakoutModule(DRUM) {
+		configOutput(CV_P1_OUTPUT, "Pitch (1V/octave)");
+		configOutput(CV_P2_OUTPUT, "Reverse (10V on)");
+	}
 };
 
 
-struct DrumBreakoutWidget : TrackWidget {
-	DrumBreakoutWidget(DrumBreakout* module) : TrackWidget(module, DrumBreakout::SLUG) {}
+struct DrumBreakoutWidget : BreakoutWidget {
+	DrumBreakoutWidget(DrumBreakout* module) : BreakoutWidget(module, DrumBreakout::SLUG) {}
 };
 
 } // namespace opz

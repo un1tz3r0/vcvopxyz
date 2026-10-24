@@ -41,17 +41,17 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | --- | --- |
 | `plugin.json` | The manifest: plugin and module metadata, and the version. |
 | `src/plugin.*` | The plugin's entry point, which registers each module's `Model`. |
-| `src/opz/` | The OP-Z track every engine shares, as a core with no module of its own (`TrackCore.hpp`) and as the module around it (`Track.hpp`), its panel and status screen (`TrackWidget.hpp`), the synth track's voices around an engine (`SynthTrack.hpp`), the drum track's dials and keys (`DrumTrack.hpp`), and the FX track around an effect (`FxTrack.hpp`). |
+| `src/opz/` | The OP-Z track every plug shares, as a core with no module of its own (`TrackCore.hpp`), the synth track's voices around an engine (`SynthTrack.hpp`), the drum track around a kit (`DrumTrack.hpp`, `KitCore.hpp`), the FX track around an effect (`FxTrack.hpp`), the plugs' registry (`Plugs.*`), and a track's ten slots in the Sequencer (`Host.hpp`). |
 | `src/opz/Kit.*`, `BuiltinKits.cpp`, `FactoryKits.cpp` | Drum kits: the OP-1/OP-Z kit, AIFF and WAV readers, the synthesized built-in kits, and the OP-Z kits in `res/kits`. |
 | `res/kits/`, `tools/kits/split.py` | The OP-Z's own drum kits, cut by the script from the bounces in `samples/`: `python3 tools/kits/split.py samples res/kits`. |
 | `src/opz/Sequence.hpp` | The sequencer's steps, components and the player that schedules them, knowing nothing of Rack. |
 | `src/opz/Sequencer.cpp` | The Sequencer module. |
 | `src/opz/Project.hpp` | A project slot, and the reader and writer for the OP-Z's `.opz` project files, knowing nothing of Rack. |
-| `src/opz/Bus.hpp` | The bus between the Sequencer and the engines and Screens to its right. |
+| `src/opz/Bus.hpp`, `Hub.hpp` | The bus between the Sequencer and the breakouts and Screens to its right. |
 | `src/dsp/` | Building blocks that know nothing of Rack: filter, envelope, band-limited saw, delay line. |
-| `src/Digital.cpp`, `Analog.cpp`, `Cluster.cpp`, `Organ.cpp` | The engines. |
-| `src/Drum.cpp` | Drum, the drum track. |
-| `src/Delay.cpp`, `Reverb.cpp`, `Rymd.cpp`, `Chorus.cpp`, `Crush.cpp`, `Dist.cpp` | The FX modules. |
+| `src/Digital.cpp`, `Analog.cpp`, … `EP.cpp` | The synth engines, each registering its plug. |
+| `src/Drum.cpp` | The drum plug. |
+| `src/Delay.cpp`, `Reverb.cpp`, `Rymd.cpp`, `Chorus.cpp`, `Crush.cpp`, `Dist.cpp` | The send effects' plugs. |
 | `src/Breakout.cpp`, `DrumBreakout.cpp`, `FxBreakout.cpp` | Synth, Drum and Send FX Breakout, the synth, drum and FX tracks for sounds made of other modules. |
 | `src/opz/Screen.cpp` | The Screen expander. |
 | `src/Screen.*` | A reusable display widget whose readouts line up with the controls around it. |
@@ -115,8 +115,8 @@ deletes the pictures no page uses. `[[key:track-track|TRACK|32]]` is the TRACK k
 3. Write `res-src/panels/MyModule.py` with a `panel()` function returning a `panelkit.Panel`, and run `make panels`
    to get `res/MyModule.svg` and `res/MyModule-dark.svg`.
 
-A new synth engine is less work: it is a struct with a slug, its two sound dials and a `Voice`, handed to
-`SynthTrack` (see [DESIGN.md](../DESIGN.md#synth-engines)), with a panel from `res-src/synth_track.py`.
-`src/Analog.cpp` is a complete example in about 50 lines. A new effect is the same: a struct with a slug, its two
-dials, its time keys and a `Unit`, handed to `FxTrack` (`src/opz/FxTrack.hpp`), with a panel from `fx_track_panel`;
-`src/Crush.cpp` is the shortest.
+A new synth engine isn't a module: it is a struct with a slug, its two sound dials and a `Voice`, registered as a
+plug with `static opz::SynthPlug<MyEngine> myEnginePlug;` (see [DESIGN.md](../DESIGN.md#synth-engines)), after which
+it is in every synth track's slot menus. `src/Analog.cpp` is a complete example in about 50 lines. A new effect is
+the same: a struct with a slug, its two dials, its time keys and a `Unit`, registered with `opz::FxPlug`
+(`src/opz/FxTrack.hpp`); `src/Crush.cpp` is the shortest.

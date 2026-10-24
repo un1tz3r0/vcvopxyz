@@ -7,26 +7,8 @@ using namespace rack;
 extern Plugin* pluginInstance;
 
 // One Model per module. Each is defined at the bottom of its module's .cpp and registered in plugin.cpp.
-extern Model* modelDrum;
-extern Model* modelDigital;
-extern Model* modelAnalog;
-extern Model* modelCluster;
-extern Model* modelOrgan;
-extern Model* modelBow;
-extern Model* modelElectric;
-extern Model* modelSaw;
-extern Model* modelShade;
-extern Model* modelUranus;
-extern Model* modelVolt;
-extern Model* modelEP;
 extern Model* modelBreakout;
 extern Model* modelDrumBreakout;
 extern Model* modelFxBreakout;
-extern Model* modelDelay;
-extern Model* modelReverb;
-extern Model* modelRymd;
-extern Model* modelChorus;
-extern Model* modelCrush;
-extern Model* modelDist;
 extern Model* modelScreen;
 extern Model* modelSequencer;

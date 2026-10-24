@@ -3,7 +3,7 @@ Shade: the OP-Z's smooth piano, a soft FM electric piano. Each note is a sine mo
 pitch, struck bright and mellowing as its envelope falls. DETUNE plays a second piano against the first, from
 unison to a wide, beating chorus; DRIVE pushes both into a soft clip, from clean to growling.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
 #include "dsp/Sine.hpp"
 
 struct Shade {
@@ -32,4 +32,4 @@ struct Shade {
 };
 
 
-Model* modelShade = createModel<opz::SynthTrack<Shade>, opz::SynthTrackWidget<Shade>>(Shade::SLUG);
+static opz::SynthPlug<Shade> shadePlug(31);

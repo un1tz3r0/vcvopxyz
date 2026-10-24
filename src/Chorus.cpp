@@ -60,4 +60,4 @@ struct Chorus {
 };
 
 
-Model* modelChorus = createModel<opz::FxTrack<Chorus>, opz::FxTrackWidget<Chorus>>(Chorus::SLUG);
+static opz::FxPlug<Chorus> chorusPlug(39);

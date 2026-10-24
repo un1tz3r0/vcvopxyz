@@ -1,5 +1,10 @@
 # Drum tracks
 
+> **Changed in 2.1.0:** the engines and send effects are no longer modules. They are plugs inside the Sequencer,
+> ten slots a track, picked with TRACK latched and a black key, and filled from its context menu (**Plug slots**).
+> A breakout on a track plays the track's plug when its audio outputs are patched, or hands the track to outside
+> modules when only its note CVs are. This page still describes the modules and is being rewritten.
+
 <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Drum-large-dark.png"><img alt="Drum, playing the kick track" src="assets/modules/Drum-large-light.png"></picture>
 
 **Drum** is the OP-Z's drum track: a kit of 24 sounds, one per key. The first Drum to the right of a

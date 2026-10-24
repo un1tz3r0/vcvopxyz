@@ -3,7 +3,7 @@ Uranus: the OP-Z's clean bass, a sine operator that can feed back on itself, as 
 and third harmonics, from a pure sine to a round, present bass; FEEDBACK bends the operator's own phase with its
 output, leaning it towards a saw.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
 #include "dsp/Sine.hpp"
 
 struct Uranus {
@@ -35,4 +35,4 @@ struct Uranus {
 };
 
 
-Model* modelUranus = createModel<opz::SynthTrack<Uranus>, opz::SynthTrackWidget<Uranus>>(Uranus::SLUG);
+static opz::SynthPlug<Uranus> uranusPlug(129);

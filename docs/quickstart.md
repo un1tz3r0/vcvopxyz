@@ -76,7 +76,7 @@ The keys' LEDs keep the OP-Z's colours. On a step:
 | Orange | Notes on the step; dim past the step count, where the track doesn't play |
 | White | The playhead; in track mode the selected track; in project mode the pattern playing |
 | Red | The playhead while recording; a sound mute; a clear filling up |
-| Blue | How long the held step's notes last; on the black keys in track mode, the step length |
+| Blue | How long the held step's notes last; on the black keys in track mode with SHIFT, the step length |
 | Green | Steps with step components; the rest of a chain; the battery |
 | Blinking | A held step, or one picked for components |
 
@@ -92,7 +92,8 @@ keys, and a long press or Ctrl+click for SHIFT and the steps.
 | --- | --- |
 | Hold track, press a step to select a track | Click the track's key beside the dials, or latch TRACK and click the step |
 | Hold track, turn a dial | Latch TRACK, turn the dial |
-| Hold track and shift, press a value key: step length | Latch TRACK, click a black key (no SHIFT) |
+| Hold track, press a value key: pick the plug in that slot | Latch TRACK, click a black key |
+| Hold track and shift, press a value key: step length | Latch TRACK and SHIFT, click a black key |
 | Step count (no combo on the OP-Z) | Latch TRACK and SHIFT, click a step |
 | Hold track, press −/+: shift the pattern | Latch TRACK, click − or + |
 | Hold track, hold stop: clear the track | Latch TRACK, hold STOP a second |

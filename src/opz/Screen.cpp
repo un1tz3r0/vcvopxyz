@@ -1,12 +1,13 @@
 /*
-Screen: the OP-Z's phone app as an expander. Placed to the right of an OP-Z engine, it shows a picture of the page the
-dials are on (the filter over a scope, the envelope with a dot per voice, the LFO or the arp, the mix, the track settings), the
+Screen: the OP-Z's phone app as an expander. Placed anywhere on the Sequencer's row, it shows the selected track: a
+picture of the page the dials are on (the filter over a scope, the envelope with a dot per voice, the LFO or the arp, the mix, the track settings), the
 value of the dial last touched, and every dial of every page. Click a dial on it to select it and its page, and drag
-anywhere on it to change the selected dial, like the app's touch pad. Beside a Drum, KIT swaps the picture for a kit
+anywhere on it to change the selected dial, like the app's touch pad. On a drum track, KIT swaps the picture for a kit
 editor, as teenage engineering's drum utility does it: the whole kit, the slice played last up close with its ends to
 drag, and its tuning, level, play mode and direction.
 */
-#include "Track.hpp"
+#include "Hub.hpp"
+#include "../ui.hpp"
 
 namespace opz {
 
@@ -20,26 +21,29 @@ struct Screen : Module {
 		busMoved();
 	}
 
-	/** The engine to its left, and its core. */
-	Track* engine() {
-		return dynamic_cast<Track*>(leftExpander.module);
+	/** For the UI thread: the core playing the Sequencer's selected track, or null off a row or on the master track;
+	and what it plays. */
+	TrackCore* track() {
+		Hub* h = findHub(this);
+		return h ? h->trackCore(h->selectedTrack()) : nullptr;
 	}
 
-	TrackCore* track() {
-		Track* e = engine();
-		return e ? &e->getCore() : nullptr;
+	std::string plugName() {
+		Hub* h = findHub(this);
+		return h ? h->plugName(h->selectedTrack()) : "";
 	}
 };
 
 
 /** A slice's settings changed on the Screen, for the undo history. */
 struct SliceChange : history::ModuleAction {
-	int slice = 0;
+	int track = 0, slice = 0;
 	Kit::Slice before, after;
 
 	void apply(const Kit::Slice& s) {
-		if (Track* t = dynamic_cast<Track*>(APP->engine->getModule(moduleId)))
-			t->getCore().editSlice(slice, s);
+		if (Hub* h = dynamic_cast<Hub*>(APP->engine->getModule(moduleId)))
+			if (TrackCore* t = h->trackCore(track))
+				t->editSlice(slice, s);
 	}
 	void undo() override {
 		apply(before);
@@ -121,7 +125,7 @@ struct Display : widget::OpaqueWidget {
 	void step() override {
 		TrackCore* track = module ? module->track() : nullptr;
 		if (track) {
-			if (track->snapshots.update() || !snapshot)
+			if (track->snapshots.update() || !snapshot || track != lastTrack)
 				snapshot = &track->snapshots.read();
 			// The readout follows whichever dial moves, and the page when it changes.
 			for (int i = 0; i < TrackCore::PARAMS_LEN; i++) {
@@ -173,9 +177,8 @@ struct Display : widget::OpaqueWidget {
 				nvgScissor(vg, 0, 0, box.size.x, box.size.y);
 				nvgScale(vg, mm2px(1.f), mm2px(1.f));
 				nvgFontFaceId(vg, font->handle);
-				Track* engine = module ? module->engine() : nullptr;
-				if (engine)
-					drawTrack(vg, &engine->getCore(), engine->model->name, snapshot ? *snapshot : empty);
+				if (TrackCore* track = module ? module->track() : nullptr)
+					drawTrack(vg, track, module->plugName(), snapshot ? *snapshot : empty);
 				else
 					drawHint(vg);
 				nvgRestore(vg);
@@ -184,7 +187,7 @@ struct Display : widget::OpaqueWidget {
 		OpaqueWidget::drawLayer(args, layer);
 	}
 
-	/** With no engine beside it, the screen says where it goes. */
+	/** Off a Sequencer's row, or on the master track, the screen says where it goes. */
 	void drawHint(NVGcontext* vg) {
 		math::Vec s = size();
 		float cx = s.x / 2, cy = s.y / 2 - 6.f;
@@ -201,8 +204,8 @@ struct Display : widget::OpaqueWidget {
 			nvgFillColor(vg, DIAL_COLORS[d]);
 			nvgFill(vg);
 		}
-		text(vg, cx, cy + 15.f, 2.4f, INK, NVG_ALIGN_CENTER, "place me to the right");
-		text(vg, cx, cy + 18.5f, 2.4f, INK, NVG_ALIGN_CENTER, "of an OP-Z engine");
+		text(vg, cx, cy + 15.f, 2.4f, INK, NVG_ALIGN_CENTER, "place me to the right of");
+		text(vg, cx, cy + 18.5f, 2.4f, INK, NVG_ALIGN_CENTER, "the sequencer, on a track");
 	}
 
 	void drawTrack(NVGcontext* vg, TrackCore* track, const std::string& name, const TrackCore::Snapshot& snap) {
@@ -404,7 +407,8 @@ struct Display : widget::OpaqueWidget {
 			return;
 		SliceChange* h = new SliceChange;
 		h->name = string::f("edit sound %d", slice + 1);
-		h->moduleId = track->paramQuantities[TrackCore::P1_PARAM]->module->id; // the engine's module, whose params it plays by
+		h->moduleId = track->paramQuantities[TrackCore::P1_PARAM]->module->id; // the Sequencer, whose params it plays by
+		h->track = track->busTrack;
 		h->slice = slice;
 		h->before = *from;
 		h->after = now;

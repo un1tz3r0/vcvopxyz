@@ -6,12 +6,11 @@ overflow would: OCTAVE sets how many times each peak wraps. FEEDBACK adds the si
 operator modulating itself, which leans it towards a saw before the wrap. The wrap runs at twice the sample rate, with
 first-order antiderivative anti-aliasing on its edges, so it keeps its hard edge without the worst of its aliasing.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
 #include <array>
 
 struct Digital {
 	static constexpr const char* SLUG = "Digital";
-	static constexpr const char* SOUND_SINCE = "2.0.17"; // patches before had octave and FM depth on these dials
 	static constexpr float WRAPS = 7.f;
 
 	static void configSound(Module* m, int p1, int p2) {
@@ -69,4 +68,4 @@ struct Digital {
 };
 
 
-Model* modelDigital = createModel<opz::SynthTrack<Digital>, opz::SynthTrackWidget<Digital>>(Digital::SLUG);
+static opz::SynthPlug<Digital> digitalPlug(25);

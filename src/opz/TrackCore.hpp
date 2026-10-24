@@ -9,16 +9,16 @@
 #include <atomic>
 
 /*
-An OP-Z track's engine, whatever it plays: four dials that step through four pages (sound, envelope, LFO, mix) plus
+An OP-Z track's sound, whatever plays it: four dials that step through four pages (sound, envelope, LFO, mix) plus
 the track settings. On the arp track, the arp's dials take the LFO page's place, and the LFO is off. Its notes come
-from the inputs, or from its track's lane of the bus (see Bus.hpp). Everything after the voices is shared: the LFO,
-the filter, the level and pan, the outputs, the lights and the snapshots a Screen reads. A synth track (SynthTrack.hpp)
-and a drum track (DrumTrack.hpp) differ only in their voices, their two sound dials and their note styles.
+from its track's lane of the Sequencer (see Bus.hpp), or from a breakout's inputs. Everything after the voices is
+shared: the LFO, the filter, the level and pan, the outputs, the lights and the snapshots a Screen reads. A synth
+track (SynthTrack.hpp), a drum track (DrumTrack.hpp) and an FX track (FxTrack.hpp) differ only in their voices, their
+two sound dials and their note styles.
 
-This is the engine's core, all it plays and shows, and it holds no Module. It reads and writes params, jacks and
-lights through pointers, by the ids in TrackIds, so it plays the same in a module of its own (Track.hpp) as it would
-inside another module. The module joins the bus for it: it hands the core what the hub sent and where to send its
-track's sound back.
+A core holds no Module. The Sequencer keeps one for every plug a track can play (Host.hpp), and a core reads and
+writes its track's params, the jacks of the breakout bound to it, and its lights through pointers, by the ids in
+TrackIds, so its code reads as a module's would.
 */
 namespace opz {
 
@@ -115,6 +115,20 @@ struct Meter {
 };
 
 
+/** A sound dial's travel in its plug's own units. The Sequencer keeps both sound dials as shares of their travel, 0
+to 1, whichever plug plays, so steps, scenes and presets hold them the same way; a core turns a share into what its
+voices take. */
+struct SoundRange {
+	float min = 0.f, max = 1.f;
+	bool snap = false;
+
+	float units(float share) const {
+		float v = min + share * (max - min);
+		return snap ? std::round(v) : v;
+	}
+};
+
+
 /** The ids a track's params, jacks and lights go by, in its core and its module alike. */
 struct TrackIds {
 	enum ParamId {
@@ -127,8 +141,7 @@ struct TrackIds {
 		PARAMS_LEN
 	};
 	static_assert(PARAMS_LEN == SOUND_PARAMS && ARP_SPEED_PARAM == ARP_PARAMS, "a step locks any of a track's params");
-	// The return and the CV outputs belong to the breakouts, which hand the voice or the effect to other modules; the
-	// other engines' panels leave them out. Ids are append-only, since patches save them.
+	// The jacks are a breakout's, which hands its track to other modules. Ids are append-only, since patches save them.
 	enum InputId { VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, CLOCK_INPUT, RESET_INPUT, EXT_INPUT, RETURN_L_INPUT, RETURN_R_INPUT, INPUTS_LEN };
 	enum OutputId {
 		LEFT_OUTPUT, RIGHT_OUTPUT, FX1_OUTPUT, FX2_OUTPUT,
@@ -185,7 +198,8 @@ struct TrackCore : TrackIds {
 		xyz::Adsr::Shape envelope;
 	};
 
-	// The params, jacks and lights it plays by, by the ids in TrackIds: its module's, from bind().
+	// The params, jacks and lights it plays by, by the ids in TrackIds, from bind(): its track's params on the
+	// Sequencer, its breakout's jacks, and lights for the meters.
 	Param* params = nullptr;
 	ParamQuantity** paramQuantities = nullptr;
 	Input* inputs = nullptr;
@@ -201,19 +215,21 @@ struct TrackCore : TrackIds {
 		return p == PAGE_LFO && arp() ? "ARP" : PAGE_NAMES[p];
 	}
 
-	bool drum = false;           // takes one of tracks 1 to 4 rather than 5 to 8
-	bool effect = false;         // an FX module, which takes FX 1 or 2
+	bool drum = false;           // plays one of tracks 1 to 4 rather than 5 to 8
+	bool effect = false;         // plays FX 1 or 2
 	int timeKey = -1;            // an FX module's time, as the key its notes set it with
 	float secondsPerBeat = 0.5f; // 120 BPM until a clock says otherwise
 	int ppqn = 4;                // clock pulses per beat: 4 is one per sixteenth, one per step
 	int page = PAGE_SOUND;
 	bool trackMode = false;
-	// The bus, as its module hands it over each frame. The UI thread reads busTrack too, so it's written once.
-	int busTrack = -1;           // the Sequencer's track this engine plays, or -1 off the bus
+	int busTrack = -1;           // the Sequencer's track it plays, set once
+	SoundRange ranges[2];        // its sound dials' travel, from its plug
+	// What the Sequencer hands it each frame: the lanes and the master's keys, and where its sound goes.
 	int64_t frame = 0;
-	const Downstream* bus = nullptr; // what the hub sent in the frame before, or null off the bus
-	Slot* slot = nullptr;        // where its track's sound goes back to the hub in this frame, or null off the bus
-	bool selected = false;       // the Sequencer's keys and dials are on this engine's track
+	const Downstream* bus = nullptr;
+	Slot* slot = nullptr;
+	bool silenced = false;       // ringing out after a switch of plug: it takes no notes, and an effect no send
+	bool selected = false;       // the Sequencer's keys and dials are on its track
 
 	int style = 0;               // the note style playing, which a change of the dial lets every note go for
 	int channels = 0;            // the note source's channels
@@ -248,51 +264,29 @@ struct TrackCore : TrackIds {
 
 	virtual ~TrackCore() = default;
 
-	/** Plays by a module's own params, jacks and lights. */
-	void bind(Module* m) {
-		params = m->params.data();
-		paramQuantities = m->paramQuantities.data();
-		inputs = m->inputs.data();
-		outputs = m->outputs.data();
-		lights = m->lights.data();
+	void bind(Param* p, ParamQuantity** q, Input* in, Output* out, Light* l) {
+		params = p;
+		paramQuantities = q;
+		inputs = in;
+		outputs = out;
+		lights = l;
 	}
 
-	/** Every param but the two sound dials, which the engine configures first, on module `m` from param `base` on,
-	which the core is bound to. The LFO's targets default to the sound dials' names. */
-	void configTrack(Module* m, int base, const std::vector<std::string>& styles, const std::string& styleHelp, std::vector<std::string> targets = {}) {
-		m->configParam<FilterQuantity>(base + FILTER_PARAM, 0.f, 1.f, 0.5f, "Filter")->description = "Low-pass to the left, high-pass to the right";
-		m->configParam(base + RESONANCE_PARAM, 0.f, 1.f, 0.f, "Resonance", "%", 0.f, 100.f);
-		m->configParam<TimeQuantity>(base + ATTACK_PARAM, 0.f, 1.f, 0.f, "Attack");
-		m->configParam<TimeQuantity>(base + DECAY_PARAM, 0.f, 1.f, 0.5f, "Decay");
-		m->configParam(base + SUSTAIN_PARAM, 0.f, 1.f, 0.7f, "Sustain", "%", 0.f, 100.f);
-		m->configParam<TimeQuantity>(base + RELEASE_PARAM, 0.f, 1.f, 0.5f, "Release");
-		m->configParam(base + LFO_AMOUNT_PARAM, -1.f, 1.f, 0.f, "LFO amount", "%", 0.f, 100.f)->description = "Off in the middle; to the left the LFO pulls the target the other way";
-		m->configParam<SpeedQuantity>(base + LFO_SPEED_PARAM, 0.f, 1.f, 0.75f, "LFO speed")->description = "Synced to the clock to the left, free to the right";
-		if (targets.empty())
-			targets = {paramQuantities[P1_PARAM]->name, paramQuantities[P2_PARAM]->name, "Filter", "Resonance", "Attack", "Pitch", "Pan", "Volume"};
-		m->configSwitch(base + LFO_TARGET_PARAM, 0.f, TARGETS_LEN - 1, TARGET_FILTER, "LFO target", targets);
-		m->configSwitch(base + LFO_SHAPE_PARAM, 0.f, Lfo::SHAPES_LEN - 1, Lfo::SINE, "LFO shape",
-			{"Sine", "Triangle", "Square", "Saw", "Random", "External (EXT input)",
-			 "Bell, per note", "Triangle, per note", "Square, per note", "Saw, per note", "Random, per note", "Single saw, per note"});
-		m->configParam(base + FX1_PARAM, 0.f, 1.f, 0.f, "FX 1 send", "%", 0.f, 100.f)->description = "To the FX 1 module, or the FX 1 output while it is patched, after the level";
-		m->configParam(base + FX2_PARAM, 0.f, 1.f, 0.f, "FX 2 send", "%", 0.f, 100.f)->description = "To the FX 2 module, or the FX 2 output while it is patched, after the level";
-		m->configParam(base + PAN_PARAM, -1.f, 1.f, 0.f, "Pan", "%", 0.f, 100.f);
-		m->configParam(base + LEVEL_PARAM, 0.f, 1.f, 0.7f, "Level", "%", 0.f, 100.f);
-		m->configSwitch(base + STYLE_PARAM, 0.f, styles.size() - 1, 0.f, "Note style", styles)->description = styleHelp;
-		m->configParam(base + GLIDE_PARAM, 0.f, 1.f, 0.f, "Portamento", "%", 0.f, 100.f)->description = "Mono and legato only";
-		m->configSwitch(base + ARP_SPEED_PARAM, 0.f, ARP_SPEEDS, 4.f, "Arp speed", {"Off", "1/4", "1/8", "1/8 triplets", "1/16",
-			"1/16 triplets", "1/32", "1/32 triplets", "1/64"})->description = "Arp track only. Off plays its notes as they are";
-		m->configSwitch(base + ARP_PATTERN_PARAM, 0.f, ARP_PATTERNS - 1, ARP_UP, "Arp pattern", {"As played", "Up", "Down", "Up and down",
-			"Down and up", "Random"})->description = "Arp track only";
-		m->configSwitch(base + ARP_STYLE_PARAM, 0.f, ARP_STYLES - 1, 0.f, "Arp style", {"As set", "LHLLHLLH", "HLLHLLHL", "LLHLLHLL", "LMH",
-			"LL, rest"})->description = "Arp track only. A rhythm of accents: H as played, M three quarters, L half, and rests";
-		m->configParam<OctavesQuantity>(base + ARP_RANGE_PARAM, 0.f, 1.f, 0.f, "Arp range")->description = "Arp track only. Higher octaves of the notes";
-	}
-
-	/** Gives a param a new default, and sets it there. */
-	void configDefault(int param, float value) {
-		paramQuantities[param]->defaultValue = value;
-		params[param].setValue(value);
+	/** Takes over its track from the core that played it: the page and the master's keys, the clock and the LFO, so
+	a switch of plug carries on where the last one was. Its dials catch up on its first sample. */
+	void takeOver(const TrackCore& from) {
+		page = from.page;
+		trackMode = from.trackMode;
+		masterTrackMode = from.masterTrackMode;
+		pageRequests = from.pageRequests;
+		selected = from.selected;
+		ppqn = from.ppqn;
+		secondsPerBeat = from.secondsPerBeat;
+		lfo = from.lfo;
+		lfoValue = from.lfoValue;
+		std::copy(std::begin(from.dialValues), std::end(from.dialValues), dialValues);
+		silenced = false;
+		controlDivider.clock = controlDivider.division - 1;
 	}
 
 	/** What dial `d` turns on a page, or -1 for nothing. */
@@ -311,9 +305,13 @@ struct TrackCore : TrackIds {
 		return nullptr;
 	}
 	virtual void editSlice(int i, const Kit::Slice& to) {}
+	/** A track with slots of its own, a kit player's, plays slot `s` now; for the audio thread. */
+	virtual void pick(int s) {}
 	virtual int lastSlice() {
 		return 0;
 	}
+	/** Gets ready for a sample rate, on the UI thread, so that a switch of plug allocates nothing on the audio thread. */
+	virtual void setSampleRate(float rate) {}
 
 	virtual void noteOn(int channel) = 0;
 	virtual void noteOff(int channel) = 0;
@@ -321,11 +319,17 @@ struct TrackCore : TrackIds {
 	/** A voice's envelope, and its velocity, for the lights and a Screen; null past the last voice. */
 	virtual const xyz::Adsr* envelope(int voice, float* velocity) const = 0;
 
-	/** A dial's name as the panel's legend prints it; the engine's two are named after its params. */
+	/** A dial's name as the panel's legend prints it; the sound dials are named after their plug's. */
 	std::string dialName(int param) {
 		static const char* const names[] = {nullptr, nullptr, "FILTER", "RESO", "ATTACK", "DECAY", "SUSTAIN", "RELEASE",
 			"AMOUNT", "SPEED", "TARGET", "SHAPE", "FX 1", "FX 2", "PAN", "LEVEL", "STYLE", "GLIDE", "SPEED", "PATTERN", "STYLE", "RANGE"};
-		return names[param] ? names[param] : string::uppercase(paramQuantities[param]->name);
+		if (names[param])
+			return names[param];
+		// Its label after "Track 5 ", which the Sequencer's params all start with.
+		std::string label = paramQuantities[param]->getLabel();
+		if (label.rfind("Track ", 0) == 0 && label.find(' ', 6) != std::string::npos)
+			label = label.substr(label.find(' ', 6) + 1);
+		return string::uppercase(label);
 	}
 
 	bool hasDials(int p) const {
@@ -388,9 +392,9 @@ struct TrackCore : TrackIds {
 			style = newStyle;
 			releaseAll();
 		}
-		lane = from;
+		lane = silenced ? nullptr : from;
 		// Channels beyond the gate's count read as low, so dropping channels releases their notes.
-		channels = lane ? lane->channels : inputs[GATE_INPUT].getChannels();
+		channels = silenced ? 0 : lane ? lane->channels : inputs[GATE_INPUT].getChannels();
 		for (int c = 0; c < PORT_MAX_CHANNELS; c++) {
 			float gate = c >= channels ? 0.f : lane ? 10.f * lane->gate[c] : inputs[GATE_INPUT].getVoltage(c);
 			switch (gates[c].processEvent(gate, 0.1f, 1.f)) {
@@ -417,20 +421,7 @@ struct TrackCore : TrackIds {
 		pageRequests = bus->pageRequests;
 	}
 
-	/** Drum, synth or FX: an engine takes the next track of its kind along the bus. */
-	int kind() const {
-		return effect ? 2 : drum ? 1 : 0;
-	}
-
-	/** The tracks an engine of its kind can take: the first, and how many. */
-	int firstTrack() const {
-		return effect ? FX1 : drum ? 0 : DRUM_TRACKS;
-	}
-	int tracks() const {
-		return effect ? FX_TRACKS : drum ? DRUM_TRACKS : SYNTH_TRACKS;
-	}
-
-	/** Its track's slot on the hub: its sound and FX sends while its outputs are unpatched, its page and dials. */
+	/** Its sound and FX sends this frame, for the Sequencer's mix, while its breakout's outputs are unpatched. */
 	void sendUpstream(float left, float right, float mono) {
 		if (!slot)
 			return;
@@ -441,12 +432,6 @@ struct TrackCore : TrackIds {
 		s.right = mixed ? right : 0.f;
 		for (int k = 0; k < FX_TRACKS; k++)
 			s.send[k] = effect || outputs[FX1_OUTPUT + k].isConnected() ? 0.f : mono * (k ? controls.fx2 : controls.fx1);
-		s.page = trackMode ? -1 : page;
-		s.timeKey = effect ? timeKey : -1;
-		std::copy(std::begin(dialValues), std::end(dialValues), s.dials);
-		if (arp())
-			for (int i = 0; i < 4; i++)
-				s.arp[i] = params[ARP_SPEED_PARAM + i].getValue();
 	}
 
 	void trackTempo(float sampleTime, const Downstream* bus) {
@@ -489,8 +474,8 @@ struct TrackCore : TrackIds {
 		Controls& c = controls;
 		c.lfo = amount * std::fabs(amount) * lfoValue;
 		float offset = lfoInside ? c.lfo : 0.f;
-		c.p1 = modulated(P1_PARAM, TARGET_P1, offset, sweep[SWEEP_SYNTH]);
-		c.p2 = modulated(P2_PARAM, TARGET_P2, offset);
+		c.p1 = ranges[0].units(modulated(P1_PARAM, TARGET_P1, offset, sweep[SWEEP_SYNTH]));
+		c.p2 = ranges[1].units(modulated(P2_PARAM, TARGET_P2, offset));
 		c.pitch = (int) value(LFO_TARGET_PARAM) == TARGET_PITCH ? 2.f * offset : 0.f;
 
 		// The resonance belongs to whichever filter the dial is moving; the other one stays flat.
@@ -515,8 +500,8 @@ struct TrackCore : TrackIds {
 		c.fx2 = value(FX2_PARAM) * value(FX2_PARAM);
 	}
 
-	/** Everything up to the voices, once a sample, after the module has handed over the bus: the tempo, the keys, the
-	notes, the LFO and the dials. */
+	/** Everything up to the voices, once a sample, once the Sequencer has handed over the bus: the tempo, the keys,
+	the notes, the LFO and the dials. */
 	void prepare(const ProcessArgs& args) {
 		trackTempo(args.sampleTime, bus);
 		if (reset.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f))
@@ -558,7 +543,8 @@ struct TrackCore : TrackIds {
 		scopeEnd = (scopeEnd + 1) % Snapshot::SCOPE;
 		sendUpstream(panned[0], panned[1], mono);
 
-		if (lightDivider.process())
+		// A core ringing out after a switch leaves the lights to the one playing.
+		if (lightDivider.process() && !silenced)
 			updateLights(sampleTime * lightDivider.getDivision());
 	}
 
@@ -666,7 +652,7 @@ struct TrackCore : TrackIds {
 		trackMode = false;
 	}
 
-	/** Its settings beside the params, into its module's JSON. Track mode isn't saved, so a patch always opens on the
+	/** Its settings beside the params, into its track's JSON. Track mode isn't saved, so a patch always opens on the
 	dials' pages. */
 	virtual void dataToJson(json_t* root) {
 		json_object_set_new(root, "ppqn", json_integer(ppqn));

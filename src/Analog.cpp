@@ -4,7 +4,7 @@ amp envelope opens. MIX fades from the saw alone to the saw and the sub, then on
 how far the filter closes between notes: none leaves it open, full closes it down to the note's fundamental and lets
 the envelope sweep it eight octaves up.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
 #include "dsp/Blep.hpp"
 
 struct Analog {
@@ -49,4 +49,4 @@ struct Analog {
 };
 
 
-Model* modelAnalog = createModel<opz::SynthTrack<Analog>, opz::SynthTrackWidget<Analog>>(Analog::SLUG);
+static opz::SynthPlug<Analog> analogPlug;

@@ -3,7 +3,7 @@ Volt: the OP-Z's multi-oscillator electric synthesis, a saw, a pulse and a trian
 up from the saw, from unison through every interval to two octaves, and brings the sub in as it goes; MODULATION
 sweeps the pulse's width with a slow LFO of the voice's own and rings the saw and pulse together.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
 #include "dsp/Blep.hpp"
 #include "dsp/Sine.hpp"
 
@@ -41,4 +41,4 @@ struct Volt {
 };
 
 
-Model* modelVolt = createModel<opz::SynthTrack<Volt>, opz::SynthTrackWidget<Volt>>(Volt::SLUG);
+static opz::SynthPlug<Volt> voltPlug(65);

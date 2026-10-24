@@ -1,5 +1,10 @@
 # Your first sound
 
+> **Changed in 2.1.0:** the engines and send effects are no longer modules. They are plugs inside the Sequencer,
+> ten slots a track, picked with TRACK latched and a black key, and filled from its context menu (**Plug slots**).
+> A breakout on a track plays the track's plug when its audio outputs are patched, or hands the track to outside
+> modules when only its note CVs are. This page still describes the modules and is being rewritten.
+
 A walk from an empty rack to a bassline, a beat and an echo, in about ten minutes. It assumes you know how to add
 modules and patch cables in VCV Rack, but nothing about the OP-Z. For the keys and gestures on their own, see the
 [quickstart](quickstart.md).

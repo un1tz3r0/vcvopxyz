@@ -66,4 +66,4 @@ struct Crush {
 };
 
 
-Model* modelCrush = createModel<opz::FxTrack<Crush>, opz::FxTrackWidget<Crush>>(Crush::SLUG);
+static opz::FxPlug<Crush> crushPlug(109);

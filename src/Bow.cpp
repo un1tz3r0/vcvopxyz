@@ -4,7 +4,7 @@ side of the bow, a damped bridge, and the bow's stick and slip as a friction cur
 amp envelope, so a note swells in as the string catches and rings on after it lifts. TENSION is how hard the bow
 presses and how bright the string is, from airy to biting; CHORUS adds a second string, detuned against the first.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
 #include <vector>
 
 struct Bow {
@@ -75,4 +75,4 @@ struct Bow {
 };
 
 
-Model* modelBow = createModel<opz::SynthTrack<Bow>, opz::SynthTrackWidget<Bow>>(Bow::SLUG);
+static opz::SynthPlug<Bow> bowPlug(112);

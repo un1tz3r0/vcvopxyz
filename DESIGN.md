@@ -8,48 +8,50 @@ How vcvopxyz is put together, and why. For what the modules do, see the [manual]
   tuned by ear. Nothing is null-tested against recordings of the hardware.
 - **The OP-Z first, the OP-XY later.** The OP-Z's synth tracks and sequencer come first because each tests the
   other; the OP-XY's sequencer and engines follow once the OP-Z's are complete.
-- **One row, no cables.** The hardware is one box, so the modules are one row: a master on the left and engines to
-  its right that find their tracks by position. Every connection the bus makes can still be patched by hand.
+- **One box, no cables.** The hardware is one box, so the Sequencer plays every track itself, each with the plug
+  picked for it. Breakouts to its right hand a track to other modules when it should be patched by hand.
 - **Rack-native where the hardware can't translate.** Latched modes stand in for held keys, a CV input stands in for
   the motion sensor, and every dial is an ordinary Rack param with undo, MIDI mapping and typed values.
 
-## The bus
+## Plugs and the hub
 
-`src/opz/Bus.hpp`. The Sequencer sits at the left end of a row as the master, and holds the bus itself, a `Hub`:
+`src/opz/Plugs.hpp`, `src/opz/Host.hpp`, `src/opz/Hub.hpp`. Every sound a track can play is a plug: the eleven
+synth engines, the drum tracks' kit player and the six effects, each registered from its own file by a static
+`SynthPlug<Engine>`, `FxPlug<Effect>` or `PlugRegistration`, with its slug (its module's before 2.1.0), its kind and
+its OP-Z id where one is known. Each kind's breakout registers a plug too, whose voice is other modules.
 
-- **Downstream**, from the master to every engine: each track's lane (poly pitch, velocity, gate, the sweep offsets,
-  the parameter locks of the step playing, and its level from the mixer, 0 while its sound is muted), the tempo, the
-  selected track, track mode, page requests and the FX sends.
-- **A slot per track**, from that track's engine to the master: its L/R sound and FX 1 and FX 2 sends while its own
-  outputs are unpatched, its page, an FX module's time key, its four dial values for the master's dial LEDs, and the
-  arp track's arp dials. Each slot is stamped with the frame it was written in, so an engine that has moved off a
-  track stops counting at once. The master sums the slots into an `Upstream`.
+The Sequencer keeps a `HostedTrack` per track: a core of every plug of the track's kind and one of its breakout's,
+all bound to the same 22 params of the Sequencer's (`trackParam`), the breakout's jacks and the track's lights. One
+core plays. A switch of plug is a swap of pointers on the audio thread, nothing made or freed: the core left behind
+takes no more notes and rings out under the new one until it's quiet (0.1 s, or 3 s for an effect, whose echoes have
+gaps; 10 s at most), and the new one takes over the page, the clock and the LFO. FX units allocate their delay
+lines when the sample rate changes, on the UI thread, never at a switch.
 
-An engine takes its track from its kind's count: the first drum engine plays track 1, the next track 2, and so on to
-track 4, the first synth engine track 5, and so on to track 8, and the first FX module FX 1 and the next FX 2, so
-the kinds can mix in any order. The sends travel left with the mix, and the master sends them right again on its next
-sample, so every FX module hears every engine wherever the two sit. The master
-has no CV outputs of its own for the tracks: the three breakouts are the way out to other modules. A module from
-another plugin ends the bus, since `onBus` checks the plugin before casting. A Screen only carries it on.
+A track's two sound dials are stored as shares of their travel, 0 to 1, whichever plug plays, so steps, scenes and
+the row record hold them alike. A `PlugDial` shows itself as the playing plug's own dial, configured once on a
+module of its own (`Plug::dial`), and a core turns a share into its units through the plug's `SoundRange`.
 
-Both halves are double-buffered by Rack's frame count (`ProcessArgs::frame`): in frame n the master writes the
-`n & 1` copy of the downstream and reads the slots written in frame n − 1, and each engine reads the downstream of
-frame n − 1 and writes its slot in the `n & 1` copy. Rack's engine finishes every module's frame before it starts
-the next, the same guarantee its expander messages rely on, so no copy is written and read at once on any number of
-threads. Every engine is one sample behind the master wherever it sits, and its sound reaches the mix a sample
-later.
+Ten slots a track sit on the black keys in track mode: the synth and FX tracks' hold plugs, a drum track's hold kits
+(`KitCore`, `src/opz/KitCore.hpp`), each an OP-Z kit, a built-in one or one from a file kept in the Sequencer's patch
+storage. Each pattern remembers its slot.
 
-An engine's master and track only change when modules move, so it walks left to find them again only after Rack has
-given some module on a bus a new neighbour: every OP-Z module's `onExpanderChange` bumps a plugin-wide count
-(`busLayout`), and each engine compares it with the count it last walked at, once a sample.
+Every frame the Sequencer writes each lane into one `Downstream`, runs the eight tracks' cores, sums their FX sends,
+runs the two FX tracks' with this frame's sends, and mixes: no track is a sample behind any other.
 
-The bus used to be relayed from module to module through Rack's expander messages, each one copying the whole
-2.8 KB downstream on, a sample later. That copy, more than everything else the bus did, was the cost, and on more
-than one engine thread each copy crossed cores. A row of a Sequencer, four Drums, four synths, a Screen and a Delay,
-run by Rack's own engine, took 2.9 µs a sample on one thread and 6.0 µs on two to four; the hub takes 1.9 µs and
-3.6 µs. The master's dials carry no state of their own:
-each frame, a `MasterDial` widget re-points itself at the param it turns now, mostly one of the selected engine's,
-so a turn is that param's own, with its tooltip, undo and MIDI mapping.
+The hub is how breakouts and Screens to its right reach the tracks. A breakout finds the first Sequencer to its left,
+and its track: Auto takes the first of its kind that no breakout further left has, a fixed one its own if free. Each
+frame it writes its inputs and which of its outputs are patched into the hub (`JacksIn`), and copies out what the
+track's core wrote to its patched outputs (`JacksOut`). Both are double-buffered by Rack's frame count, so a
+breakout's jacks are a sample behind the track whichever thread runs it. What a breakout has patched decides who
+plays: its note outputs without its audio outputs hand the track to the breakout's core, which sends the notes out
+and takes the sound back at its return; its audio outputs keep the plug playing, out of them instead of the mix.
+
+Placement only changes when modules move, so breakouts walk left again only after Rack has given some module of
+this plugin a new neighbour: every module's `onExpanderChange` bumps a plugin-wide count (`busLayout`). The UI thread
+never keeps a hub: a Screen or a breakout's status screen walks left each frame (`findHub`). A row of a Sequencer
+playing every track (four drums, four synths, two effects) takes 2.8 µs a sample on one thread, as the same tracks
+did as eleven modules in 2.0.27. The master's dials carry no state of their own: each frame, a `MasterDial` widget
+re-points itself at the param it turns now, so a turn is that param's own, with its tooltip, undo and MIDI mapping.
 
 ## Tracks
 
@@ -57,20 +59,12 @@ so a turn is that param's own, with its tooltip, undo and MIDI mapping.
 filter, the mix, the meters and the state published for the UI through a `TripleBuffer`, which the status screen and
 a Screen read. A core supplies its voices through `noteOn`, `noteOff`, `releaseAll` and `envelope`, and may hide a
 dial (`dial`) or name a key's sound (`soundName`). `SynthCore<Engine>` (`src/opz/SynthTrack.hpp`) adds poly, mono
-and legato voices with portamento around an engine; `KitCore` (`src/Drum.cpp`) plays a kit.
+and legato voices with portamento around an engine; `KitCore` (`src/opz/KitCore.hpp`) plays a kit.
 
 A core holds no `Module`. It reads and writes params, jacks and lights through pointers (`params`, `inputs`,
-`outputs`, `lights`, `paramQuantities`), by the ids in `TrackIds`, so its code reads as a module's would. Its
-params are configured on a module it is given, from a base param (`configure(m, base)`), and patch data goes
-through `dataToJson`/`dataFromJson` on the core. `Track` (`src/opz/Track.hpp`) is the module around one:
-`TrackModule<Core>` binds the core to the module's own params and jacks, configures them, and each frame hands it
-the bus (`joinBus`): what the hub sent (`bus`), its track (`busTrack`) and the slot its sound goes back into
-(`slot`). The module keeps what only a module has: its place on the bus, the panel's port names, its entry in the
-Sequencer's row record (its slug, its dials as shares of their travel and its settings), and patch storage, which Drum's core reaches through a `kitFile` callback. The UI reaches
-an engine through its core too (`Track::getCore()`), and the Sequencer's dials turn `paramQuantities[p]->module`'s
-param `paramQuantities[p]->paramId`, so none of it cares which module holds a core's params. This is the step
-before the engines play inside the Sequencer itself: each hosted core will be bound to a block of the Sequencer's
-own params.
+`outputs`, `lights`, `paramQuantities`), by the ids in `TrackIds`, so its code reads as a module's would. Each frame
+the Sequencer hands it the lanes (`bus`) and the slot its sound goes into (`slot`); its track (`busTrack`) is set
+once. Patch data goes through `dataToJson`/`dataFromJson` on the core, saved by its plug's slug.
 
 - **Per sample:** the bus, the tempo, the notes, and each voice's envelope and sound. Voices are summed
   before the filter: the filter has one cutoff for the whole track and is linear, so filtering the mix sounds the
@@ -82,8 +76,8 @@ own params.
   and the pan, then the outputs, the bus mix and the meters. A filter whose state goes NaN or infinite, from a bad
   input on Breakout's RET say, clears it, so the track recovers on the next sample.
 
-The panel has no dials, as the hardware's tracks have none of their own: the Sequencer's turn the selected track's,
-and a Screen turns any. Its status screen (`TrackStatus`) reads the same published state as a Screen beside it,
+A breakout's panel has no dials, as the hardware's tracks have none of their own: the Sequencer's turn the selected
+track's, and a Screen turns them too. Its status screen (`TrackStatus`) reads the same published state as a Screen,
 both on the UI thread, which is the `TripleBuffer`'s one consumer.
 
 ### Synth engines
@@ -92,19 +86,19 @@ An engine supplies only its sound:
 
 ```cpp
 struct Analog {
-	static constexpr const char* SLUG = "Analog";            // module slug, and its panel in res/
+	static constexpr const char* SLUG = "Analog";            // its plug's slug, its module's before 2.1.0
 	static void configSound(Module* m, int p1, int p2);     // configures its two sound dials
 	struct Voice {
 		// One sample, about ±1. `envelope` is the voice's amp envelope, 0 to 1, for an engine with a filter envelope.
 		float process(float frequency, float sampleTime, float p1, float p2, float envelope);
 	};
 };
-Model* modelAnalog = createModel<opz::SynthTrack<Analog>, opz::SynthTrackWidget<Analog>>(Analog::SLUG);
+static opz::SynthPlug<Analog> analogPlug;                 // and its OP-Z plug id, where it has one
 ```
 
 Synth Breakout (slug `Breakout`, kept for old patches) is the exception that proves the split: its core derives
 from `SynthCore<BreakoutSound>` and overrides `process` to send each stage out as CV and skip the stages whose
-outputs are patched, with `lfoInside` turning the LFO's inside targets off. Drum and Drum Breakout share `DrumCore`
+outputs are patched, with `lfoInside` turning the LFO's inside targets off. The kit player and Drum Breakout share `DrumCore`
 (`src/opz/DrumTrack.hpp`): the drum dials, note styles and keys. The synth and drum breakouts share
 `TrackCore::emitReturn`, the return through whatever isn't patched out. Send FX Breakout's core derives from
 `FxCore` and overrides `process` to send the bus's send out and take the effect back through the filter; it shares
@@ -116,7 +110,7 @@ Bow is the one physical model, a bowed waveguide after STK's: its bridge low-pas
 eighth harmonic and its friction curve stays shallow, since past either the string jumps to an upper mode, and the
 delay is shortened by the low-pass's phase delay to keep it in tune.
 
-### FX modules
+### Effects
 
 `src/opz/FxTrack.hpp`. `FxCore<Effect>` is a `TrackCore` with `effect` set, around an effect's `Unit` (`src/Delay.cpp`
 and the rest), which takes a stereo sample and returns the effect alone. It has no voices and only the sound and LFO
@@ -130,7 +124,8 @@ through the track's filter pair and level, so mutes, locks and the mix work as f
 `src/opz/Kit.hpp` is a kit as the OP-1 and OP-Z keep one: one buffer of mono samples and 24 slices into it, each
 with its tuning, gain, direction and play mode. `Kit.cpp` reads OP-1 and OP-Z kit AIFFs (the slices are JSON in
 an "op-1" application chunk), plain AIFF, AIFC and WAV, and folders of sounds, all at 44.1 kHz mono. A loaded kit
-is saved in the patch's storage folder as a float WAV, with its slices in the module's JSON. Files are taken as
+is saved in the Sequencer's patch storage as a float WAV (`kit-<track>-<slot>.wav`), with its slices in the
+Sequencer's JSON. Files are taken as
 untrusted: rates outside 1 to 384 kHz are refused, samples that aren't finite become 0 and the rest are held to
 ±4, slice speeds to four octaves either way, and names that aren't UTF-8, which JSON can't hold, lose their other
 bytes to '?'.
@@ -152,7 +147,8 @@ name.
 A kit from a file reaches the audio thread through a mutex the audio thread only `try_lock`s, and the kit it
 replaces goes back to the UI thread to be freed, so the audio thread never blocks or frees memory.
 
-The Screen edits a kit through three `Track` hooks (`kit()`, `editSlice()`, `lastSlice()`) that only Drum fills in.
+The Screen edits the playing slot's kit through three `TrackCore` hooks (`kit()`, `editSlice()`, `lastSlice()`) that
+only the kit player fills in.
 Slices change in place while they play: the audio thread reads a slice's ends once a sample and stops a voice that
 finds them less than two samples apart, so a half-made edit costs at most a cut-off sound. Editing a built-in kit
 first copies it in as a loaded kit. `Kit::toOp1()` writes the OP-1 kit format the loader reads, resampled to 44.1
@@ -176,7 +172,7 @@ tested on its own. `src/opz/Sequencer.cpp` is the module: the face, the modes, r
   frame and pushes a `PatternChange` when they differ. Every edit, from any source, is one undo step, and so is a
   project switch (below).
 - **Components** are a bitmask and a value per step. Most act in the player when it schedules a slot; sweeps go out
-  over the bus as offsets on the lane; the gate step jump advances the tracks that wait for triggers, as **ADV** does.
+  on the lane as offsets; the gate step jump advances the tracks that wait for triggers, as **ADV** does.
 - **Parameter locks** are a mask and a value per step over a track's 22 params (the arp's four last), each a share of
   the dial's travel, as the OP-Z's files keep them. The player marks each slot with whether the step's parameter spark
   let its locks through, and the lane carries the locks of the slot under the playhead; the engine reads every dial
@@ -186,10 +182,10 @@ tested on its own. `src/opz/Sequencer.cpp` is the module: the face, the modes, r
   engine params under the four dials at each control step, and a change locks the param on the step under the
   playhead; a recalled scene moves them without counting as a turn. The undo history waits until the dials have been
   still half a second, so a turn is one edit (the knob's own move is another).
-- **Arp:** the arp lives in the arp track's player, so every engine, Breakout included, gets its notes as ordinary
-  ones over the bus. With it on, the player's channels hold the notes (all 16, whatever the polyphony) and a second
-  set of channels, as many as the polyphony, carries what it plays. Its dials are the engine's four extra params,
-  which the engine shows on the LFO page while it plays track 7 and sends back over the bus; the player applies the
+- **Arp:** the arp lives in the arp track's player, so every plug, the breakout's included, gets its notes as
+  ordinary ones on the lane. With it on, the player's channels hold the notes (all 16, whatever the polyphony) and a second
+  set of channels, as many as the polyphony, carries what it plays. Its dials are the arp track's four extra params,
+  which its core shows on the LFO page and the Sequencer reads as turned; the player applies the
   step's locks to them itself, so a locked step's first note already follows them. A held sequenced note keeps its
   pitch and tonality component, and each arp note moves it as the master track says then. In OP-Z files the arp
   track's LFO bytes hold its arp dials.
@@ -200,9 +196,8 @@ tested on its own. `src/opz/Sequencer.cpp` is the module: the face, the modes, r
 ### Projects
 
 `src/opz/Project.hpp` is a project slot as plain data, and the reader and writer for the OP-Z's own project files,
-with no Rack in either. The slots live in the Sequencer and save with the patch as JSON. A slot holds the engines'
-dials as shares of each dial's range, so a project sets the same dial positions whichever engine plays a track, as
-the OP-Z's files do.
+with no Rack in either. The slots live in the Sequencer and save with the patch as JSON. A slot holds each pattern's
+plug slot and dials, the dials as shares of each one's range, as the OP-Z's files do.
 
 Switching projects happens in the audio thread, from the keys; files are read and written in the UI thread. A mutex
 guards the slots between the two, which the audio thread only `try_lock`s: a key's switch or save, or a slot the UI
@@ -214,12 +209,20 @@ Patches from 2.0.5 and earlier had keys where the mixer's and the metronome's pa
 module's plugin version in the patch, so a Sequencer from before 2.0.6 resets those six to their defaults on loading.
 Param and port ids are append-only from 2.0.6 on.
 
+2.1.0 moved every engine into the Sequencer. A Sequencer from 2.0.25 on recorded the engine modules on its row
+(`row`: each one's slug, its dials as shares and its settings), so an older patch's tracks pick those plugs up from
+their slots, or the last slot where a track's defaults lack it; a kit loaded from a file was the Drum module's and is
+lost. Rack reports the engine modules themselves as missing. A breakout's first param was a sound dial, and is now
+its track selector, so one from before 2.1.0 goes back to Auto.
+
 The .opz layout comes from the OP-Z community's reverse engineering (see the comment at the top of `Project.hpp`).
 Each imported file is kept, in the patch's storage folder, so an export writes the slot over the file it came from
-and keeps everything the Sequencer doesn't model, such as the drum and FX plugs and any pattern never played.
+and keeps everything the Sequencer doesn't model, such as the drum kits and any pattern never played. The synth and
+FX tracks' plugs go by their OP-Z ids: on import a pattern plays the slot holding the file's plug, if any does, and
+on export it writes its slot's plug where that has an id (Analog, Organ, EP and Rymd have none, and leave the file's).
 
 A project's 16 patterns are `Project::Scene`s. The one playing lives where a single pattern always did, in the lanes,
-the params and the engines' dials, and the other 15 wait in the Sequencer's `scenes`; a switch stores the one
+the params, the tracks' dials and their plugs, and the other 15 wait in the Sequencer's `scenes`; a switch stores the one
 playing into its scene and recalls the next, in the audio thread under the slots' lock. A chain moves on in
 `followChain`, every sample: since each `Player` schedules a slot one ahead, it sets `Player::hold` to the
 pattern's end, so no track schedules a slot from there on, and once the end is reached it switches and calls
@@ -248,11 +251,10 @@ Vic made to keep (2026-10-21).
 
 - **Held keys latch:** TRACK, REC and the index keys switch on and off with a click; a step and SHIFT latch with a long
   press or Ctrl+click. Index lock (triple-click) has nothing to do.
-- **Step length** is TRACK and a black key; the guide has TRACK, SHIFT and a value key, and TRACK and a black key
-  pick the plug, which has no meaning here. **Step count**, which the guide gives no combo for, is TRACK and SHIFT
-  and a step.
-- **Plugs** are modules: a track's engine is the module in its place on the bus, so there are no presets to store or
-  randomize.
+- **Step length** is TRACK, SHIFT and a black key, and TRACK and a black key pick the plug, as in the guide; on the
+  master track, which has no plugs, TRACK and a black key set it too. **Step count**, which the guide gives no
+  combo for, is TRACK and SHIFT and a step.
+- **Plugs** come from ten slots per track, filled from the context menu; presets aren't stored or randomized yet.
 - **Quantize** pulls notes towards the grid as they play; the guide applies it to notes recorded live.
 - **Sound mutes** zero a track's level before its sends, so a sound-muted track stops feeding the FX tracks; the
   guide says muted tracks still send to the effects.
@@ -309,7 +311,7 @@ Vic made to keep (2026-10-21).
   waiting to be tuned by ear.
 - **Index keys:** the OP-Z's are held while turning dials or pressing keys, so here three latch, like TRACK, and
   SCREEN, which only shows the battery, works while held. The battery is pretend, running down while playing.
-- **Mixer:** levels are squared, as the engines' are, and only reach the engines over the bus; a mute stops a
+- **Mixer:** levels are squared, as the dials' are; a mute stops a
   track's gates, while a sound mute (SHIFT) only zeroes its level. Punch is a compressor with
   make-up gain, and the master level comes after it.
 - **Parameter locks** hold for the step's slots, from its slot's start until the next step's, rather than for its
@@ -318,7 +320,7 @@ Vic made to keep (2026-10-21).
 - **Metronome:** the OP-Z counts in a voice that can't be copied, so its sounds are six synthesized clicks.
 - **Patterns and chains:** a pattern's end, for a chain, is its longest track's (step count times step length),
   or a bar if every track waits for triggers. Each pattern has its own sound, as the OP-Z's files store it, but a
-  pattern never played leaves the engines' dials as they are. The mute group is per pattern; the groups themselves
+  pattern never played leaves the tracks' dials and plugs as they are. The mute group is per pattern; the groups themselves
   are the project's. Chains are picked and saved on the keys of project mode rather than with PROJECT held, since
   the index keys latch: PLAY builds one, the white keys keep 14 of the file's 15 saved chains, and SHIFT copies. A
   note with negative micro timing on the first step of a chain's next pattern plays on the step, since that pattern

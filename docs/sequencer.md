@@ -69,9 +69,11 @@ row of jacks: the transport's inputs, the notes to record, then the transport's 
 - <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/track-track-dark.png"><img alt="TRACK on" src="assets/keys/track-track-light.png" height="32"></picture> **Track mode:** click **TRACK** to switch it on, and again to switch it off. Steps 1 to 8 select a track, steps 9
   and 10 the FX tracks, and step 12 the master track. The dials
   set its **note length** (1/64 to a bar with the dotted values between, then drone), the engine's **note style**,
-  **quantize** (pulls micro timing towards the grid as it plays) and the engine's **portamento**. The black keys set
-  the step length in blue (1 to 8 for ×1 to ×8, 9 for ×16, 0 for one step per trigger on **ADV**), and **−** and
-  **+** shift the pattern a step. With SHIFT latched too, the steps set the step count. **STOP** lets go of the
+  **quantize** (pulls micro timing towards the grid as it plays) and the engine's **portamento**. The black keys pick
+  the track's plug from its ten slots, lit white (bright for the one playing), and **−** and **+** shift the
+  pattern a step. With SHIFT latched too, the steps set the step count and the black keys the step length in blue
+  (1 to 8 for ×1 to ×8, 9 for ×16, 0 for one step per trigger on **ADV**); the master track has no plugs, so its
+  black keys always set the step length. The slots are filled from the Sequencer's context menu, **Plug slots**. **STOP** lets go of the
   notes, and held for a second clears the track.
 - <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/shift-shift-dark.png"><img alt="SHIFT latched" src="assets/keys/shift-shift-light.png" height="32"></picture> **SHIFT:** a click turns the page. A long press or a Ctrl+click latches it, for track mode's step count, the
   step components and the mixer's sound mutes.

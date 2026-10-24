@@ -3,7 +3,7 @@ Saw: the OP-Z's filtered waves, two saws a few cents apart through a resonant lo
 sits over the note and how much it rings; ENVELOPE is how far the amp envelope opens it from there, sharply at the
 start of a note and easing off as it decays, for plucks at one end and swells at the other.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
 #include "dsp/Blep.hpp"
 
 struct Saw {
@@ -40,4 +40,4 @@ struct Saw {
 };
 
 
-Model* modelSaw = createModel<opz::SynthTrack<Saw>, opz::SynthTrackWidget<Saw>>(Saw::SLUG);
+static opz::SynthPlug<Saw> sawPlug(26);
