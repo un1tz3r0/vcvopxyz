@@ -10,15 +10,14 @@ drag, and its tuning, level, play mode and direction.
 
 namespace opz {
 
-/** The module only passes the bus on; its widget reads the track to its left. */
-struct Screen : Module, BusNode {
+/** The module only carries the bus on, which takes nothing a sample; its widget reads the track to its left. */
+struct Screen : Module {
 	Screen() {
 		config(0, 0, 0, 0);
-		attach(this);
 	}
 
-	void process(const ProcessArgs& args) override {
-		relay(this);
+	void onExpanderChange(const ExpanderChangeEvent& e) override {
+		busMoved();
 	}
 
 	Track* track() {

@@ -15,25 +15,39 @@ How vcvopxyz is put together, and why. For what the modules do, see the [manual]
 
 ## The bus
 
-`src/opz/Bus.hpp`. The Sequencer sits at the left end of a row as the master. Every OP-Z module is a `BusNode`,
-which owns the double buffers Rack's expander messages flip between, and passes on what it gets, a sample later:
+`src/opz/Bus.hpp`. The Sequencer sits at the left end of a row as the master, and holds the bus itself, a `Hub`:
 
-- **Downstream** (rightward): each track's lane (poly pitch, velocity, gate, the sweep offsets, the parameter locks
-  of the step playing, and its level from the mixer, 0 while its sound is muted), the tempo, the selected track,
-  track mode, page requests, the FX sends, and counts of the drum and synth engines and FX modules passed so far.
-- **Upstream** (leftward): the L/R mix and the FX 1 and FX 2 sends of every engine whose own outputs are unpatched,
-  each engine's page, each FX module's time key, and the selected engine's four dial values for the master's dial
-  LEDs.
+- **Downstream**, from the master to every engine: each track's lane (poly pitch, velocity, gate, the sweep offsets,
+  the parameter locks of the step playing, and its level from the mixer, 0 while its sound is muted), the tempo, the
+  selected track, track mode, page requests and the FX sends.
+- **A slot per track**, from that track's engine to the master: its L/R sound and FX 1 and FX 2 sends while its own
+  outputs are unpatched, its page, an FX module's time key, its four dial values for the master's dial LEDs, and the
+  arp track's arp dials. Each slot is stamped with the frame it was written in, so an engine that has moved off a
+  track stops counting at once. The master sums the slots into an `Upstream`.
 
 An engine takes its track from its kind's count: the first drum engine plays track 1, the next track 2, and so on to
 track 4, the first synth engine track 5, and so on to track 8, and the first FX module FX 1 and the next FX 2, so
 the kinds can mix in any order. The sends travel left with the mix, and the master sends them right again on its next
 sample, so every FX module hears every engine wherever the two sit. The master
 has no CV outputs of its own for the tracks: the three breakouts are the way out to other modules. A module from
-another plugin ends the bus, since `onBus` checks the plugin before casting. A Screen only relays.
+another plugin ends the bus, since `onBus` checks the plugin before casting. A Screen only carries it on.
 
-Expander messages are the only safe way to share state between modules that Rack may run on different threads, and
-the one-sample delay per module is inaudible for notes and dials. The master's dials carry no state of their own:
+Both halves are double-buffered by Rack's frame count (`ProcessArgs::frame`): in frame n the master writes the
+`n & 1` copy of the downstream and reads the slots written in frame n − 1, and each engine reads the downstream of
+frame n − 1 and writes its slot in the `n & 1` copy. Rack's engine finishes every module's frame before it starts
+the next, the same guarantee its expander messages rely on, so no copy is written and read at once on any number of
+threads. Every engine is one sample behind the master wherever it sits, and its sound reaches the mix a sample
+later.
+
+An engine's master and track only change when modules move, so it walks left to find them again only after Rack has
+given some module on a bus a new neighbour: every OP-Z module's `onExpanderChange` bumps a plugin-wide count
+(`busLayout`), and each engine compares it with the count it last walked at, once a sample.
+
+The bus used to be relayed from module to module through Rack's expander messages, each one copying the whole
+2.8 KB downstream on, a sample later. That copy, more than everything else the bus did, was the cost, and on more
+than one engine thread each copy crossed cores. A row of a Sequencer, four Drums, four synths, a Screen and a Delay,
+run by Rack's own engine, took 2.9 µs a sample on one thread and 6.0 µs on two to four; the hub takes 1.9 µs and
+3.6 µs. The master's dials carry no state of their own:
 each frame, a `MasterDial` widget re-points itself at the param it turns now, mostly one of the selected engine's,
 so a turn is that param's own, with its tooltip, undo and MIDI mapping.
 
@@ -96,9 +110,6 @@ pages, so `dial` hides the rest and `nextPage` skips them. Its notes set `timeKe
 seconds against the tempo; the LFO's attack and pitch target slots stand in for time and send. The return goes
 through the track's filter pair and level, so mutes, locks and the mix work as for any track. The delay lines
 (`src/dsp/Delay.hpp`) are powers of two in size, read with Hermite interpolation where a time moves.
-
-The bus's `Downstream` is copied whole by every module every sample. Copying only the channels in use was tried and
-cost more than the plain struct copy, which compiles to one `memcpy`.
 
 ### Drum kits
 
