@@ -73,7 +73,8 @@ row of jacks: the transport's inputs, the notes to record, then the transport's 
   the track's plug from its ten slots, lit white (bright for the one playing), and **−** and **+** shift the
   pattern a step. With SHIFT latched too, the steps set the step count and the black keys the step length in blue
   (1 to 8 for ×1 to ×8, 9 for ×16, 0 for one step per trigger on **ADV**); the master track has no plugs, so its
-  black keys always set the step length. The slots are filled from the Sequencer's context menu, **Plug slots**. **STOP** lets go of the
+  black keys always set the step length. The slots are filled from the Sequencer's context menu, **Plug slots**. The
+  white keys are the plug's 14 [presets](#presets), and **REC** randomizes the track's sound. **STOP** lets go of the
   notes, and held for a second clears the track.
 - <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/shift-shift-dark.png"><img alt="SHIFT latched" src="assets/keys/shift-shift-light.png" height="32"></picture> **SHIFT:** a click turns the page. A long press or a Ctrl+click latches it, for track mode's step count, the
   step components and the mixer's sound mutes.
@@ -124,6 +125,17 @@ any other track, or play it on the keys.
   keys beside the dials light green for the tracks it moves; click one to add or remove it.
 - **The tonality component:** on a step of a track it moves, it changes how that step's notes follow the master
   track. See [Step components](step-components.md).
+
+## Presets
+
+Each plug keeps 14 presets, on the white keys in track mode, the same in every patch. Click one to load it into the
+selected track; a long press or a Ctrl+click stores the track's dials there. A preset holds the sound, envelope, LFO
+and mix pages, the note style and portamento, but not the arp's dials, which belong to the pattern. The key of the
+preset loaded lights brightly and the stored ones dimly. Preset 1 starts as the plug's defaults. Presets are saved
+in Rack's user folder, under `vcvopxyz/presets/`, as soon as they're stored.
+
+**REC** in track mode randomizes the sound, envelope and LFO pages, leaving the mix page as it is. A load, a
+randomize and a plug picked are each one step of Rack's undo.
 
 ## Patterns and chains
 

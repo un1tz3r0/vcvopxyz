@@ -94,6 +94,9 @@ keys, and a long press or Ctrl+click for SHIFT and the steps.
 | Hold track, turn a dial | Latch TRACK, turn the dial |
 | Hold track, press a value key: pick the plug in that slot | Latch TRACK, click a black key |
 | Hold track and shift, press a value key: step length | Latch TRACK and SHIFT, click a black key |
+| Hold track, press a white key: load a preset | Latch TRACK, click a white key |
+| Store a preset | Latch TRACK, long-press or Ctrl+click a white key |
+| Hold track, press rec: randomize the sound | Latch TRACK, click REC |
 | Step count (no combo on the OP-Z) | Latch TRACK and SHIFT, click a step |
 | Hold track, press −/+: shift the pattern | Latch TRACK, click − or + |
 | Hold track, hold stop: clear the track | Latch TRACK, hold STOP a second |

@@ -70,6 +70,21 @@ const Plug* breakoutPlug(int kind) {
 	return dials().breakouts[kind];
 }
 
+int plugNumber(const Plug* p) {
+	dials();
+	return int(p - registry().data());
+}
+
+const Plug* numberedPlug(int n) {
+	dials();
+	return &registry()[n];
+}
+
+int plugCount() {
+	dials();
+	return (int) registry().size();
+}
+
 int plugIndex(int kind, const std::string& slug) {
 	const std::vector<const Plug*>& list = plugs(kind);
 	for (size_t i = 0; i < list.size(); i++)

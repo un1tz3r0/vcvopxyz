@@ -35,6 +35,7 @@ first step as the last ends.
 #include "KitCore.hpp"
 #include "Sequence.hpp"
 #include "Project.hpp"
+#include "Presets.hpp"
 #include <mutex>
 #include <osdialog.h>
 
@@ -342,6 +343,11 @@ struct Sequencer : Module, Hub {
 				std::string name = m->slotName(m->track, value);
 				return string::f("Slot %d: ", (value + 1) % 10) + (name.empty() ? "empty" : name) + (value == m->hosted[m->track].slot ? " (playing)" : "");
 			}
+			if (m->trackMode && !m->setsStepLength()) {
+				int i = keyComponent(key);
+				return string::f("Preset %d%s; a long press or Ctrl+click stores it", i + 1, i == m->presetLoaded[m->track] ? " (loaded)"
+					: m->presetUsed(m->track, i) ? "" : " (empty)");
+			}
 			if (m->tempoMode)
 				return value >= 0 ? string::f("Tempo digit %d", (value + 1) % 10) : "Tap tempo";
 			if (m->projectMode)
@@ -535,6 +541,16 @@ struct Sequencer : Module, Hub {
 	long pulses = 0, lastTick = -1, lastBeat = -1;
 	float sincePulse = 0.f, pulsePeriod = 0.f; // seconds; a period of 0 is unknown
 	HostedTrack hosted[LANES];   // every track's cores, by lane; the master track has none
+	std::atomic<int> presetLoaded[LANES]; // the preset each track last loaded or stored, or -1
+	/** A track's plug or dials changed at once from the keys, for the widget to make a step of the undo history: its
+	slot, preset and dials before and after. */
+	struct SoundEdit {
+		int track;
+		const char* what;
+		int slot[2], preset[2];
+		float values[2][PRESET_PARAMS];
+	};
+	dsp::RingBuffer<SoundEdit, 16> soundEdits;
 	Downstream down;             // what the cores take, written afresh each frame
 	dsp::ClockDivider controlDivider, lightDivider, scaleDivider;
 	Meter inputMeters[INPUTS_LEN], outputMeters[JACKS];
@@ -631,11 +647,14 @@ struct Sequencer : Module, Hub {
 					};
 			}
 		defaultSlots();
-		for (int t = 0; t < LANES; t++)
+		for (int t = 0; t < LANES; t++) {
+			presetLoaded[t] = -1;
 			if (t != MASTER) {
 				hosted[t].settle();
 				resetSoundDials(t);
 			}
+		}
+		readPresets();
 		memory.add(Note());
 		controlDivider.setDivision(16);
 		lightDivider.setDivision(64);
@@ -694,10 +713,81 @@ struct Sequencer : Module, Hub {
 		HostedTrack& h = hosted[t];
 		if (t == MASTER || s == h.slot || !h.filled(s))
 			return;
-		h.slot = s;
-		if (h.kind != DRUM)
-			for (int d = 0; d < 2; d++)
-				params[trackParam(t, TrackIds::P1_PARAM + d)].setValue(plugs(h.kind)[h.plugIn(s)]->defaultShare(d));
+		soundEdit(t, "pick a plug", [&]() {
+			h.slot = s;
+			presetLoaded[t] = -1;
+			if (h.kind != DRUM)
+				for (int d = 0; d < 2; d++)
+					params[trackParam(t, TrackIds::P1_PARAM + d)].setValue(plugs(h.kind)[h.plugIn(s)]->defaultShare(d));
+		});
+	}
+
+	/** A change to a track's plug or dials as one step of the undo history. */
+	template <class F>
+	void soundEdit(int t, const char* what, F change) {
+		SoundEdit e;
+		e.track = t;
+		e.what = what;
+		auto take = [&](int w) {
+			e.slot[w] = hosted[t].slot;
+			e.preset[w] = presetLoaded[t];
+			for (int k = 0; k < PRESET_PARAMS; k++)
+				e.values[w][k] = params[trackParam(t, k)].getValue();
+		};
+		take(0);
+		change();
+		take(1);
+		if (!soundEdits.full())
+			soundEdits.push(e);
+	}
+
+	/** Whether a track's plug has preset `i` to load: one stored, or its first, which starts as the plug's defaults. */
+	bool presetUsed(int t, int i) {
+		const Plug* p = hosted[t].plug;
+		return p && (i == 0 || preset(p, i).used);
+	}
+
+	/** TRACK and a white key: the track's dials from its plug's preset. */
+	void loadPreset(int t, int i) {
+		const Plug* p = hosted[t].plug;
+		if (!presetUsed(t, i))
+			return;
+		soundEdit(t, "load a preset", [&]() {
+			Preset& pr = preset(p, i);
+			if (pr.used) {
+				for (int k = 0; k < PRESET_PARAMS; k++)
+					if (float share = pr.shares[k]; share >= 0.f)
+						setShare(t, k, share);
+			}
+			else {
+				for (int k = 0; k < PRESET_PARAMS; k++)
+					params[trackParam(t, k)].setValue(paramQuantities[trackParam(t, k)]->getDefaultValue());
+				resetSoundDials(t);
+			}
+			presetLoaded[t] = i;
+		});
+	}
+
+	/** A long press or Ctrl+click on the white key: the track's dials into the preset. */
+	void storePreset(int t, int i) {
+		const Plug* p = hosted[t].plug;
+		if (!p)
+			return;
+		float shares[PRESET_PARAMS];
+		for (int k = 0; k < PRESET_PARAMS; k++)
+			shares[k] = paramQuantities[trackParam(t, k)]->getScaledValue();
+		preset(p, i).store(shares);
+		presetLoaded[t] = i;
+	}
+
+	/** TRACK and REC, as on the OP-Z: the dials of the sound, envelope and LFO pages anywhere. The mix page stays, so
+	nothing jumps in level. */
+	void randomizeSound(int t) {
+		soundEdit(t, "randomize a sound", [&]() {
+			for (int k = TrackIds::P1_PARAM; k <= TrackIds::LFO_SHAPE_PARAM; k++)
+				setShare(t, k, random::uniform());
+			presetLoaded[t] = -1;
+		});
 	}
 
 	/** The keys run from F3 to E5, an octave either side of middle C, before − and + move them. */
@@ -1480,6 +1570,15 @@ struct Sequencer : Module, Hub {
 					keyedSave = false;
 				}
 			}
+			else if (trackMode && !setsStepLength() && keyComponent(key) >= 0) {
+				// A click loads a preset; a long press or a Ctrl+click stores one.
+				if (picksUp(e, g)) {
+					storePreset(track, keyComponent(key));
+					g.handled = true;
+				}
+				else if (e == KeyGesture::CLICK)
+					loadPreset(track, keyComponent(key));
+			}
 			else if (e == KeyGesture::PRESS)
 				keyDown(key);
 			else if (e == KeyGesture::CLICK || e == KeyGesture::RELEASE)
@@ -1551,7 +1650,14 @@ struct Sequencer : Module, Hub {
 				case PROJECT_PARAM: toggleMode(&Sequencer::projectMode); break;
 				case MIXER_PARAM: toggleMode(&Sequencer::mixerMode); break;
 				case METRONOME_PARAM: toggleMode(&Sequencer::tempoMode); break;
-				case REC_PARAM: recording = !recording; cursor = 0; break;
+				case REC_PARAM:
+					if (trackMode && track != MASTER)
+						randomizeSound(track);
+					else {
+						recording = !recording;
+						cursor = 0;
+					}
+					break;
 				case PLAY_PARAM:
 					if (projectMode) {
 						chaining = !chaining;
@@ -1991,6 +2097,9 @@ struct Sequencer : Module, Hub {
 			const HostedTrack& h = hosted[track];
 			for (int v = 0; v < HostedTrack::SLOTS; v++)
 				level[valueKey(v)] = v == h.slot ? 1.f : h.filled(v) ? 0.2f : 0.f;
+			// And its plug's presets, the same way.
+			for (int i = 0; i < PRESETS; i++)
+				level[componentKey(i)] = i == presetLoaded[track] ? 1.f : presetUsed(track, i) ? 0.2f : 0.f;
 		}
 		else if (tempoMode) {
 			keyColor = led::WHITE;
@@ -2128,12 +2237,14 @@ struct Sequencer : Module, Hub {
 	where the plugs now playing start them. */
 	void onReset(const ResetEvent& e) override {
 		defaultSlots();
-		for (int t = 0; t < LANES; t++)
+		for (int t = 0; t < LANES; t++) {
+			presetLoaded[t] = -1;
 			if (t != MASTER) {
 				hosted[t].settle();
 				for (std::unique_ptr<TrackCore>& c : hosted[t].cores)
 					c->resetSettings();
 			}
+		}
 		Module::onReset(e);
 		for (int t = 0; t < LANES; t++) {
 			Lane& l = lanes[t];
@@ -2508,6 +2619,8 @@ struct Sequencer : Module, Hub {
 				json_object_set_new(j, "slots", slots);
 			}
 			json_object_set_new(j, "slot", json_integer(h.slot));
+			if (presetLoaded[t] >= 0)
+				json_object_set_new(j, "preset", json_integer(presetLoaded[t]));
 			json_t* data = json_object();
 			for (size_t c = 0; c < h.cores.size(); c++) {
 				json_t* d = json_object();
@@ -2537,6 +2650,8 @@ struct Sequencer : Module, Hub {
 				if (json_t* d = json_object_get(data, h.plugOf[c]->slug.c_str()))
 					h.cores[c]->dataFromJson(d);
 			h.slot = clamp((int) json_integer_value(json_object_get(j, "slot")), 0, HostedTrack::SLOTS - 1);
+			json_t* preset = json_object_get(j, "preset");
+			presetLoaded[t] = preset ? clamp((int) json_integer_value(preset), 0, PRESETS - 1) : -1;
 			h.settle();
 		}
 	}
@@ -2758,6 +2873,31 @@ struct PatternChange : history::ModuleAction {
 	}
 	void redo() override {
 		set(after);
+	}
+};
+
+
+/** A track's plug picked, preset loaded or sound randomized from the keys, in the audio thread: the widget saves each
+here for undo. A slot emptied since stays as it is. */
+struct SoundChange : history::ModuleAction {
+	Sequencer::SoundEdit edit;
+
+	void set(int w) {
+		Sequencer* m = dynamic_cast<Sequencer*>(APP->engine->getModule(moduleId));
+		if (!m)
+			return;
+		int t = edit.track;
+		if (m->hosted[t].filled(edit.slot[w]))
+			m->hosted[t].slot = edit.slot[w];
+		for (int k = 0; k < PRESET_PARAMS; k++)
+			m->params[Sequencer::trackParam(t, k)].setValue(edit.values[w][k]);
+		m->presetLoaded[t] = edit.preset[w];
+	}
+	void undo() override {
+		set(0);
+	}
+	void redo() override {
+		set(1);
 	}
 };
 
@@ -3119,8 +3259,17 @@ struct SequencerWidget : ModuleWidget {
 	}
 
 	void step() override {
-		if (Sequencer* m = getModule<Sequencer>())
+		if (Sequencer* m = getModule<Sequencer>()) {
 			recordChanges(m);
+			while (!m->soundEdits.empty()) {
+				SoundChange* h = new SoundChange;
+				h->edit = m->soundEdits.shift();
+				h->name = string::f("%s on track %d", h->edit.what, trackNumber(h->edit.track));
+				h->moduleId = m->id;
+				APP->history->push(h);
+			}
+			writePresets();
+		}
 		ModuleWidget::step();
 	}
 
