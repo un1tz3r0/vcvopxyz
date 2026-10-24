@@ -12,6 +12,8 @@ mode, and the context menu's **Plug slots** fills each slot with one of these:
 | [Built-in kits](#built-in-kits) | Synthesized with the first Sequencer | Their name |
 | [Kit files](#kit-files) | An OP-1 or OP-Z kit, any AIFF or WAV, or a folder of sounds | Their sound, in the patch's storage folder |
 
+Each kit put in a slot, from any of them, is one step of Rack's undo.
+
 ## OP-Z kits
 
 The OP-Z's own kits, sampled from the device, one WAV and its slices each in the plugin's `res/kits`:

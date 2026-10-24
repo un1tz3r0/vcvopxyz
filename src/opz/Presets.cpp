@@ -75,6 +75,11 @@ void Preset::store(const float* values) {
 	unwritten = true;
 }
 
+void Preset::restore(const float* values, bool used) {
+	store(values);
+	this->used = used;
+}
+
 void readPresets() {
 	table();
 }
@@ -95,15 +100,19 @@ void writePresets() {
 			if (stored == preset.written)
 				continue;
 			preset.written = stored;
+			std::string dir = userDirectory(p), path = system::join(dir, fileName(i));
+			if (!preset.used) {
+				if (system::isFile(path))
+					system::remove(path);
+				continue;
+			}
 			json_t* root = json_object();
 			json_object_set_new(root, "plug", json_string(p->slug.c_str()));
 			json_t* shares = json_object();
 			for (int k = 0; k < PRESET_PARAMS; k++)
 				json_object_set_new(shares, NAMES[k], json_real(preset.shares[k]));
 			json_object_set_new(root, "shares", shares);
-			std::string dir = userDirectory(p);
 			system::createDirectories(dir);
-			std::string path = system::join(dir, fileName(i));
 			if (json_dump_file(root, path.c_str(), JSON_INDENT(2) | JSON_REAL_PRECISION(9)) != 0)
 				WARN("Couldn't write the preset %s", path.c_str());
 			json_decref(root);

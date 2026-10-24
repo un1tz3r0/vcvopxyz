@@ -27,6 +27,9 @@ struct Preset {
 
 	/** For the audio thread. */
 	void store(const float* values);
+	/** Puts it back as it was before a store, for undo, on the UI thread: `values`, or unused, which removes its
+	file. */
+	void restore(const float* values, bool used);
 };
 
 /** Reads every preset, if nothing has yet; for the UI thread. */

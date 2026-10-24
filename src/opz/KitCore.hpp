@@ -136,6 +136,41 @@ struct KitCore : DrumCore {
 		setKit(s, std::move(kit));
 	}
 
+	/** What a slot holds, to put back for undo: an OP-Z kit, a built-in one, a copy of a file's, or nothing. */
+	struct Held {
+		int factory = -1, builtin = -1;
+		std::shared_ptr<const Kit> file;
+		const Kit* was = nullptr;   // the kit it was taken from, only to tell whether the slot changed
+
+		bool operator==(const Held& o) const {
+			return was == o.was && factory == o.factory && builtin == o.builtin;
+		}
+	};
+
+	Held held(int s) {
+		std::lock_guard<std::mutex> lock(kitMutex);
+		Held h;
+		h.was = kitIn(s);
+		if (const Kit* k = fileKit(s))
+			h.file = std::make_shared<const Kit>(*k);
+		else {
+			h.factory = slots[s].factory;
+			h.builtin = slots[s].builtin;
+		}
+		return h;
+	}
+
+	void restore(int s, const Held& h) {
+		if (h.file)
+			useKit(s, std::make_unique<Kit>(*h.file));
+		else if (h.factory < 0 || !setFactory(s, h.factory)) {
+			if (h.builtin >= 0)
+				setBuiltin(s, h.builtin);
+			else
+				clearSlot(s);
+		}
+	}
+
 	/** The kit from a file in a slot, playing or handed over, or null. Under the mutex. */
 	Kit* fileKit(int s) {
 		KitSlot& slot = slots[s];
@@ -162,12 +197,26 @@ struct KitCore : DrumCore {
 		return fileKit(s) || !tagged ? k->name : k->name + (slots[s].factory >= 0 ? " (OP-Z)" : " (built in)");
 	}
 
-	/** The slot holding the kit a Drum module played before 2.1.0, put in the first empty slot where none does; -1 for a
-	kit from a file, which is lost, as its samples were the module's. */
-	int oldKit(json_t* data, int track) {
-		if (json_object_get(data, "kit")) {
-			WARN("Drum track %d: its kit from a file was the Drum module's, and needs loading again", track + 1);
-			return -1;
+	/** The slot holding the kit a Drum module played before 2.1.0, put in the first empty slot where none does. A kit
+	from a file comes from the module's `storage` folder, and is -1 without it. */
+	int oldKit(json_t* data, int track, const char* storage) {
+		if (json_t* saved = json_object_get(data, "kit")) {
+			std::unique_ptr<Kit> k;
+			std::string path = storage ? system::join(storage, "kit.wav") : "";
+			try {
+				if (storage && system::isFile(path))
+					k = Kit::fromSaved(system::readFile(path), saved);
+			}
+			catch (const Exception&) {}
+			if (!k) {
+				WARN("Drum track %d: its Drum module's kit from a file isn't beside the patch, and needs loading again", track + 1);
+				return -1;
+			}
+			int s = 0;
+			while (s < SLOTS - 1 && filled(s))
+				s++;
+			useKit(s, std::move(k));
+			return s;
 		}
 		const char* opz = json_string_value(json_object_get(data, "opz"));
 		int f = opz ? factoryKitIndex(opz) : -1;

@@ -36,8 +36,11 @@ first step as the last ends.
 #include "Sequence.hpp"
 #include "Project.hpp"
 #include "Presets.hpp"
+#include <map>
 #include <mutex>
+#include <set>
 #include <osdialog.h>
+#include <patch.hpp>
 
 namespace opz {
 
@@ -547,12 +550,16 @@ struct Sequencer : Module, Hub {
 	float flashes[LANES] = {};   // how much of each track key's flash at its last note is left
 	int notesSeen[LANES] = {};   // the notes each track had started then
 	/** A track's plug or dials changed at once from the keys, for the widget to make a step of the undo history: its
-	slot, preset and dials before and after. */
+	slot, preset and dials before and after, and a preset stored, as it was and is. */
 	struct SoundEdit {
 		int track;
 		const char* what;
 		int slot[2], preset[2];
 		float values[2][PRESET_PARAMS];
+		const Plug* stored = nullptr;
+		int storedIndex = 0;
+		bool storedUsed[2] = {};
+		float storedShares[2][PRESET_PARAMS];
 	};
 	dsp::RingBuffer<SoundEdit, 16> soundEdits;
 	Downstream down;             // what the cores take, written afresh each frame
@@ -728,8 +735,10 @@ struct Sequencer : Module, Hub {
 
 	/** A change to a track's plug or dials as one step of the undo history. */
 	template <class F>
-	void soundEdit(int t, const char* what, F change) {
+	void soundEdit(int t, const char* what, F change, const Plug* stored = nullptr, int storedIndex = 0) {
 		SoundEdit e;
+		e.stored = stored;
+		e.storedIndex = storedIndex;
 		e.track = t;
 		e.what = what;
 		auto take = [&](int w) {
@@ -737,6 +746,12 @@ struct Sequencer : Module, Hub {
 			e.preset[w] = presetLoaded[t];
 			for (int k = 0; k < PRESET_PARAMS; k++)
 				e.values[w][k] = params[trackParam(t, k)].getValue();
+			if (stored) {
+				Preset& p = preset(stored, storedIndex);
+				e.storedUsed[w] = p.used;
+				for (int k = 0; k < PRESET_PARAMS; k++)
+					e.storedShares[w][k] = p.shares[k];
+			}
 		};
 		take(0);
 		change();
@@ -777,11 +792,13 @@ struct Sequencer : Module, Hub {
 		const Plug* p = hosted[t].plug;
 		if (!p)
 			return;
-		float shares[PRESET_PARAMS];
-		for (int k = 0; k < PRESET_PARAMS; k++)
-			shares[k] = paramQuantities[trackParam(t, k)]->getScaledValue();
-		preset(p, i).store(shares);
-		presetLoaded[t] = i;
+		soundEdit(t, "store a preset", [&]() {
+			float shares[PRESET_PARAMS];
+			for (int k = 0; k < PRESET_PARAMS; k++)
+				shares[k] = paramQuantities[trackParam(t, k)]->getScaledValue();
+			preset(p, i).store(shares);
+			presetLoaded[t] = i;
+		}, p, i);
 	}
 
 	/** TRACK and REC, as on the OP-Z: the dials of the sound, envelope and LFO pages anywhere. The mix page stays, so
@@ -2699,10 +2716,77 @@ struct Sequencer : Module, Hub {
 		}
 	}
 
+	/** The row this Sequencer had before 2.1.0, from the patch Rack is loading it from, as 2.0.27 recorded it: the
+	modules to its right, of this plugin, each engine taking the next track of its kind. Each entry also names its
+	module's storage folder, where a Drum module kept a kit from a file. Null for a Sequencer from 2.1.0 on, or one
+	loaded from anywhere but a patch. */
+	json_t* rowFromPatch() {
+		if (id < 0 || APP->engine->getModule(id) == this)
+			return nullptr;
+		json_t* patch = json_load_file(system::join(APP->patch->autosavePath, "patch.json").c_str(), 0, nullptr);
+		std::map<int64_t, json_t*> byId;
+		size_t i;
+		json_t* m;
+		json_array_foreach(json_object_get(patch, "modules"), i, m)
+			byId[json_integer_value(json_object_get(m, "id"))] = m;
+		auto ours = [&](json_t* m) {
+			const char* plugin = json_string_value(json_object_get(m, "plugin"));
+			return m && plugin && plugin == pluginInstance->slug;
+		};
+		auto right = [&](json_t* m) {
+			json_t* r = json_object_get(m, "rightModuleId");
+			return r ? byId[json_integer_value(r)] : nullptr;
+		};
+		json_t* self = byId[id];
+		const char* model = json_string_value(json_object_get(self, "model"));
+		if (!ours(self) || !model || model != this->model->slug || json_object_get(json_object_get(self, "data"), "plugs")) {
+			json_decref(patch);
+			return nullptr;
+		}
+		json_t* row = json_array();
+		for (int t = 0; t < LANES; t++)
+			json_array_append_new(row, json_null());
+		int taken[KINDS] = {};
+		std::set<json_t*> seen;
+		for (json_t* m = right(self); ours(m) && seen.insert(m).second; m = right(m)) {
+			const char* model = json_string_value(json_object_get(m, "model"));
+			std::string slug = model ? model : "";
+			const Plug* p = nullptr;
+			for (int n = 0; n < plugCount() && !p; n++)
+				if (numberedPlug(n)->slug == slug)
+					p = numberedPlug(n);
+			int count = !p ? 0 : p->kind == FX ? FX_TRACKS : p->kind == DRUM ? DRUM_TRACKS : SYNTH_TRACKS;
+			if (!p || taken[p->kind] >= count)
+				continue;
+			int t = (p->kind == FX ? FX1 : p->kind == DRUM ? 0 : DRUM_TRACKS) + taken[p->kind]++;
+			float values[SOUND_PARAMS];
+			for (int k = 0; k < SOUND_PARAMS; k++)
+				values[k] = NAN;
+			json_t* param;
+			json_array_foreach(json_object_get(m, "params"), i, param) {
+				int k = (int) json_integer_value(json_object_get(param, "id"));
+				if (k >= 0 && k < SOUND_PARAMS)
+					values[k] = (float) json_number_value(json_object_get(param, "value"));
+			}
+			json_t* sound = json_array();
+			for (int k = 0; k < SOUND_PARAMS; k++) {
+				ParamQuantity* q = k <= TrackIds::P2_PARAM ? p->dial(k) : paramQuantities[trackParam(t, k)];
+				float v = std::isfinite(values[k]) ? values[k] : q->getDefaultValue();
+				json_array_append_new(sound, json_real(math::rescale(v, q->getMinValue(), q->getMaxValue(), 0.f, 1.f)));
+			}
+			json_t* data = json_object_get(m, "data");
+			std::string storage = system::join(APP->patch->autosavePath, "modules", std::to_string(json_integer_value(json_object_get(m, "id"))));
+			json_array_set_new(row, t, json_pack("{s:s, s:o, s:o, s:s}", "slug", slug.c_str(), "sound", sound,
+				"data", data ? json_deep_copy(data) : json_object(), "storage", storage.c_str()));
+		}
+		json_decref(patch);
+		return row;
+	}
+
 	/** Before 2.1.0 a module beside the Sequencer played each track, and from 2.0.25 on the Sequencer recorded which in
 	its row, with the module's dials and settings: each track now plays that plug, from its slot, or from the last
 	slot where it has none. A track whose module was a breakout keeps its plug, and its breakout takes it over again.
-	A drum track's kit from a file is lost, its samples having been the module's. */
+	A drum track's kit from a file comes from the Drum module's storage folder, where the row names it. */
 	void rowFromJson(json_t* row) {
 		for (int t = 0; t < LANES; t++) {
 			json_t* j = json_array_get(row, t);
@@ -2714,7 +2798,7 @@ struct Sequencer : Module, Hub {
 			int p = plugIndex(h.kind, slug);
 			TrackCore* core = p >= 0 ? h.cores[p].get() : slug == breakoutPlug(h.kind)->slug ? h.breakoutCore() : nullptr;
 			if (KitCore* k = h.kits(); k && p >= 0) {
-				if (int s = k->oldKit(data, t); s >= 0)
+				if (int s = k->oldKit(data, t, json_string_value(json_object_get(j, "storage"))); s >= 0)
 					h.slot = s;
 			}
 			else if (p >= 0) {
@@ -2813,6 +2897,25 @@ struct Sequencer : Module, Hub {
 			muteGroup = clamp((int) json_integer_value(j), 0, MUTE_GROUPS - 1);
 		if (json_t* j = json_object_get(root, "plugs"))
 			plugsFromJson(j);
+		else if (json_t* walked = rowFromPatch()) {
+			// A 2.0.25 to 2.0.27 row record is the one to trust, with the storage folders the walk found.
+			if (json_t* recorded = json_object_get(root, "row")) {
+				for (int t = 0; t < LANES; t++) {
+					json_t* r = json_array_get(recorded, t);
+					json_t* w = json_array_get(walked, t);
+					const char* slug = json_string_value(json_object_get(r, "slug"));
+					if (slug && json_equal(json_object_get(w, "slug"), json_object_get(r, "slug"))) {
+						json_t* c = json_deep_copy(r);
+						json_object_set(c, "storage", json_object_get(w, "storage"));
+						json_array_set_new(walked, t, c);
+					}
+					else
+						json_array_set(walked, t, r ? r : json_null());
+				}
+			}
+			rowFromJson(walked);
+			json_decref(walked);
+		}
 		else if (json_t* j = json_object_get(root, "row"))
 			rowFromJson(j);
 		// The pattern playing is in the tracks and the params; the rest, and the chains, are here.
@@ -2920,8 +3023,8 @@ struct PatternChange : history::ModuleAction {
 };
 
 
-/** A track's plug picked, preset loaded or sound randomized from the keys, in the audio thread: the widget saves each
-here for undo. A slot emptied since stays as it is. */
+/** A track's plug picked, preset loaded or stored, or sound randomized from the keys, in the audio thread: the widget
+saves each here for undo. A slot emptied since stays as it is. */
 struct SoundChange : history::ModuleAction {
 	Sequencer::SoundEdit edit;
 
@@ -2935,6 +3038,47 @@ struct SoundChange : history::ModuleAction {
 		for (int k = 0; k < PRESET_PARAMS; k++)
 			m->params[Sequencer::trackParam(t, k)].setValue(edit.values[w][k]);
 		m->presetLoaded[t] = edit.preset[w];
+		if (edit.stored)
+			preset(edit.stored, edit.storedIndex).restore(edit.storedShares[w], edit.storedUsed[w]);
+	}
+	void undo() override {
+		set(0);
+	}
+	void redo() override {
+		set(1);
+	}
+};
+
+
+/** A slot filled or emptied from the context menu's Plug slots, for the undo history: its plug, or a drum track's kit,
+before and after. The slot playing is never emptied. */
+struct SlotChange : history::ModuleAction {
+	int track = 0, slot = 0;
+	int plug[2] = {-1, -1};
+	KitCore::Held kit[2];
+
+	/** What the slot holds now, as side `w`. */
+	void take(Sequencer* m, int w) {
+		HostedTrack& h = m->hosted[track];
+		if (KitCore* k = h.kits())
+			kit[w] = k->held(slot);
+		else
+			plug[w] = h.slots[slot];
+	}
+
+	void set(int w) {
+		Sequencer* m = dynamic_cast<Sequencer*>(APP->engine->getModule(moduleId));
+		if (!m)
+			return;
+		HostedTrack& h = m->hosted[track];
+		KitCore* k = h.kits();
+		bool emptying = k ? !kit[w].file && kit[w].factory < 0 && kit[w].builtin < 0 : plug[w] < 0;
+		if (emptying && slot == h.slot)
+			return;
+		if (k)
+			k->restore(slot, kit[w]);
+		else
+			h.slots[slot] = plug[w];
 	}
 	void undo() override {
 		set(0);
@@ -3497,6 +3641,22 @@ struct SequencerWidget : ModuleWidget {
 	}
 
 	/** A track's ten slots, each a submenu to put a plug or a kit in it. The slot playing can't be emptied. */
+	/** Changes a track's slot from the menu as one step of the undo history. */
+	template <class F>
+	static void editSlot(Sequencer* module, int t, int s, const char* what, F change) {
+		SlotChange* h = new SlotChange;
+		h->moduleId = module->id;
+		h->name = string::f("%s in track %d's slot %d", what, trackNumber(t), (s + 1) % 10);
+		h->track = t;
+		h->slot = s;
+		h->take(module, 0);
+		change();
+		h->take(module, 1);
+		if (h->plug[0] == h->plug[1] && h->kit[0] == h->kit[1])
+			return delete h;
+		APP->history->push(h);
+	}
+
 	static void appendSlotsMenu(Menu* menu, Sequencer* module, int t) {
 		HostedTrack& h = module->hosted[t];
 		menu->addChild(createMenuLabel("TRACK and a black key plays one"));
@@ -3505,18 +3665,19 @@ struct SequencerWidget : ModuleWidget {
 			std::string label = string::f("Slot %d: ", (s + 1) % 10) + (name.empty() ? "empty" : name);
 			menu->addChild(createSubmenuItem(label, s == h.slot ? "playing" : "", [=, &h](Menu* menu) {
 				if (KitCore* k = h.kits())
-					return appendKitMenu(menu, k, s, s == h.slot);
+					return appendKitMenu(menu, module, t, k, s, s == h.slot);
 				const std::vector<const Plug*>& list = plugs(h.kind);
 				for (int p = 0; p < (int) list.size(); p++)
-					menu->addChild(createCheckMenuItem(list[p]->slug, "", [=, &h]() { return h.slots[s] == p; }, [=, &h]() { h.slots[s] = p; }));
+					menu->addChild(createCheckMenuItem(list[p]->slug, "", [=, &h]() { return h.slots[s] == p; },
+						[=, &h]() { editSlot(module, t, s, "put a plug", [&]() { h.slots[s] = p; }); }));
 				menu->addChild(new MenuSeparator);
-				menu->addChild(createMenuItem("Empty", "", [=, &h]() { h.slots[s] = -1; }, s == h.slot));
+				menu->addChild(createMenuItem("Empty", "", [=, &h]() { editSlot(module, t, s, "empty", [&]() { h.slots[s] = -1; }); }, s == h.slot));
 			}));
 		}
 	}
 
 	/** A drum track's slot: an OP-Z kit, a built-in one, or one from a file, and saving it as a kit file. */
-	static void appendKitMenu(Menu* menu, KitCore* k, int s, bool playing) {
+	static void appendKitMenu(Menu* menu, Sequencer* module, int t, KitCore* k, int s, bool playing) {
 		menu->addChild(createSubmenuItem("OP-Z kit", "", [=](Menu* sub) {
 			const std::vector<FactoryKit>& kits = factoryKits();
 			if (kits.empty())
@@ -3526,7 +3687,9 @@ struct SequencerWidget : ModuleWidget {
 					sub->addChild(new MenuSeparator);
 				sub->addChild(createCheckMenuItem(kits[i].name, "", [=]() { return !k->filedKit(s) && k->slots[s].factory == i; },
 					[=]() {
-						if (!k->setFactory(s, i))
+						bool read = true;
+						editSlot(module, t, s, "put a kit", [&]() { read = k->setFactory(s, i); });
+						if (!read)
 							osdialog_message(OSDIALOG_WARNING, OSDIALOG_OK, ("Couldn't read the kit " + kits[i].id + " in the plugin's res/kits.").c_str());
 					}));
 			}
@@ -3535,13 +3698,13 @@ struct SequencerWidget : ModuleWidget {
 			static const char* const names[DRUM_TRACKS] = {"Kick", "Snare", "Perc", "Sample"};
 			for (int i = 0; i < DRUM_TRACKS; i++)
 				sub->addChild(createCheckMenuItem(names[i], "", [=]() { return !k->filedKit(s) && k->slots[s].builtin == i; },
-					[=]() { k->setBuiltin(s, i); }));
+					[=]() { editSlot(module, t, s, "put a kit", [&]() { k->setBuiltin(s, i); }); }));
 		}));
-		menu->addChild(createMenuItem("Load a kit file…", "OP-1, OP-Z, AIFF or WAV", [=]() { loadKit(k, s, false); }));
-		menu->addChild(createMenuItem("Load a folder of sounds…", "one per key", [=]() { loadKit(k, s, true); }));
+		menu->addChild(createMenuItem("Load a kit file…", "OP-1, OP-Z, AIFF or WAV", [=]() { editSlot(module, t, s, "load a kit", [&]() { loadKit(k, s, false); }); }));
+		menu->addChild(createMenuItem("Load a folder of sounds…", "one per key", [=]() { editSlot(module, t, s, "load a kit", [&]() { loadKit(k, s, true); }); }));
 		menu->addChild(createMenuItem("Save as a kit file…", "OP-1 and OP-Z", [=]() { saveKit(k, s); }, !k->filled(s)));
 		menu->addChild(new MenuSeparator);
-		menu->addChild(createMenuItem("Empty", "", [=]() { k->clearSlot(s); }, playing));
+		menu->addChild(createMenuItem("Empty", "", [=]() { editSlot(module, t, s, "empty", [&]() { k->clearSlot(s); }); }, playing));
 	}
 
 	void appendContextMenu(Menu* menu) override {

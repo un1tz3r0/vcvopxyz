@@ -24,8 +24,9 @@ The Sequencer keeps a `HostedTrack` per track: a core of every plug of the track
 all bound to the same 22 params of the Sequencer's (`trackParam`), the breakout's jacks and the track's lights. One
 core plays. A switch of plug is a swap of pointers on the audio thread, nothing made or freed: the core left behind
 takes no more notes and rings out under the new one until it's quiet (0.1 s, or 3 s for an effect, whose echoes have
-gaps; 10 s at most), and the new one takes over the page, the clock and the LFO. FX units allocate their delay
-lines when the sample rate changes, on the UI thread, never at a switch.
+gaps; 10 s at most), and the new one takes over the page, the clock and the LFO. Its gate triggers start low, so the
+notes held through the switch start on it. FX units allocate their delay lines when the sample rate changes, on the
+UI thread, never at a switch.
 
 A track's two sound dials are stored as shares of their travel, 0 to 1, whichever plug plays, so steps, scenes and
 the row record hold them alike. A `PlugDial` shows itself as the playing plug's own dial, configured once on a
@@ -164,9 +165,12 @@ when the first Sequencer is made: `res/presets/<slug>/NN.json` from the plugin, 
 plug's preset 1, until a file holds it, is its dials as they start.
 
 TRACK and a white key load and store them in the audio thread, which only reads and writes the table's atomics; the
-widget writes the user's files for whatever was stored since its last frame (`writePresets`). A load, a plug picked
-on a black key and TRACK and REC's randomizing go to the widget through a ring buffer as one `SoundChange` each, the
-slot, preset and 18 dials before and after, which it pushes to the undo history.
+widget writes the user's files for whatever was stored since its last frame (`writePresets`). A load, a store, a plug
+picked on a black key and TRACK and REC's randomizing go to the widget through a ring buffer as one `SoundChange`
+each, the slot, preset and 18 dials before and after (and for a store, the preset itself), which it pushes to the undo
+history. A preset a store's undo empties again loses its user file. The context menu's slot edits are `SlotChange`s,
+holding the slot's plug, or its kit (`KitCore::Held`: an OP-Z or built-in kit's number, or a copy of a file's),
+either side.
 
 ## The sequencer
 
@@ -225,9 +229,14 @@ Param and port ids are append-only from 2.0.6 on.
 
 2.1.0 moved every engine into the Sequencer. A Sequencer from 2.0.25 on recorded the engine modules on its row
 (`row`: each one's slug, its dials as shares and its settings), so an older patch's tracks pick those plugs up from
-their slots, or the last slot where a track's defaults lack it; a kit loaded from a file was the Drum module's and is
-lost. Rack reports the engine modules themselves as missing. A breakout's first param was a sound dial, and is now
-its track selector, so one from before 2.1.0 goes back to Auto.
+their slots, or the last slot where a track's defaults lack it. Earlier Sequencers recorded nothing, but the patch
+file Rack is loading them from has the modules: Rack unpacks it into its autosave folder before any module reads its
+JSON, so `rowFromPatch` reads `patch.json` there, walks right from the Sequencer through this plugin's modules as
+the old bus did, gives each engine the next track of its kind, and builds the same record from its params and data.
+A Drum module kept a kit loaded from a file as `kit.wav` in its storage folder, which the patch carries; the walk
+names that folder in the record, and the kit moves into one of the Sequencer's slots. A 2.0.25 to 2.0.27 record
+takes the folders from the same walk. Rack reports the engine modules themselves as missing. A breakout's first
+param was a sound dial, and is now its track selector, so one from before 2.1.0 goes back to Auto.
 
 The .opz layout comes from the OP-Z community's reverse engineering (see the comment at the top of `Project.hpp`).
 Each imported file is kept, in the patch's storage folder, so an export writes the slot over the file it came from
