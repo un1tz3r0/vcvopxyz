@@ -154,6 +154,20 @@ finds them less than two samples apart, so a half-made edit costs at most a cut-
 first copies it in as a loaded kit. `Kit::toOp1()` writes the OP-1 kit format the loader reads, resampled to 44.1
 kHz, with the unknown fields (envelope, FX, LFO) at the values OP-1 kits commonly carry.
 
+### Presets
+
+`src/opz/Presets.*`. Every plug has 14 presets, shared by every Sequencer and every patch. A preset is a track's
+first 18 params (the four pages, note style and portamento) as shares of their travel, so a range tuned later still
+lands each dial where it was; the arp's dials are the sequence's and stay out. They are read once, on the UI thread,
+when the first Sequencer is made: `res/presets/<slug>/NN.json` from the plugin, then the same name under
+`vcvopxyz/presets` in Rack's user folder, the user's file winning. A key a file leaves out leaves that dial alone. A
+plug's preset 1, until a file holds it, is its dials as they start.
+
+TRACK and a white key load and store them in the audio thread, which only reads and writes the table's atomics; the
+widget writes the user's files for whatever was stored since its last frame (`writePresets`). A load, a plug picked
+on a black key and TRACK and REC's randomizing go to the widget through a ring buffer as one `SoundChange` each, the
+slot, preset and 18 dials before and after, which it pushes to the undo history.
+
 ## The sequencer
 
 `src/opz/Sequence.hpp` holds the pattern, the track settings and the `Player`, with no Rack in it, so it can be

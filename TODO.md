@@ -3,12 +3,14 @@
 ## Next
 
 The engine move, planned in Vic's "Plan: engines into the Sequencer" doc (2026-10-24), one PR each: OP-Z kits
-(2.0.25), the engine core split (2.0.26), the row record's dials (2.0.27), engines in the Sequencer (2.1.0), presets, the display, docs.
+(2.0.25), the engine core split (2.0.26), the row record's dials (2.0.27), engines in the Sequencer (2.1.0), presets (2.1.1), the display, docs.
 
 - [ ] **Re-sample the flagged pads** with track 4's kits: pad 16 of every snare and hat kit (the bounces stop 8 ms
       into it), Hat 5's pads 4, 6, 8, 10 and 12 (nothing played), and the sounds still ringing when the next one
       started (Hat 2 pads 10 to 13, Hat 4 pads 9 and 10, Hat 5 pads 1, 2, 13 and 15, Kick 1 pad 14, Kick 2 pad 4,
       Kick 4 pads 3 and 13). `split.py` prints the list.
+- [ ] **Voice presets 2 to 4** of each synth engine by ear (Vic), store them, and copy the files from Rack's user
+      folder (`vcvopxyz/presets/<slug>/`) into `res/presets/` as the factory ones.
 - [ ] **Sample,** the OP-Z's last synth engine: a PCM sample player with a crush dial, which could load its sound
       through `Kit`.
 
@@ -24,7 +26,7 @@ The engine move, planned in Vic's "Plan: engines into the Sequencer" doc (2026-1
 
 Whatever turns up off the plan's path, each for a PR of its own afterwards.
 
-- [ ] Editing a track's plug slots from the context menu isn't undoable.
+- [ ] Editing a track's plug slots from the context menu isn't undoable, nor is storing a preset.
 - [ ] A plug switched in while notes are held doesn't start them: it plays from the next note on.
 - [ ] Every track now runs in the Sequencer's process, on one engine thread, where the engine modules could spread
       across Rack's threads.

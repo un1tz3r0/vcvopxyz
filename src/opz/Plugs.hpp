@@ -40,6 +40,10 @@ const std::vector<const Plug*>& plugs(int kind);
 const Plug* breakoutPlug(int kind);
 /** A plug's place in plugs(kind), or -1. */
 int plugIndex(int kind, const std::string& slug);
+/** A plug's place among every plug, breakouts too, for tables kept beside them, and how many there are. */
+int plugNumber(const Plug* p);
+const Plug* numberedPlug(int n);
+int plugCount();
 
 /** Adds a plug to the list, from a file's static initialization. */
 struct PlugRegistration {
