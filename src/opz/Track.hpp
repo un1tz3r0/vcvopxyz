@@ -449,6 +449,12 @@ struct Track : Module {
 		busMoved();
 	}
 
+	/** What plays its track, for the Sequencer's record of its row, which a version without engine modules picks the
+	same sounds from. */
+	virtual json_t* rowJson() {
+		return json_pack("{s:s}", "slug", model->slug.c_str());
+	}
+
 	/** Its track's slot on the hub: its sound and FX sends while its outputs are unpatched, its page and dials. */
 	void sendUpstream(float left, float right, float mono) {
 		if (!hub || busTrack < 0)

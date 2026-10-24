@@ -69,4 +69,22 @@ struct Kit {
 hats, toms and percussion on 3, and effects and tones on 4. Synthesized the first time it's asked for. */
 const Kit& builtinKit(int track);
 
+/** One of the OP-Z's own kits, sampled from the device by tools/kits/split.py into res/kits: its sounds back to back
+in a WAV, and their slices in JSON beside it, as a patch keeps a kit. */
+struct FactoryKit {
+	std::string id;   // the files' name, which patches keep
+	std::string name;
+	int track = 0;    // the drum track it's for, from 0
+};
+
+/** Every kit in res/kits, by track and then number; listed the first time they're asked for. */
+const std::vector<FactoryKit>& factoryKits();
+
+/** A kit's index in factoryKits(), or -1. */
+int factoryKitIndex(const std::string& id);
+
+/** For the UI thread: one of them, read from its files the first time it's asked for and kept from then on, so the
+audio thread can play it once it has it; null if its files can't be read. */
+const Kit* factoryKit(int i);
+
 } // namespace opz
