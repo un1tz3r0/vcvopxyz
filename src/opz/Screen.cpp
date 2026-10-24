@@ -20,8 +20,14 @@ struct Screen : Module {
 		busMoved();
 	}
 
-	Track* track() {
+	/** The engine to its left, and its core. */
+	Track* engine() {
 		return dynamic_cast<Track*>(leftExpander.module);
+	}
+
+	TrackCore* track() {
+		Track* e = engine();
+		return e ? &e->getCore() : nullptr;
 	}
 };
 
@@ -33,7 +39,7 @@ struct SliceChange : history::ModuleAction {
 
 	void apply(const Kit::Slice& s) {
 		if (Track* t = dynamic_cast<Track*>(APP->engine->getModule(moduleId)))
-			t->editSlice(slice, s);
+			t->getCore().editSlice(slice, s);
 	}
 	void undo() override {
 		apply(before);
@@ -53,15 +59,15 @@ struct Display : widget::OpaqueWidget {
 	static constexpr float PAD = 2.6f, VISUAL_TOP = 19.f, VISUAL_HEIGHT = 38.f, OVERVIEW_TOP = 60.5f;
 
 	Screen* module = nullptr;
-	const Track::Snapshot* snapshot = nullptr;
-	int focus = Track::P1_PARAM;          // the dial the readout shows and a drag changes
-	float last[Track::PARAMS_LEN] = {};   // dial values last frame, to see which one was touched
+	const TrackCore::Snapshot* snapshot = nullptr;
+	int focus = TrackCore::P1_PARAM;          // the dial the readout shows and a drag changes
+	float last[TrackCore::PARAMS_LEN] = {};   // dial values last frame, to see which one was touched
 	int lastPage = -1;
-	Track* lastTrack = nullptr;
+	TrackCore* lastTrack = nullptr;
 	float dragValue = 0.f, dragStart = 0.f;
 	bool dragging = false;
 	// Dummy snapshot for before the first one arrives.
-	Track::Snapshot empty = {};
+	TrackCore::Snapshot empty = {};
 
 	// The kit editor
 	static constexpr int PEAKS = 256;
@@ -94,7 +100,7 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	/** Which page and dial a parameter belongs to. */
-	static bool locate(Track* track, int param, int* page, int* dial) {
+	static bool locate(TrackCore* track, int param, int* page, int* dial) {
 		for (int p = 0; p < PAGES_LEN; p++)
 			for (int d = 0; d < 4; d++)
 				if (track->dial(p, d) == param) {
@@ -105,7 +111,7 @@ struct Display : widget::OpaqueWidget {
 		return false;
 	}
 
-	static int firstDial(Track* track, int page) {
+	static int firstDial(TrackCore* track, int page) {
 		for (int d = 0; d < 4; d++)
 			if (track->dial(page, d) >= 0)
 				return track->dial(page, d);
@@ -113,12 +119,12 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	void step() override {
-		Track* track = module ? module->track() : nullptr;
+		TrackCore* track = module ? module->track() : nullptr;
 		if (track) {
 			if (track->snapshots.update() || !snapshot)
 				snapshot = &track->snapshots.read();
 			// The readout follows whichever dial moves, and the page when it changes.
-			for (int i = 0; i < Track::PARAMS_LEN; i++) {
+			for (int i = 0; i < TrackCore::PARAMS_LEN; i++) {
 				float v = track->params[i].getValue();
 				if (v != last[i] && !dragging && track == lastTrack)
 					focus = i;
@@ -167,9 +173,9 @@ struct Display : widget::OpaqueWidget {
 				nvgScissor(vg, 0, 0, box.size.x, box.size.y);
 				nvgScale(vg, mm2px(1.f), mm2px(1.f));
 				nvgFontFaceId(vg, font->handle);
-				Track* track = module ? module->track() : nullptr;
-				if (track)
-					drawTrack(vg, track, snapshot ? *snapshot : empty);
+				Track* engine = module ? module->engine() : nullptr;
+				if (engine)
+					drawTrack(vg, &engine->getCore(), engine->model->name, snapshot ? *snapshot : empty);
 				else
 					drawHint(vg);
 				nvgRestore(vg);
@@ -199,12 +205,12 @@ struct Display : widget::OpaqueWidget {
 		text(vg, cx, cy + 18.5f, 2.4f, INK, NVG_ALIGN_CENTER, "of an OP-Z engine");
 	}
 
-	void drawTrack(NVGcontext* vg, Track* track, const Track::Snapshot& snap) {
+	void drawTrack(NVGcontext* vg, TrackCore* track, const std::string& name, const TrackCore::Snapshot& snap) {
 		math::Vec s = size();
 		int shown = track->shownPage();
 
 		// Status bar
-		text(vg, PAD, 4.2f, 2.8f, INK, NVG_ALIGN_LEFT, string::lowercase(track->model->name));
+		text(vg, PAD, 4.2f, 2.8f, INK, NVG_ALIGN_LEFT, string::lowercase(name));
 		text(vg, s.x / 2, 4.2f, 2.3f, PAGE_COLORS[shown], NVG_ALIGN_CENTER, track->pageName(shown));
 		text(vg, s.x - PAD, 4.2f, 2.1f, DIM, NVG_ALIGN_RIGHT, string::f("%.0f BPM", 60.f / track->secondsPerBeat));
 		nvgBeginPath(vg);
@@ -388,7 +394,7 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	/** A slice's new settings, and the undo history's step for them when `from` is what they were. */
-	void editSlice(Track* track, const Kit::Slice& to, const Kit::Slice* from = nullptr) {
+	void editSlice(TrackCore* track, const Kit::Slice& to, const Kit::Slice* from = nullptr) {
 		track->editSlice(slice, to);
 		if (!from)
 			return;
@@ -398,7 +404,7 @@ struct Display : widget::OpaqueWidget {
 			return;
 		SliceChange* h = new SliceChange;
 		h->name = string::f("edit sound %d", slice + 1);
-		h->moduleId = track->id;
+		h->moduleId = track->paramQuantities[TrackCore::P1_PARAM]->module->id; // the engine's module, whose params it plays by
 		h->slice = slice;
 		h->before = *from;
 		h->after = now;
@@ -406,7 +412,7 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	/** A press in the kit editor: KIT itself, a slice picked on the whole kit, or the play mode or direction. */
-	bool pressKit(Track* track) {
+	bool pressKit(TrackCore* track) {
 		const Kit* k = track->kit();
 		if (!k)
 			return false;
@@ -436,9 +442,9 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	/** A scope of the output, and the filter's response over it. */
-	void drawSound(NVGcontext* vg, Track* track, const Track::Snapshot& snap, math::Rect v) {
+	void drawSound(NVGcontext* vg, TrackCore* track, const TrackCore::Snapshot& snap, math::Rect v) {
 		// Start the trace on a rising zero crossing, so a steady note stands still.
-		const int N = Track::Snapshot::SCOPE / 2;
+		const int N = TrackCore::Snapshot::SCOPE / 2;
 		int start = 1;
 		while (start < N && !(snap.scope[start - 1] < 0.f && snap.scope[start] >= 0.f))
 			start++;
@@ -457,8 +463,8 @@ struct Display : widget::OpaqueWidget {
 		stroke(vg, nvgTransRGBAf(INK, 0.55f), 0.3f);
 
 		// The two filters in series, each a 12 dB state-variable filter; only the half the dial is in resonates.
-		float filter = track->params[Track::FILTER_PARAM].getValue();
-		float q = 1.f / (2.f - 1.9f * track->params[Track::RESONANCE_PARAM].getValue());
+		float filter = track->params[TrackCore::FILTER_PARAM].getValue();
+		float q = 1.f / (2.f - 1.9f * track->params[TrackCore::RESONANCE_PARAM].getValue());
 		float lp = lowpassHz(filter), hp = highpassHz(filter);
 		float lpQ = filter < 0.5f ? q : float(M_SQRT1_2), hpQ = filter > 0.5f ? q : float(M_SQRT1_2);
 		auto y = [&](float t) {
@@ -495,11 +501,11 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	/** The envelope, each stage in its dial's colour, with a dot riding it for each sounding voice. */
-	void drawEnvelope(NVGcontext* vg, Track* track, const Track::Snapshot& snap, math::Rect v) {
-		float a = 0.1f + track->params[Track::ATTACK_PARAM].getValue();
-		float d = 0.1f + track->params[Track::DECAY_PARAM].getValue();
-		float sustain = track->params[Track::SUSTAIN_PARAM].getValue();
-		float r = 0.1f + track->params[Track::RELEASE_PARAM].getValue();
+	void drawEnvelope(NVGcontext* vg, TrackCore* track, const TrackCore::Snapshot& snap, math::Rect v) {
+		float a = 0.1f + track->params[TrackCore::ATTACK_PARAM].getValue();
+		float d = 0.1f + track->params[TrackCore::DECAY_PARAM].getValue();
+		float sustain = track->params[TrackCore::SUSTAIN_PARAM].getValue();
+		float r = 0.1f + track->params[TrackCore::RELEASE_PARAM].getValue();
 		float hold = 0.5f;
 		float scale = (v.size.x - 4.f) / (a + d + hold + r);
 		float x0 = v.pos.x + 2.f, top = v.pos.y + 4.f, bottom = v.getBottom() - 3.f;
@@ -544,9 +550,9 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	/** One cycle of the LFO's shape, as deep as its amount, with a dot at its phase. */
-	void drawLfo(NVGcontext* vg, Track* track, const Track::Snapshot& snap, math::Rect v) {
-		int shape = (int) track->params[Track::LFO_SHAPE_PARAM].getValue();
-		float amount = track->params[Track::LFO_AMOUNT_PARAM].getValue();
+	void drawLfo(NVGcontext* vg, TrackCore* track, const TrackCore::Snapshot& snap, math::Rect v) {
+		int shape = (int) track->params[TrackCore::LFO_SHAPE_PARAM].getValue();
+		float amount = track->params[TrackCore::LFO_AMOUNT_PARAM].getValue();
 		float depth = std::copysign(std::fmax(std::fabs(amount), 0.1f), amount);
 		bool unipolar = Lfo::triggered(shape);
 		float mid = unipolar ? v.getBottom() - 4.f : v.getCenter().y;
@@ -583,17 +589,17 @@ struct Display : widget::OpaqueWidget {
 		nvgFillColor(vg, INK);
 		nvgFill(vg);
 
-		ParamQuantity* speed = track->paramQuantities[Track::LFO_SPEED_PARAM];
-		ParamQuantity* target = track->paramQuantities[Track::LFO_TARGET_PARAM];
+		ParamQuantity* speed = track->paramQuantities[TrackCore::LFO_SPEED_PARAM];
+		ParamQuantity* target = track->paramQuantities[TrackCore::LFO_TARGET_PARAM];
 		text(vg, v.getRight() - 1.8f, v.pos.y + 3.f, 1.7f, DIM, NVG_ALIGN_RIGHT,
 			string::uppercase(speed->getDisplayValueString() + " \xc2\xb7 " + target->getDisplayValueString()));
 	}
 
 	/** Sixteen beats of the arp over a triad: each note as high as its place in the pattern, as big as its accent. */
-	void drawArp(NVGcontext* vg, Track* track, math::Rect v) {
+	void drawArp(NVGcontext* vg, TrackCore* track, math::Rect v) {
 		auto value = [&](int param) { return track->params[param].getValue(); };
-		Arp a{(int) value(Track::ARP_SPEED_PARAM), (int) value(Track::ARP_PATTERN_PARAM), (int) value(Track::ARP_STYLE_PARAM),
-			value(Track::ARP_RANGE_PARAM)};
+		Arp a{(int) value(TrackCore::ARP_SPEED_PARAM), (int) value(TrackCore::ARP_PATTERN_PARAM), (int) value(TrackCore::ARP_STYLE_PARAM),
+			value(TrackCore::ARP_RANGE_PARAM)};
 		const int BEATS = 16, m = 3 * a.octaves();
 		static const int RANDOM[BEATS] = {5, 1, 9, 4, 0, 7, 11, 2, 8, 3, 10, 6, 1, 9, 4, 7};
 		float x0 = v.pos.x + 4.f, w = v.size.x - 8.f, bottom = v.getBottom() - 4.f, h = v.size.y - 11.f;
@@ -617,13 +623,13 @@ struct Display : widget::OpaqueWidget {
 			nvgFillColor(vg, color);
 			nvgFill(vg);
 		}
-		std::string label = a.speed > 0 ? track->paramQuantities[Track::ARP_SPEED_PARAM]->getDisplayValueString() + " \xc2\xb7 "
-			+ track->paramQuantities[Track::ARP_PATTERN_PARAM]->getDisplayValueString() : "OFF";
+		std::string label = a.speed > 0 ? track->paramQuantities[TrackCore::ARP_SPEED_PARAM]->getDisplayValueString() + " \xc2\xb7 "
+			+ track->paramQuantities[TrackCore::ARP_PATTERN_PARAM]->getDisplayValueString() : "OFF";
 		text(vg, v.getRight() - 1.8f, v.pos.y + 3.f, 1.7f, DIM, NVG_ALIGN_RIGHT, string::uppercase(label));
 	}
 
 	/** Where the track sits in the stereo field, how loud it is, and what it sends to the effects. */
-	void drawMix(NVGcontext* vg, Track* track, const Track::Snapshot& snap, math::Rect v) {
+	void drawMix(NVGcontext* vg, TrackCore* track, const TrackCore::Snapshot& snap, math::Rect v) {
 		float left = v.pos.x + 4.f, right = v.getRight() - 16.f;
 		auto bar = [&](float y, float from, float to, NVGcolor color, const char* label) {
 			nvgBeginPath(vg);
@@ -636,11 +642,11 @@ struct Display : widget::OpaqueWidget {
 			nvgFill(vg);
 			text(vg, left, y - 2.4f, 1.6f, DIM, NVG_ALIGN_LEFT, label);
 		};
-		float fx1 = track->params[Track::FX1_PARAM].getValue(), fx2 = track->params[Track::FX2_PARAM].getValue();
+		float fx1 = track->params[TrackCore::FX1_PARAM].getValue(), fx2 = track->params[TrackCore::FX2_PARAM].getValue();
 		bar(v.pos.y + 9.f, 0.f, fx1, DIAL_COLORS[0], "FX 1");
 		bar(v.pos.y + 18.f, 0.f, fx2, DIAL_COLORS[1], "FX 2");
 		// Pan as a dot on a line from L to R.
-		float pan = track->params[Track::PAN_PARAM].getValue();
+		float pan = track->params[TrackCore::PAN_PARAM].getValue();
 		float py = v.pos.y + 29.f, px = left + (right - left) * (pan + 1.f) / 2;
 		nvgBeginPath(vg);
 		nvgMoveTo(vg, left, py);
@@ -668,7 +674,7 @@ struct Display : widget::OpaqueWidget {
 			nvgFillColor(vg, level > 0.5f ? DIAL_COLORS[3] : INK);
 			nvgFill(vg);
 		}
-		float level = track->params[Track::LEVEL_PARAM].getValue();
+		float level = track->params[TrackCore::LEVEL_PARAM].getValue();
 		float ly = bottom - (bottom - top) * level * level / 2;
 		nvgBeginPath(vg);
 		nvgMoveTo(vg, mx - 1.6f, ly);
@@ -677,9 +683,9 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	/** The note style, and the portamento, where the track has one, as a slide between two notes. */
-	void drawTrackSettings(NVGcontext* vg, Track* track, math::Rect v) {
-		int style = (int) track->params[Track::STYLE_PARAM].getValue();
-		const std::vector<std::string>& styles = static_cast<SwitchQuantity*>(track->paramQuantities[Track::STYLE_PARAM])->labels;
+	void drawTrackSettings(NVGcontext* vg, TrackCore* track, math::Rect v) {
+		int style = (int) track->params[TrackCore::STYLE_PARAM].getValue();
+		const std::vector<std::string>& styles = static_cast<SwitchQuantity*>(track->paramQuantities[TrackCore::STYLE_PARAM])->labels;
 		int n = styles.size();
 		float cw = (v.size.x - 4.f) / n;
 		for (int i = 0; i < n; i++) {
@@ -696,7 +702,7 @@ struct Display : widget::OpaqueWidget {
 		if (track->dial(PAGE_TRACK, 3) < 0)
 			return;
 		// A step up a fifth, smoothed by the portamento.
-		float glide = track->params[Track::GLIDE_PARAM].getValue();
+		float glide = track->params[TrackCore::GLIDE_PARAM].getValue();
 		float x0 = v.pos.x + 4.f, x1 = v.getRight() - 4.f, y0 = v.pos.y + 19.f, y1 = v.pos.y + 11.f;
 		nvgBeginPath(vg);
 		const int N = 60;
@@ -713,7 +719,7 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	/** Every dial as an arc in its colour, a row per page, with the page the dials are on lit up. */
-	void drawOverview(NVGcontext* vg, Track* track, int shown) {
+	void drawOverview(NVGcontext* vg, TrackCore* track, int shown) {
 		float rh = rowHeight(), cw = cellWidth();
 		for (int p = 0; p < PAGES_LEN; p++) {
 			float y = OVERVIEW_TOP + p * rh;
@@ -755,7 +761,7 @@ struct Display : widget::OpaqueWidget {
 	// Touch: click a dial in the overview to select it and its page, then drag anywhere to change it.
 
 	/** The dial under a point, in mm, or -1. */
-	int dialAt(Track* track, math::Vec mm, int* page) {
+	int dialAt(TrackCore* track, math::Vec mm, int* page) {
 		if (mm.y < OVERVIEW_TOP)
 			return -1;
 		int p = int((mm.y - OVERVIEW_TOP) / rowHeight()), d = int((mm.x - PAD) / cellWidth());
@@ -766,7 +772,7 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	void onButton(const ButtonEvent& e) override {
-		Track* track = module ? module->track() : nullptr;
+		TrackCore* track = module ? module->track() : nullptr;
 		if (track && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT) {
 			pressed = e.pos.div(mm2px(1.f));
 			int page, param = pressKit(track) ? -1 : dialAt(track, pressed, &page);
@@ -783,7 +789,7 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	void onDragStart(const DragStartEvent& e) override {
-		Track* track = module ? module->track() : nullptr;
+		TrackCore* track = module ? module->track() : nullptr;
 		const Kit* k = track && kitMode ? track->kit() : nullptr;
 		if (k && e.button == GLFW_MOUSE_BUTTON_LEFT) {
 			before = k->slices[slice];
@@ -812,7 +818,7 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	void onDragMove(const DragMoveEvent& e) override {
-		Track* track = module ? module->track() : nullptr;
+		TrackCore* track = module ? module->track() : nullptr;
 		bool fine = (APP->window->getMods() & RACK_MOD_MASK) == RACK_MOD_CTRL;
 		if (track && kitDrag != NO_EDIT && track->kit()) {
 			// The ends follow the pointer across the close-up; tuning and level go 250 pixels up for 48 semitones or 200%.
@@ -838,7 +844,7 @@ struct Display : widget::OpaqueWidget {
 	}
 
 	void onDragEnd(const DragEndEvent& e) override {
-		Track* track = module ? module->track() : nullptr;
+		TrackCore* track = module ? module->track() : nullptr;
 		if (kitDrag != NO_EDIT) {
 			kitDrag = NO_EDIT;
 			if (track && track->kit())
@@ -850,10 +856,11 @@ struct Display : widget::OpaqueWidget {
 		dragging = false;
 		float value = track->params[focus].getValue();
 		if (value != dragStart) {
+			ParamQuantity* q = track->paramQuantities[focus];
 			history::ParamChange* h = new history::ParamChange;
-			h->name = "change " + track->paramQuantities[focus]->getLabel();
-			h->moduleId = track->id;
-			h->paramId = focus;
+			h->name = "change " + q->getLabel();
+			h->moduleId = q->module->id;
+			h->paramId = q->paramId;
 			h->oldValue = dragStart;
 			h->newValue = value;
 			APP->history->push(h);

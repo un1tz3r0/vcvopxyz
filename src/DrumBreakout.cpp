@@ -13,9 +13,7 @@ release it with the note.
 
 namespace opz {
 
-struct DrumBreakout : DrumTrack {
-	static constexpr const char* SLUG = "DrumBreakout";
-
+struct DrumBreakoutCore : DrumCore {
 	struct Voice {
 		xyz::Adsr envelope;
 		dsp::PulseGenerator trigger;
@@ -92,6 +90,11 @@ struct DrumBreakout : DrumTrack {
 		emitDialCVs();
 		emitReturn(levels, loudest, args.sampleTime);
 	}
+};
+
+
+struct DrumBreakout : TrackModule<DrumBreakoutCore> {
+	static constexpr const char* SLUG = "DrumBreakout";
 };
 
 

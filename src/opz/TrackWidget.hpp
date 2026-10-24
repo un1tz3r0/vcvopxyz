@@ -10,7 +10,7 @@ inline const char* const TRACK_LABELS[LANES] = {"KICK", "SNARE", "PERC", "SAMPLE
 /** A track's status screen: the Sequencer track it plays, as a big digit and that track's icon, then a scope of
 its output, a dot per voice and a level bar. Off the bus it shows a dash and plays from its inputs. */
 struct TrackStatus : widget::Widget {
-	Track* module = nullptr;
+	TrackCore* core = nullptr;
 	std::shared_ptr<window::Svg> symbols[LANES];
 
 	TrackStatus() {
@@ -20,8 +20,8 @@ struct TrackStatus : widget::Widget {
 
 	void step() override {
 		// The UI thread is the buffer's one consumer, shared with a Screen beside the track.
-		if (module)
-			module->snapshots.update();
+		if (core)
+			core->snapshots.update();
 		widget::Widget::step();
 	}
 
@@ -32,7 +32,7 @@ struct TrackStatus : widget::Widget {
 	}
 
 	void draw(const DrawArgs& args) override {
-		int track = module ? module->busTrack : -1;
+		int track = core ? core->busTrack : -1;
 		SevenSegment::draw(args.vg, digits(track), track >= 0 && trackNumber(track) > 9 ? "88" : "8", false, nvgTransRGBAf(NOTE_COLOR, 0.08f));
 		if (track < 0)
 			return;
@@ -47,11 +47,11 @@ struct TrackStatus : widget::Widget {
 	void drawLayer(const DrawArgs& args, int layer) override {
 		if (layer != 1)
 			return Widget::drawLayer(args, layer);
-		if (!module)
+		if (!core)
 			return Widget::drawLayer(args, layer);
-		int track = module->busTrack;
+		int track = core->busTrack;
 		bool on = track >= 0;
-		const Track::Snapshot& snapshot = module->snapshots.read();
+		const TrackCore::Snapshot& snapshot = core->snapshots.read();
 		SevenSegment::draw(args.vg, digits(track), on ? std::to_string(trackNumber(track)) : "-", true, NOTE_COLOR);
 
 		// The track's icon, lit white while the Sequencer has it selected.
@@ -61,7 +61,7 @@ struct TrackStatus : widget::Widget {
 			nvgSave(args.vg);
 			nvgTranslate(args.vg, box.size.x - mm2px(5.4f) - side / 2, mm2px(6.6f) - side / 2);
 			nvgScale(args.vg, scale, scale);
-			nvgTint(args.vg, module->selected ? nvgRGB(0xff, 0xff, 0xff) : nvgRGB(0x8a, 0x89, 0x86));
+			nvgTint(args.vg, core->selected ? nvgRGB(0xff, 0xff, 0xff) : nvgRGB(0x8a, 0x89, 0x86));
 			window::svgDraw(args.vg, symbols[track]->handle);
 			nvgRestore(args.vg);
 		}
@@ -69,8 +69,8 @@ struct TrackStatus : widget::Widget {
 		// The scope: the output's last 1024 samples, ±5V full height.
 		float x0 = mm2px(1.6f), w = box.size.x - 2 * x0, mid = mm2px(19.6f), h = mm2px(4.f);
 		nvgBeginPath(args.vg);
-		for (int i = 0; i < Track::Snapshot::SCOPE; i += 4) {
-			float x = x0 + w * i / (Track::Snapshot::SCOPE - 1), y = mid - h * clamp(snapshot.scope[i] / 5.f, -1.f, 1.f);
+		for (int i = 0; i < TrackCore::Snapshot::SCOPE; i += 4) {
+			float x = x0 + w * i / (TrackCore::Snapshot::SCOPE - 1), y = mid - h * clamp(snapshot.scope[i] / 5.f, -1.f, 1.f);
 			i ? nvgLineTo(args.vg, x, y) : nvgMoveTo(args.vg, x, y);
 		}
 		nvgStrokeColor(args.vg, nvgRGB(0x3b, 0xe0, 0x7a));
@@ -114,7 +114,7 @@ struct TrackWidget : ModuleWidget {
 		PanelLayout layout(panel);
 		TrackStatus* status = createWidget<TrackStatus>(math::Vec());
 		status->box = layout.box("STATUS_WIDGET");
-		status->module = module;
+		status->core = module ? &module->getCore() : nullptr;
 		addChild(status);
 		addChild(createLightCentered<SmallLight<WhiteLight>>(layout.center("SELECTED_LIGHT"), module, Track::SELECTED_LIGHT));
 		addChild(createLightCentered<SmallLight<NoteLight>>(layout.center("ACTIVE_LIGHT"), module, Track::ACTIVE_LIGHT));
@@ -141,14 +141,14 @@ struct TrackWidget : ModuleWidget {
 	}
 
 	void appendContextMenu(Menu* menu) override {
-		Track* module = getModule<Track>();
+		TrackCore* core = &getModule<Track>()->getCore();
 		std::vector<std::string> labels;
 		for (int n : Track::PPQN)
 			labels.push_back(string::f("%d PPQN", n));
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createIndexSubmenuItem("Clock pulses per beat", labels,
-			[=]() { return std::find(std::begin(Track::PPQN), std::end(Track::PPQN), module->ppqn) - std::begin(Track::PPQN); },
-			[=](size_t i) { module->ppqn = Track::PPQN[i]; }));
+			[=]() { return std::find(std::begin(Track::PPQN), std::end(Track::PPQN), core->ppqn) - std::begin(Track::PPQN); },
+			[=](size_t i) { core->ppqn = Track::PPQN[i]; }));
 	}
 };
 
