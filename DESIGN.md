@@ -122,8 +122,18 @@ untrusted: rates outside 1 to 384 kHz are refused, samples that aren't finite be
 bytes to '?'.
 
 The built-in kits (`BuiltinKits.cpp`) are synthesized from short recipes, a tone with a pitch sweep, FM and a
-partial, noise and 808-style metal through a filter, a click and drive, so the plugin ships no samples. All four
-are made once, on the UI thread, when the first Drum is created (about 200 ms, 10 MB).
+partial, noise and 808-style metal through a filter, a click and drive. All four are made once, on the UI thread,
+when the first Drum is created (about 200 ms, 10 MB).
+
+The OP-Z kits are samples of the device's own (Vic owns three OP-Zs and is fine with shipping them; teenage
+engineering gets asked before any wider release). `tools/kits/split.py` cuts Vic's bounces in `samples/` (each
+kit's 24 sounds played one after another on a grid) into `res/kits/<kind>-<n>.wav`, the sounds back to back in mono
+16-bit, and `.json`, their slices: the same pair a patch keeps a loaded kit in, so `Kit::fromSaved()` reads them. The
+OP-Z outputs digital silence between hits, so a sound runs from the first sample after a silence to its last above
+-72 dBFS, with 5 ms faded out; the grid finds sounds that start under the last one's tail, and pads with nothing on
+their beat stay empty. `FactoryKits.cpp` lists the kits once and reads each the first time the UI thread asks for it,
+then keeps it, so the audio thread can play it through a pointer the Drum stores. A patch saves the kit's file
+name.
 
 A kit from a file reaches the audio thread through a mutex the audio thread only `try_lock`s, and the kit it
 replaces goes back to the UI thread to be freed, so the audio thread never blocks or frees memory.

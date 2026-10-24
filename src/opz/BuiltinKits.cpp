@@ -1,5 +1,6 @@
 /*
-The drum tracks' built-in kits, synthesized rather than sampled, since the OP-Z's own packs aren't ours to ship.
+The drum tracks' built-in kits, synthesized, which each track plays until another kit is picked. The OP-Z's own,
+sampled, are in res/kits (FactoryKits.cpp).
 Every sound comes from one small drum voice: a tone that can fall in pitch, with a second partial and FM; noise and
 a TR-808-style cluster of square waves through a filter; a click; and saturation over the lot.
 */

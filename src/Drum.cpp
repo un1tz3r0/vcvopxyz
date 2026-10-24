@@ -1,8 +1,8 @@
 /*
 Drum: an OP-Z drum track, kick, snare, perc or sample, as the first to fourth drum engine to the right of a Sequencer
 takes. It plays a kit of 24 sounds, one per key from F3 to E5, the octaves either side playing them again. Each track
-starts on a kit of its own, synthesized; the context menu loads an OP-1 or OP-Z kit file, any AIFF or WAV cut into 24,
-or a folder of sounds.
+starts on a kit of its own, synthesized; the context menu picks one of the OP-Z's own kits, sampled, or loads an OP-1
+or OP-Z kit file, any AIFF or WAV cut into 24, or a folder of sounds.
 
 PITCH tunes every sound and REVERSE plays them backwards. The note styles are the OP-Z's drum ones: retrig plays each
 sound to its end, so a sound's tail rings under the next, as many at once as there are notes (two at least, as on the
@@ -52,6 +52,8 @@ struct Drum : DrumTrack {
 	std::mutex kitMutex;
 	std::atomic<bool> handing{false};
 	std::atomic<int> builtin{-1};  // the built-in kit played without a file: -1 for its track's own
+	std::atomic<int> factoryIndex{-1};          // an OP-Z kit played without a file, in factoryKits(), or -1
+	std::atomic<const Kit*> factory{nullptr};   // and the kit itself, once the UI thread has read it
 	const Kit* playing = nullptr;  // the kit the voices are playing
 	std::atomic<int> lastSound{0}; // the slice played last, for the kit editor
 	json_t* savedKit = nullptr;    // a patch's kit, from dataFromJson until onAdd reads its samples
@@ -71,9 +73,26 @@ struct Drum : DrumTrack {
 		return builtinKit(b >= 0 ? b : std::max(busTrack, 0));
 	}
 
-	/** The kit to play: one from a file, or the built-in one. */
+	/** The kit played without a file: an OP-Z kit, or a built-in one. */
+	const Kit& sharedKit() const {
+		const Kit* f = factory;
+		return f ? *f : builtinFor();
+	}
+
+	/** The kit to play: one from a file, or a shared one. */
 	const Kit& playable() const {
-		return loaded ? *loaded : builtinFor();
+		return loaded ? *loaded : sharedKit();
+	}
+
+	/** For the UI thread: plays an OP-Z kit, or -1 for none, rather than a file's, and says if its files were read. */
+	bool useFactory(int i) {
+		const Kit* k = factoryKit(i);
+		if (i >= 0 && !k)
+			return false;
+		factory = k;
+		factoryIndex = k ? i : -1;
+		setKit(nullptr);
+		return true;
 	}
 
 	/** Takes a kit the UI thread handed over, unless it's busy handing it. */
@@ -106,7 +125,7 @@ struct Drum : DrumTrack {
 		return handing ? incoming.get() : loaded.get();
 	}
 
-	/** For the UI thread: the kit to edit, a copy of the built-in one if no file's is loaded. Its slices change in
+	/** For the UI thread: the kit to edit, a copy of the shared one if no file's is loaded. Its slices change in
 	place while it plays, so the audio thread reads each slice's ends once a sample, and a voice that catches them
 	half changed stops. */
 	Kit* editKit() {
@@ -115,7 +134,7 @@ struct Drum : DrumTrack {
 			if (Kit* k = fileKit())
 				return k;
 		}
-		auto copy = std::make_unique<Kit>(builtinFor());
+		auto copy = std::make_unique<Kit>(sharedKit());
 		Kit* k = copy.get();
 		useKit(std::move(copy));
 		return k;
@@ -137,7 +156,7 @@ struct Drum : DrumTrack {
 	const Kit* kit() override {
 		std::lock_guard<std::mutex> lock(kitMutex);
 		const Kit* k = fileKit();
-		return k ? k : &builtinFor();
+		return k ? k : &sharedKit();
 	}
 
 	void editSlice(int i, const Kit::Slice& to) override {
@@ -152,7 +171,7 @@ struct Drum : DrumTrack {
 		std::lock_guard<std::mutex> lock(kitMutex);
 		const Kit* k = fileKit();
 		int i = soundOf((pitch - 60) / 12.f);
-		const Kit::Slice& s = (k ? *k : builtinFor()).slices[i];
+		const Kit::Slice& s = (k ? *k : sharedKit()).slices[i];
 		return s.empty() ? "no sound" : !s.name.empty() ? s.name : string::f("sound %d", i + 1);
 	}
 
@@ -259,9 +278,24 @@ struct Drum : DrumTrack {
 		emit(x, x, controls.fx1, controls.fx2, args.sampleTime);
 	}
 
+	json_t* rowJson() override {
+		json_t* root = Track::rowJson();
+		int f = factoryIndex;
+		if (f >= 0)
+			json_object_set_new(root, "opz", json_string(factoryKits()[f].id.c_str()));
+		else
+			json_object_set_new(root, "builtin", json_integer(builtin));
+		std::lock_guard<std::mutex> lock(kitMutex);
+		json_object_set_new(root, "file", json_boolean(fileKit()));
+		return root;
+	}
+
 	json_t* dataToJson() override {
 		json_t* root = Track::dataToJson();
 		json_object_set_new(root, "builtin", json_integer(builtin));
+		int f = factoryIndex;
+		if (f >= 0)
+			json_object_set_new(root, "opz", json_string(factoryKits()[f].id.c_str()));
 		std::lock_guard<std::mutex> lock(kitMutex);
 		if (const Kit* k = fileKit())
 			json_object_set_new(root, "kit", k->toJson());
@@ -272,6 +306,12 @@ struct Drum : DrumTrack {
 		Track::dataFromJson(root);
 		if (json_t* j = json_object_get(root, "builtin"))
 			builtin = clamp((int) json_integer_value(j), -1, DRUM_TRACKS - 1);
+		const char* opz = json_string_value(json_object_get(root, "opz"));
+		int i = opz ? factoryKitIndex(opz) : -1;
+		if (opz && (i < 0 || !useFactory(i)))
+			WARN("Drum: no OP-Z kit %s to read, so the built-in kit plays", opz);
+		if (factoryIndex != i)
+			useFactory(-1);
 		json_decref(savedKit);
 		savedKit = json_incref(json_object_get(root, "kit"));
 		if (!savedKit)
@@ -340,7 +380,7 @@ struct DrumWidget : TrackWidget {
 		{
 			std::lock_guard<std::mutex> lock(m->kitMutex);
 			const Kit* k = m->fileKit();
-			const Kit& kit = k ? *k : m->builtinFor();
+			const Kit& kit = k ? *k : m->sharedKit();
 			file = kit.toOp1(&cut);
 			name = kit.name;
 		}
@@ -370,19 +410,34 @@ struct DrumWidget : TrackWidget {
 		{
 			std::lock_guard<std::mutex> lock(m->kitMutex);
 			const Kit* k = m->fileKit();
-			name = k ? k->name : m->builtinFor().name + " (built in)";
+			name = k ? k->name : m->factory ? m->factory.load()->name + " (OP-Z)" : m->builtinFor().name + " (built in)";
 		}
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Kit: " + name));
 		menu->addChild(createMenuItem("Load a kit file…", "OP-1, OP-Z, AIFF or WAV", [=]() { load(m, false); }));
 		menu->addChild(createMenuItem("Load a folder of sounds…", "one per key", [=]() { load(m, true); }));
 		menu->addChild(createMenuItem("Save as a kit file…", "OP-1 and OP-Z", [=]() { save(m); }));
+		menu->addChild(createSubmenuItem("OP-Z kit", "", [=](Menu* sub) {
+			const std::vector<FactoryKit>& kits = factoryKits();
+			if (kits.empty())
+				sub->addChild(createMenuLabel("None in the plugin's res/kits"));
+			for (int i = 0; i < (int) kits.size(); i++) {
+				if (i > 0 && kits[i].track != kits[i - 1].track)
+					sub->addChild(new MenuSeparator);
+				sub->addChild(createCheckMenuItem(kits[i].name, "",
+					[=]() { std::lock_guard<std::mutex> lock(m->kitMutex); return !m->fileKit() && m->factoryIndex == i; },
+					[=]() {
+						if (!m->useFactory(i))
+							osdialog_message(OSDIALOG_WARNING, OSDIALOG_OK, ("Couldn't read the kit " + kits[i].id + " in the plugin's res/kits.").c_str());
+					}));
+			}
+		}));
 		menu->addChild(createSubmenuItem("Built-in kit", "", [=](Menu* sub) {
 			static const char* const names[] = {"Its track's", "Kick", "Snare", "Perc", "Sample"};
 			for (int i = -1; i < DRUM_TRACKS; i++)
 				sub->addChild(createCheckMenuItem(names[i + 1], "",
-					[=]() { std::lock_guard<std::mutex> lock(m->kitMutex); return !m->fileKit() && m->builtin == i; },
-					[=]() { m->builtin = i; m->setKit(nullptr); }));
+					[=]() { std::lock_guard<std::mutex> lock(m->kitMutex); return !m->fileKit() && !m->factory && m->builtin == i; },
+					[=]() { m->builtin = i; m->useFactory(-1); }));
 		}));
 	}
 };

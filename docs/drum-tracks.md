@@ -12,8 +12,12 @@ pages, LFO and jacks; this page covers only where it differs. To play a drum tra
 
 - **Keys:** F3 to E5, the Sequencer's keys at their home octave, play the 24 sounds in turn, and the octaves either
   side play them again. A key's tooltip on the Sequencer names its sound.
-- **Built in:** each track starts on a kit of its own, synthesized when the first Drum is added, so nothing ships
-  as samples. The context menu's **Built-in kit** plays another track's instead.
+- **OP-Z kits:** the context menu's **OP-Z kit** plays one of the OP-Z's own kits, sampled from the device: four
+  kick kits, four snare kits and five hat kits so far, for tracks 1 to 3. A patch keeps only the kit's name, not its
+  sound. A few sounds are missing or cut short in these first samples (pad 16 of the snare and hat kits, five pads
+  of Hat 5), and play nothing or end early until they're sampled again.
+- **Built in:** each track starts on a kit of its own, synthesized when the first Drum is added. The context menu's
+  **Built-in kit** plays another track's instead.
 
 | Track | Sounds |
 | --- | --- |
@@ -27,13 +31,13 @@ pages, LFO and jacks; this page covers only where it differs. To play a drum tra
   files, one per key in order of their names, resampled to 44.1 kHz. Stereo files are mixed to mono. A file's sample
   rate must be between 1 and 384 kHz, and samples that aren't numbers play as silence.
 - **Saving:** a loaded kit saves with the patch, in its storage folder, so the patch plays it on any computer.
-  Built-in kits are made again on loading. A Drum pasted with Ctrl+V plays the built-in kit, since only a patch or
+  Built-in and OP-Z kits are made or read again on loading. A Drum pasted with Ctrl+V plays the built-in kit, since only a patch or
   Ctrl+D (duplicate) carries the kit's sound.
 - **Kit settings:** a kit file's own slices keep their tuning, volume, direction and play mode: a slice set to gate
   or loop plays that way whatever the note style.
 - **Editing:** a [Screen](screen.md#kit-editor) beside a Drum edits its kit's slices: their ends, tuning, level,
-  play mode and direction. Editing a built-in kit makes a copy of it that saves with the patch, as a loaded kit does.
-- **Saving as a kit file:** the context menu's **Save as a kit file…** writes the kit playing, built in or edited, as
+  play mode and direction. Editing a built-in or OP-Z kit makes a copy of it that saves with the patch, as a loaded kit does.
+- **Saving as a kit file:** the context menu's **Save as a kit file…** writes the kit playing, built in, OP-Z or edited, as
   an OP-1 and OP-Z kit: a 16-bit AIFF at 44.1 kHz with the slices in it. A kit file holds 12 seconds, so a longer kit
   is cut short there. These files load back here unchanged, but haven't been tried on an OP-Z yet.
 

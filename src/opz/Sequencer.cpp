@@ -2306,6 +2306,19 @@ struct Sequencer : Module, Hub {
 			projects[i] = projectFromJson(json_array_get(a, i));
 	}
 
+	/** The engines playing its tracks, by track, null where none does: what a version without engine modules sets each
+	track's sound by. For the UI thread. */
+	json_t* rowToJson() {
+		json_t* row = json_array();
+		for (int t = 0; t < LANES; t++)
+			json_array_append_new(row, json_null());
+		for (Module* m = rightExpander.module; onBus(m); m = m->rightExpander.module)
+			if (Track* e = dynamic_cast<Track*>(m))
+				if (e->hub == this && e->busTrack >= 0)
+					json_array_set_new(row, e->busTrack, e->rowJson());
+		return row;
+	}
+
 	json_t* dataToJson() override {
 		json_t* root = json_object();
 		json_t* tracks = json_array();
@@ -2330,6 +2343,7 @@ struct Sequencer : Module, Hub {
 		json_object_set_new(root, "mutes", masksToJson(mutes));
 		json_object_set_new(root, "audioMutes", masksToJson(audioMutes));
 		json_object_set_new(root, "muteGroup", json_integer(muteGroup));
+		json_object_set_new(root, "row", rowToJson());
 		{
 			std::lock_guard<std::mutex> lock(projectsMutex);
 			scenesToJson(root, scenes, pattern, chain, chains);
