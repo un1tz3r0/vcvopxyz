@@ -1,27 +1,18 @@
-# FX tracks
+# FX tracks and their effects
 
-> **Changed in 2.1.0:** the engines and send effects are no longer modules. They are plugs inside the Sequencer,
-> ten slots a track, picked with TRACK latched and a black key, and filled from its context menu (**Plug slots**).
-> A breakout on a track plays the track's plug when its audio outputs are patched, or hands the track to outside
-> modules when only its note CVs are. This page still describes the modules and is being rewritten.
+The OP-Z's send effects play on its two FX tracks, tracks 9 and 10: **Delay**, **Reverb**, **Rymd**, **Chorus-80**,
+**Crush** and **Dist**, each a [plug](sequencer.md#plugs) in the FX tracks' slots. An FX track takes what every track
+sends it with its **FX 1** or **FX 2** dial, and its sound, effect only, goes into the Sequencer's **L** and **R**
+alongside the tracks' own. Select one with its key on the display, or with steps 9 and 10 in track mode. For an
+effect made of other modules, use a [Send FX Breakout](breakout.md#send-fx-breakout).
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Delay-small-dark.png"><img alt="Delay" src="assets/modules/Delay-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Reverb-small-dark.png"><img alt="Reverb" src="assets/modules/Reverb-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Rymd-small-dark.png"><img alt="Rymd" src="assets/modules/Rymd-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Chorus-small-dark.png"><img alt="Chorus" src="assets/modules/Chorus-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Crush-small-dark.png"><img alt="Crush" src="assets/modules/Crush-small-light.png"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Dist-small-dark.png"><img alt="Dist" src="assets/modules/Dist-small-light.png"></picture>
+## Sends and slots
 
-The OP-Z's send effects, as six modules: **Delay**, **Reverb**, **Rymd**, **Chorus**, **Crush** and **Dist**. Each
-plays one of the Sequencer's two FX tracks, the OP-Z's tracks 9 and 10, and takes what every engine sends it with its
-**FX 1** or **FX 2** dial. Its sound goes back into the Sequencer's **L** and **R**, effect only, alongside the
-tracks' own. For an effect made of other modules, use a [Send FX Breakout](breakout.md#send-fx-breakout) in place of
-one of them. Select an FX track with its key beside the Sequencer's dials, or with steps 9 and 10 in track mode.
-
-## On the bus
-
-- **Placing them:** put an FX module anywhere in the row to the right of a Sequencer, as for an engine. The first FX
-  module plays FX 1, the next FX 2, and any more play nothing. Order among the engines doesn't matter.
-- **Sends:** every engine's **FX 1** and **FX 2** dials, on its mix page, set how much of the track goes to each
-  effect, after its level and before its pan. An engine whose **FX 1** or **FX 2** output is patched sends that one
-  to the jack instead, so an outside effect can take its place.
-- **Selecting one:** in track mode, step 9 selects FX 1 and step 10 FX 2. The dials then turn the effect's, and
-  **SHIFT** turns between its two pages.
+- **Slots:** a new Sequencer puts the six effects in the first six slots of both FX tracks, FX 1 playing the Delay and
+  FX 2 the Reverb. With an FX track selected, **TRACK** and a black key pick another.
+- **Sends:** every track's **FX 1** and **FX 2** dials, on its mix page, set how much of it goes to each effect, after
+  its level and before its pan. A track whose breakout has its **FX 1** or **FX 2** output patched sends that one to
+  the jack instead, so an outside effect can take its place.
 - **Mixer:** steps 9 and 10 mute the FX tracks, which silences the effect; its send keeps filling, so the tail is
   there when it comes back.
 - **Steps:** an FX track has 16 steps, a step count, step length, note length and quantize like any other. A step's
@@ -50,6 +41,8 @@ follows; the Sequencer lights the key it's on. The other effects have no time an
 
 ### Delay
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/plugs/Delay-dark.png"><img alt="Delay" src="assets/plugs/Delay-light.png" height="40"></picture>
+
 A digital delay. The keys set the time in 64th notes of the tempo, from 1/64 on the lowest to 3/8 on the highest,
 3/16 (a dotted eighth) to begin with. A new time bends the echoes on its way there, as a tape would, rather than
 clicking. **Amount** is the feedback, how much of each echo comes round again, up to 98%; **Cutoff** is a low-pass
@@ -57,16 +50,22 @@ inside the loop, so each repeat is darker than the last.
 
 ### Reverb
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/plugs/Reverb-dark.png"><img alt="Reverb" src="assets/plugs/Reverb-light.png" height="40"></picture>
+
 A plate: Dattorro's figure-of-eight tank, two of its allpasses gently swaying, with different taps for each side.
 **Decay** is how long it rings, **Tone** how much of the top it keeps. The keys set the predelay, 10 ms a key from
 none on the lowest, 30 ms to begin with.
 
 ### Rymd
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/plugs/Rymd-dark.png"><img alt="Rymd" src="assets/plugs/Rymd-light.png" height="40"></picture>
+
 The OP-Z's older reverb, Swedish for space: a Freeverb-style room of eight damped combs and four allpasses, the right
 side's slightly longer than the left's. **Amount** is the room's size, **Cutoff** how bright it stays.
 
 ### Chorus
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/plugs/Chorus-dark.png"><img alt="Chorus" src="assets/plugs/Chorus-light.png" height="40"></picture>
 
 Chorus-80, a bucket-brigade chorus of the early 80s: a short delay on each side, swept by one triangle, the left up as
 the right comes down, darkened above 9 kHz as a bucket brigade would. Mixed with the dry tracks, it widens and
@@ -74,24 +73,22 @@ thickens them. **Speed** is the sweep's rate, 0.05 to 8 Hz, **Depth** how far it
 
 ### Crush
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/plugs/Crush-dark.png"><img alt="Crush" src="assets/plugs/Crush-light.png" height="40"></picture>
+
 A bitcrusher. **Amount** holds each sample longer, down to a 64th of the sample rate, and rounds it to fewer levels,
 12 bits down to 2, on a μ-law scale, so quiet tails crumble before loud hits do. **Cutoff** is a low-pass after it,
 100 Hz to 20 kHz, to tame the aliasing or leave it.
 
 ### Dist
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/plugs/Dist-dark.png"><img alt="Dist" src="assets/plugs/Dist-light.png" height="40"></picture>
+
 An overdrive: up to 40 dB of drive into a soft, slightly lopsided clipper, whose even harmonics warm it as a valve's
 would, run at four times the sample rate. Its output stays near the send's level as the drive rises. **Cutoff** is a
 low-pass after it, 300 Hz to 18 kHz, the tone.
 
-## Jacks
+## Out of the Sequencer
 
-- **IN L** and **IN R:** patched, they feed the effect in place of the sends, so it works off the bus or on any
-  module's audio. **IN R** is normalled to **IN L**.
-- **V/OCT** and **GATE:** with **GATE** patched, its notes set the time in place of the FX track's, F3 (−7/12 V) the
-  lowest key.
-- **CLOCK**, **RESET** and **EXT:** the LFO's, as on an engine.
-- **L** and **R:** the effect alone, after the return's filter and level. With both unpatched it goes to the
-  Sequencer's **L** and **R**; patched, it doesn't. **L** carries a mono mix while **R** is unpatched.
-
-The **OUT** LED follows the effect's level, and a [Screen](screen.md) beside one shows its pages and its time.
+A [Send FX Breakout](breakout.md#send-fx-breakout) on an FX track takes it out: its **L** and **R** carry the effect
+on its own, and its **SEND** outputs hand what the tracks send it to an outside effect, which comes back in through
+the track's filter and level. A [Screen](screen.md) shows an FX track's pages and its time.

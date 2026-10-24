@@ -6,15 +6,16 @@
     [[face:off|Alt]]                    docs/assets/keys/face-off-*.png
     [[module:Digital-small|Digital]]    docs/assets/modules/Digital-small-*.png
     [[guide:bass|Alt]]                  docs/assets/guide/bass-*.png
+    [[plug:Saw|Alt|36]]                 docs/assets/plugs/Saw-*.png
 
-and with --prune, deletes the images under docs/assets/{keys,modules,guide} that no Markdown file refers to.
+and with --prune, deletes the images under docs/assets/{keys,modules,guide,plugs} that no Markdown file refers to.
 
     expand.py <plugin dir> [--prune] file.md ...
 """
 import os, re, sys
 from pathlib import Path
 
-DIRS = dict(key='keys', dial='keys', face='keys', module='modules', guide='guide')
+DIRS = dict(key='keys', dial='keys', face='keys', module='modules', guide='guide', plug='plugs')
 SHORTHAND = re.compile(r'\[\[(\w+):([\w-]+)\|([^|\]]+)(?:\|(\d+))?\]\]')
 
 plugin = Path(sys.argv[1])
@@ -49,9 +50,9 @@ for md in files:
 if prune:
     used = set()
     for md in plugin.glob('**/*.md'):
-        used |= {m for m in re.findall(r'assets/(?:keys|modules|guide)/([\w-]+\.png)', md.read_text())}
-    for d in ('keys', 'modules', 'guide'):
+        used |= {m for m in re.findall(r'assets/((?:keys|modules|guide|plugs)/[\w-]+\.png)', md.read_text())}
+    for d in ('keys', 'modules', 'guide', 'plugs'):
         for png in (assets / d).glob('*.png'):
-            if png.name not in used:
+            if f'{d}/{png.name}' not in used:
                 png.unlink()
     print(f'kept {len(used)} images')

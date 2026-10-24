@@ -2,26 +2,37 @@
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Sequencer-large-dark.png"><img alt="The Sequencer, playing" src="assets/modules/Sequencer-large-light.png"></picture>
 
-The OP-Z's front panel, and the master of the OP-Z modules to its right. It keeps the tempo and the transport and
-sequences the OP-Z's first eight tracks: kick, snare, perc and sample, then bass, lead, arp and chord, and the
-[master track](#master-track) that transposes them in key, and the two [FX tracks](fx-tracks.md), 9 and 10, that play
-the send effects. Each track has 16 steps of up to four notes, with micro
-timing, note lengths, step count and step length. A project has 16 [patterns](#patterns-and-chains) of them all,
-chained to play in turn, and ten project slots save it all.
+The OP-Z, face and sounds. It keeps the tempo and the transport and plays the OP-Z's first eight tracks: kick, snare,
+perc and sample, then bass, lead, arp and chord, the two [FX tracks](fx-tracks.md), 9 and 10, that the others send
+to, and the [master track](#master-track) that transposes them in key. Each track plays a [plug](#plugs) from its ten
+slots, and has 16 steps of up to four notes, with micro timing, note lengths, step count and step length. A project
+has 16 [patterns](#patterns-and-chains) of them all, chained to play in turn, and ten project slots save it all.
 
 New to it? Start with [your first sound](guide.md) and the [quickstart](quickstart.md).
 
-## The chain
+## Plugs
 
-Place engines to its right, Screens beside them if you like, and they need no cables. The first synth engine plays
-track 5 (bass), the next track 6, and so on, and the first [Drum](drum-tracks.md) track 1 (kick), the next track 2,
-and so on to track 4, wherever they sit in the row. The first [FX module](fx-tracks.md) plays FX 1, the next FX 2,
-and takes every engine's sends. Each track's notes, velocity and the tempo go to its engine over
-the bus, and engines with their own outputs unpatched are mixed into **L** and **R**. To play other modules from a
-synth track, use a [Synth Breakout](breakout.md) for its engine, or a [Drum Breakout](breakout.md#drum-breakout) for a drum
-track: it sends the track's notes out as CV. A module from another
-plugin ends the chain. The engines have no dials of their own: the Sequencer's four turn them, and a Screen beside
-one shows every page.
+A track's sound is its **plug**: a synth engine on tracks 5 to 8 ([synth tracks](synth-tracks.md)), a kit of 24
+sounds on tracks 1 to 4 ([drum tracks](drum-tracks.md)), and a send effect on the FX tracks
+([FX tracks](fx-tracks.md)). Each track has ten slots of them, on the black keys in [track mode](#modes): click one
+and the track plays that plug from its next note, its sound dials where the plug starts them (a kit leaves them as
+they are), while the last one rings out. The display shows the plug playing, its icon, its slot and the preset loaded.
+
+A new Sequencer fills the slots for you: the OP-Z's own engines first on each synth track, as the hardware starts
+them, then the rest; Delay, Reverb, Rymd, Chorus-80, Crush and Dist on both FX tracks, FX 1 playing the Delay and FX 2
+the Reverb; and on each drum track the OP-Z kits sampled for it, then its built-in kit. Change them in the context
+menu's **Plug slots**: a submenu for each track, and one for each slot, with every plug of the track's kind, or for a
+drum track, the [kits](kits.md) and the files to load into the slot.
+
+Every track mixes into **L** and **R** at its level and pan, through the mixer's levels and punch. Modules placed to
+the right reach the tracks over a bus along the row, with no cables:
+
+- A [breakout](breakout.md) hands one track to other modules: with its audio outputs patched, the track's sound leaves
+  there instead of the mix; with its note outputs patched, outside modules play the track's notes, and their sound comes
+  back in through the track. The track's key on the display shows a small jack in its corner while a breakout has it.
+- A [Screen](screen.md) shows the selected track: every page of dials at once, and a drum track's kit to edit.
+
+A module from another plugin ends the bus: anything after it isn't reached.
 
 ## The face
 
@@ -41,8 +52,8 @@ row of jacks: the transport's inputs, the notes to record, then the transport's 
 
 - <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/select4-playing-dark.png"><img alt="The bass track's key, selected" src="assets/keys/select4-playing-light.png" height="32"></picture> **Selecting a track:** click its key on the display, or switch
   **TRACK** on and click one of steps 1 to 8, 9 or 10 for an FX track, or 12 for the master track. The keys, steps, dials and recording all work on the selected track.
-- <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page1-page-dark.png"><img alt="The second page key, lit" src="assets/keys/page1-page-light.png" height="32"></picture> **Dials:** they are the selected track's engine's dials, so turning one turns that parameter on the engine, with
-  its own tooltip, undo and MIDI mapping. Click **SHIFT**, or one of the four pages on the display, to change the page;
+- <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page1-page-dark.png"><img alt="The second page key, lit" src="assets/keys/page1-page-light.png" height="32"></picture> **Dials:** they are the selected track's, so turning one turns that parameter of its sound, named as its plug
+  names it in the tooltip, with its own undo and MIDI mapping. Click **SHIFT**, or one of the four pages on the display, to change the page;
   the display and the dials' LEDs show it in its colour. In track, tempo and mixer mode they set those modes' own
   values instead.
 
@@ -57,7 +68,7 @@ row of jacks: the transport's inputs, the notes to record, then the transport's 
   one (blue LEDs show how far; the same click again restores the default length), and **−** and **+** nudge it a
   tick, 1/24 of a step. Picking a step up copies it for pasting, and while stopped plays it too.
 - <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/dial0-held-dark.png"><img alt="A dial" src="assets/keys/dial0-held-light.png" height="40"></picture> **Parameter locks:** while a step is held, the dials are that step's. Turn one to lock its parameter on the step,
-  and its LED turns white; double-click it to let go of the lock. A lock holds the engine's dial where you set it
+  and its LED turns white; double-click it to let go of the lock. A lock holds the track's dial where you set it
   for as long as the step is under the playhead, then lets it go back to where the dial is, so the knob itself
   never moves. Any dial on any of the four pages can be locked, and a held step plays with its locks while stopped,
   so you can hear them. A step's tooltip counts its locks, and its context menu clears them. With a step held, hold
@@ -71,8 +82,8 @@ row of jacks: the transport's inputs, the notes to record, then the transport's 
 
 - <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/track-track-dark.png"><img alt="TRACK on" src="assets/keys/track-track-light.png" height="32"></picture> **Track mode:** click **TRACK** to switch it on, and again to switch it off. Steps 1 to 8 select a track, steps 9
   and 10 the FX tracks, and step 12 the master track. The dials
-  set its **note length** (1/64 to a bar with the dotted values between, then drone), the engine's **note style**,
-  **quantize** (pulls micro timing towards the grid as it plays) and the engine's **portamento**. The black keys pick
+  set its **note length** (1/64 to a bar with the dotted values between, then drone), the **note style**,
+  **quantize** (pulls micro timing towards the grid as it plays) and **portamento**. The black keys pick
   the track's plug from its ten slots, lit white (bright for the one playing), and **−** and **+** shift the
   pattern a step. With SHIFT latched too, the steps set the step count and the black keys the step length in blue
   (1 to 8 for ×1 to ×8, 9 for ×16, 0 for one step per trigger on **ADV**); the master track has no plugs, so its
@@ -108,7 +119,7 @@ off. Switching one on switches the others, and track mode, off.
 
 ## Master track
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/master-master-dark.png"><img alt="MASTER, selected" src="assets/keys/master-master-light.png" height="32"></picture> The OP-Z's track 12. It has no engine: its notes move the tracks it transposes, in key, so a bassline and chords
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/master-master-dark.png"><img alt="MASTER, selected" src="assets/keys/master-master-light.png" height="32"></picture> The OP-Z's track 12. It has no plug: its notes move the tracks it transposes, in key, so a bassline and chords
 written once can follow a chord progression. Select it with **MASTER** or step 12 in track mode, and sequence it like
 any other track, or play it on the keys.
 
@@ -145,13 +156,13 @@ randomize and a plug picked are each one step of Rack's undo.
 <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/face-project-dark.png"><img alt="The face in project mode: the pattern playing white, the project slot lit on the black keys" src="assets/keys/face-project-light.png"></picture>
 
 A project has 16 patterns, each a full set of tracks: every track's steps, step components, parameter locks, step
-count and length, note length, quantize and polyphony, the dials of the engine playing it, and the mute group. In
+count and length, note length, quantize and polyphony, the slot each track plays and its dials, and the mute group. In
 project mode the steps pick them: white for the pattern playing, green for the rest of its chain, and dim for the
 others with notes in them.
 
 - **Switching:** click a step to play its pattern. While playing it comes in at once, and every track carries on
-  from the step it's on, as on the OP-Z. Its engines take the dials the pattern saved; a pattern never played keeps
-  the dials as they are, so a new one starts from the sound of the last.
+  from the step it's on, as on the OP-Z. Its tracks take the plugs and dials the pattern saved; a pattern never played
+  keeps them as they are, so a new one starts from the sound of the last.
 - **Chains:** click **PLAY** in project mode, and it blinks: the steps now build a chain, the first pattern playing
   at once and the rest after it, up to 32, repeats allowed. The display counts them. Click **PLAY** again to finish.
   A chain plays each pattern to its end, then the next, round and round. A pattern's end is that of its longest
@@ -169,10 +180,10 @@ tracks back together at the end of each pattern.
 
 ## Projects
 
-A slot keeps everything that makes a song: its 16 patterns, each with every track's steps, settings and engine dials
+A slot keeps everything that makes a song: its 16 patterns, each with every track's steps, settings, plug and dials
 (the note style and portamento too), the chain playing and the saved chains, the tempo, swing and metronome, the
-mixer's levels and ten mute groups, and the master track with the tracks it moves. Loading one sets the engines'
-dials too, so each engine plays the sound it had. The slots save with the patch, and a switch is one step of Rack's
+mixer's levels and ten mute groups, and the master track with the tracks it moves. Loading one sets the plugs and
+dials too, so each track plays the sound it had. The slots save with the patch, and a switch is one step of Rack's
 undo, which puts the project left back as it was. Switching patterns isn't an undo step, but each edit in a pattern
 is, and undoing it later changes that pattern, whichever is playing.
 
@@ -228,4 +239,4 @@ it always does.
   lead, four for the chords, and one for bass and arp. Change the selected
   track's in the context menu. With the [arp](synth-tracks.md#arp) on, the arp track holds every note for the arp,
   and its polyphony counts the arp's notes. A new note takes the channel silent longest, or failing that the one playing longest,
-  and its gate drops for a sample so the engine retriggers.
+  and its gate drops for a sample so the plug retriggers.

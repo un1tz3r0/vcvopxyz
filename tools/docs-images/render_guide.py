@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""The first-sound guide's screenshots, light and dark: each scene is a row of modules after a Sequencer, an Audio-2
-at the end of the row taking the mix, and the clicks that set it up.
+"""The manual's scenes, light and dark: each is a row of modules after a Sequencer, an Audio-2 at the end of the row
+taking the mix, and the clicks that set it up.
 
     docs/assets/guide/<scene>-<theme>.png
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
-from render_modules import HP, PX_MM, RENDER, ROW, X0, Y0, clicks, hp, plugin, rack, save, version  # noqa: E402
+from render_modules import HP, PX_MM, RENDER, ROW, X0, Y0, clicks, hp, plugin, rack, save, track_param, version  # noqa: E402
 
 out = plugin / 'docs/assets/guide'
 out.mkdir(parents=True, exist_ok=True)
@@ -22,59 +22,63 @@ SNARE = [[[54, 100, 0, 0]] if s % 8 == 4 else [] for s in range(16)]
 BASS = [[[n, 100, 0, 0]] if n else [] for n in (45, 0, 0, 45, 0, 0, 57, 0, 43, 0, 0, 43, 0, 55, 0, 48)]
 CHORDS = [[[57, 100, 0, 96], [60, 100, 0, 96], [64, 100, 0, 96]]] + [[]] * 7 + \
          [[[55, 100, 0, 96], [59, 100, 0, 96], [62, 100, 0, 96]]] + [[]] * 7
+ARP = [[[57, 100, 0, 384], [60, 100, 0, 384], [64, 100, 0, 384]]] + [[]] * 15
+FOREIGN_HP = dict(AudioInterface2=5, VCO=9)
 
 
-def sequencer(track, **patterns):
-    """A Sequencer with `track` selected and the named tracks' patterns (kick, snare, bass, lead, arp, chord)."""
+def sequencer(track, params=(), **patterns):
+    """A Sequencer with `track` selected, the named tracks' patterns (kick, snare, bass, lead, arp, chord) and params
+    as (lane, param, value)."""
     names = ['kick', 'snare', 'perc', 'sample', 'bass', 'lead', 'arp', 'chord']
     channels = [2, 2, 2, 2, 1, 3, 1, 4]
     tracks = [{'pattern': patterns.get(n, EMPTY), 'channels': c} for n, c in zip(names, channels)]
-    return {'plugin': 'vcvopxyz', 'model': 'Sequencer', 'params': [],
+    return {'plugin': 'vcvopxyz', 'model': 'Sequencer', 'params': [{'id': track_param(t, p), 'value': v} for t, p, v in params],
             'data': {'tracks': tracks, 'track': track, 'ppqn': 4, 'longPressHolds': True, 'ctrlClickHolds': True}}
 
 
-def engine(slug, fx1=0.0):
-    return {'plugin': 'vcvopxyz', 'model': slug, 'params': [{'id': 12, 'value': fx1}] if fx1 else []}
+def module(slug, plugin='vcvopxyz'):
+    return {'plugin': plugin, 'model': slug, 'params': []}
 
 
-def screen():
-    return {'plugin': 'vcvopxyz', 'model': 'Screen', 'params': []}
+FX1, ARP_SPEED = 12, 18       # a track's FX 1 send and arp speed, among its params
+DIGITAL = 'KEY8'              # the bass track's fourth slot, Digital, on the fourth black key
 
-
-ARP = [[[57, 100, 0, 384], [60, 100, 0, 384], [64, 100, 0, 384]]] + [[]] * 15
-KIT = (51 + 6, 50.86, 22.3)  # the Screen's KIT, beside a Drum after the Sequencer
-
-# scene: (Sequencer, the modules after it, keys to click, scale of the picture[, the first and last module shown])
+# scene: (Sequencer, the modules after it, keys to click, scale of the picture, options): `shown`, the first and last
+# module in the picture; `cables`, (module, output, module, input) by their place in the row.
 SCENES = {
-    'audio': (sequencer(4), [], [], 1.0),
-    'digital': (sequencer(4), [engine('Digital')], [], 1.0),
-    'bass': (sequencer(4, bass=BASS), [engine('Digital')], ['PLAY'], 1.0),
-    'drum': (sequencer(0, kick=KICK, bass=BASS), [engine('Drum'), engine('Digital')], ['PLAY'], 1.0),
-    'delay': (sequencer(4, kick=KICK, bass=BASS), [engine('Drum'), engine('Digital', 0.6), engine('Delay')],
-              ['PLAY', 'PAGE3'], 1.0),
-    'voices': (sequencer(7, kick=KICK, snare=SNARE, bass=BASS, chord=CHORDS),
-               [engine('Drum'), engine('Drum'), engine('Digital', 0.4), engine('Analog'), engine('Organ'),
-                engine('EP', 0.5), engine('Delay'), engine('Reverb')], ['PLAY'], 0.75),
-    'digital-screen': (sequencer(4, bass=BASS), [engine('Digital'), screen()], ['PLAY'], 1.0, (1, 2)),
-    'arp-screen': (sequencer(6, arp=ARP), [engine('Digital'), engine('Analog'),
-                                           {'plugin': 'vcvopxyz', 'model': 'Cluster', 'params': [{'id': 18, 'value': 4}]},
-                                           screen()], ['PLAY', 'PAGE2'], 1.0, (3, 4)),
-    'kit-screen': (sequencer(0, kick=KICK), [engine('Drum'), screen()], ['PLAY', KIT], 1.0, (1, 2)),
+    'audio': (sequencer(4), [], [], 1.0, {}),
+    'bass': (sequencer(4, bass=BASS), [], ['PLAY'], 1.0, {}),
+    'slots': (sequencer(4, bass=BASS), [], ['PLAY', 'TRACK', DIGITAL], 1.0, {}),
+    'drum': (sequencer(0, kick=KICK, bass=BASS), [], ['PLAY'], 1.0, {}),
+    'delay': (sequencer(4, [(4, FX1, 0.6)], kick=KICK, bass=BASS), [], ['PLAY', 'PAGE3'], 1.0, {}),
+    'breakout': (sequencer(4, kick=KICK, bass=BASS), [module('Breakout'), module('VCO', 'Fundamental')], ['PLAY'], 1.0,
+                 dict(cables=[(1, 4, 2, 0), (2, 2, 1, 6)])),
+    'band': (sequencer(7, kick=KICK, snare=SNARE, bass=BASS, chord=CHORDS), [module('Screen')], ['PLAY'], 0.75, {}),
+    'screen': (sequencer(4, bass=BASS), [module('Screen')], ['PLAY'], 1.0, dict(shown=(1, 1))),
+    'arp-screen': (sequencer(6, [(6, ARP_SPEED, 4)], arp=ARP), [module('Screen')], ['PLAY', 'PAGE2'], 1.0,
+                   dict(shown=(1, 1))),
+    # KIT, on the Screen just after the Sequencer
+    'kit-screen': (sequencer(0, kick=KICK), [module('Screen')], ['PLAY', (hp('Sequencer'), 50.86, 22.3)], 1.0,
+                   dict(shown=(1, 1))),
 }
 
 
 def render(scene):
-    seq, rest, keys, scale, *shown = SCENES[scene]
-    row = [seq] + rest + [{'plugin': 'Core', 'model': 'AudioInterface2', 'params': []}]
-    first, last = shown[0] if shown else (0, len(row) - 1)
+    seq, rest, keys, scale, options = SCENES[scene]
+    row = [seq] + rest + [module('AudioInterface2', 'Core')]
+    first, last = options.get('shown', (0, len(row) - 1))
     x = 0
     for i, m in enumerate(row):
-        m.update(id=i + 1, version=version if m['plugin'] == 'vcvopxyz' else '2.6.6', pos=[x, 0])
-        x += hp(m['model']) if m['plugin'] == 'vcvopxyz' else 5
+        ours = m['plugin'] == 'vcvopxyz'
+        m.update(id=i + 1, version=version if ours else '2.6.6' if m['plugin'] == 'Core' else '2.6.4', pos=[x, 0])
+        x += hp(m['model']) if ours else FOREIGN_HP[m['model']]
     width = x * HP
     left, right = row[first]['pos'][0] * HP, (row[last + 1]['pos'][0] if last + 1 < len(row) else x) * HP
-    cables = [{'id': i + 1, 'outputModuleId': 1, 'outputId': 4 + i, 'inputModuleId': len(row), 'inputId': i,
-               'color': c} for i, c in enumerate(('#f3374b', '#0986ad'))]
+    # The mix into the Audio-2, then the scene's own cables.
+    wires = [(0, 4, len(row) - 1, 0, '#f3374b'), (0, 5, len(row) - 1, 1, '#0986ad')]
+    wires += [(*c, colour) for c, colour in zip(options.get('cables', []), ('#ffb437', '#a34cc4', '#2cb64e', '#e9536a'))]
+    cables = [{'id': i + 1, 'outputModuleId': a + 1, 'outputId': o, 'inputModuleId': b + 1, 'inputId': n, 'color': c}
+              for i, (a, o, b, n, c) in enumerate(wires)]
     window = f'{round((width + 10) * PX_MM)}x{round(ROW * PX_MM + 140)}'
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -82,7 +86,8 @@ def render(scene):
         (tmp / 'actions.sh').write_text('\n'.join(['sleep 4'] + clicks(keys) + ['xdotool mousemove 3 3']) + '\n')
         for theme, dark in (('light', '0'), ('dark', '1')):
             subprocess.run([rack / 'shot.sh', plugin, tmp / 'patch.json', tmp / 'shot.png', '2', window], check=True,
-                           env=dict(os.environ, ZOOM=str(RENDER), DARK=dark, CABLES='0' if shown else '0.8', ACTIONS=str(tmp / 'actions.sh')),
+                           env=dict(os.environ, ZOOM=str(RENDER), DARK=dark, CABLES='0' if 'shown' in options else '0.8',
+                                    ACTIONS=str(tmp / 'actions.sh')),
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             shot = Image.open(tmp / 'shot.png').convert('RGB')
             image = shot.crop((round(X0 + left * PX_MM), round(Y0), round(X0 + right * PX_MM), round(Y0 + ROW * PX_MM)))

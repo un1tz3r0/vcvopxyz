@@ -15,6 +15,7 @@ so is the idea that holding one key changes what the others do. What's new is ho
 | | Where | What it does |
 | --- | --- | --- |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/project-off-dark.png"><img alt="PROJECT" src="assets/keys/project-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/mixer-off-dark.png"><img alt="MIXER" src="assets/keys/mixer-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/metronome-off-dark.png"><img alt="TEMPO" src="assets/keys/metronome-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/screen-off-dark.png"><img alt="SCREEN" src="assets/keys/screen-off-light.png" height="36"></picture> | Top left corner | The four index keys: modes that change what the other keys do. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/plugs/Saw-dark.png"><img alt="The display showing Saw" src="assets/plugs/Saw-light.png" height="36"></picture> | Beside the dials | The display: the selected track's plug, its slot and preset, and the tempo with **INT** and **EXT**. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page0-off-dark.png"><img alt="Page 1" src="assets/keys/page0-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page1-off-dark.png"><img alt="Page 2" src="assets/keys/page1-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page2-off-dark.png"><img alt="Page 3" src="assets/keys/page2-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/page3-off-dark.png"><img alt="Page 4" src="assets/keys/page3-off-light.png" height="36"></picture> | Down the display's right | The dials' four pages: sound, envelope, LFO, mix. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/select4-off-dark.png"><img alt="Bass" src="assets/keys/select4-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/fx_select0-off-dark.png"><img alt="FX 1" src="assets/keys/fx_select0-off-light.png" height="36"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/master-off-dark.png"><img alt="MASTER" src="assets/keys/master-off-light.png" height="36"></picture> | Along the display's bottom | A key per track: the eight tracks, the two FX tracks, then the master track. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/dial0-off-dark.png"><img alt="Green dial" src="assets/keys/dial0-off-light.png" height="60"></picture> | Top right | Four dials, green, blue, yellow and red, for the selected track's sound. |
@@ -35,7 +36,7 @@ OP-Z holds **latches** here: it stays on until you click it again, and blinks or
 | --- | --- | --- |
 | **Click** | Presses the key. | Every key. |
 | **Click to switch on, click to switch off** | Latches a mode, since the key does nothing else on its own. Switching one of these on switches the others off; REC stays as it is. | **TRACK**, **PROJECT**, **MIXER**, **TEMPO**, and **REC** |
-| **Long press** (0.4 s) or **Ctrl+click** (⌘+click on a Mac) | Latches a key that also does something on a click. | A step (picks it up), **SHIFT**, a black key in project mode (saves to the slot), a white key in project mode (saves the chain) |
+| **Long press** (0.4 s) or **Ctrl+click** (⌘+click on a Mac) | Latches a key that also does something on a click, or does its second job. | A step (picks it up), **SHIFT**, a white key in track mode (stores a preset), a black key in project mode (saves to the slot), a white key in project mode (saves the chain) |
 | **Hold the mouse button down** | Works only while held, as on the hardware. | **SCREEN** (battery), **STOP** held a second (clears) |
 | **Double-click a dial** | Lets go of a parameter lock, or resets the dial. | The four dials |
 | **Right-click** | The key's own menu: a step's velocity, micro timing, length and locks. | Steps, and every key's tooltip names it |
@@ -54,9 +55,9 @@ none on, the steps are the selected track's pattern and the keys play it.
 
 | Mode | Lit | The steps | The keys | The dials |
 | --- | --- | --- | --- | --- |
-| None | | The pattern: click an empty step to paste the last notes played, a lit one to clear it | Play the track | The track's engine, on the page shown |
-| **TRACK** | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/track-track-dark.png"><img alt="TRACK on" src="assets/keys/track-track-light.png" height="36"></picture> | Select a track: 1 to 8, 9 and 10 for FX, 12 for master | Black: step length | Note length, note style, quantize, portamento |
-| **TRACK** + SHIFT | | The step count | | |
+| None | | The pattern: click an empty step to paste the last notes played, a lit one to clear it | Play the track | The track's plug, on the page shown |
+| **TRACK** | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/track-track-dark.png"><img alt="TRACK on" src="assets/keys/track-track-light.png" height="36"></picture> | Select a track: 1 to 8, 9 and 10 for FX, 12 for master | Black: the track's ten plug slots; white: the plug's presets (REC randomizes the sound) | Note length, note style, quantize, portamento |
+| **TRACK** + SHIFT | | The step count | Black: step length | |
 | **PROJECT** | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/project-project-dark.png"><img alt="PROJECT on" src="assets/keys/project-project-light.png" height="36"></picture> | The 16 patterns; PLAY builds a chain | Black: the ten project slots; white: saved chains | |
 | **MIXER** | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/mixer-mixer-dark.png"><img alt="MIXER on" src="assets/keys/mixer-mixer-light.png" height="36"></picture> | Mute a track (with SHIFT, only its sound) | Black: the ten mute groups | Drum level, synth level, punch, master level |
 | **TEMPO** | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/metronome-tempo-dark.png"><img alt="TEMPO on" src="assets/keys/metronome-tempo-light.png" height="36"></picture> | | Black: type a tempo; white: tap it | Tempo, swing, metronome sound, metronome level |
@@ -74,7 +75,7 @@ The keys' LEDs keep the OP-Z's colours. On a step:
 | Colour | Means |
 | --- | --- |
 | Orange | Notes on the step; dim past the step count, where the track doesn't play |
-| White | The playhead; in track mode the selected track; in project mode the pattern playing |
+| White | The playhead; in track mode the selected track, and on the keys the plug slots and presets; in project mode the pattern playing |
 | Red | The playhead while recording; a sound mute; a clear filling up |
 | Blue | How long the held step's notes last; on the black keys in track mode with SHIFT, the step length |
 | Green | Steps with step components; the rest of a chain; the battery |
@@ -121,8 +122,8 @@ keys, and a long press or Ctrl+click for SHIFT and the steps.
 | Hold tempo, turn the green dial / type / tap | Latch TEMPO, the same |
 | Triple-click an index key: index lock | Not needed: the index keys always latch |
 
-Not here: the tape, perform, module, lights and motion tracks (11, 13 to 16); punch-in effects; plugs and presets
-(each engine is a module you place instead); randomize; linked tracks; shift + dial temporary tweaks; record arm;
+Not here: the tape, perform, module, lights and motion tracks (11, 13 to 16); punch-in effects; the Sample engine
+(the rest are plugs); linked tracks; shift + dial temporary tweaks; record arm;
 super panic; pitch bend; copying a pattern's settings or a track; bounce; snapshots; tempo lock; the master track's
 effects page; sampling; MIDI settings and channels. The engines aren't the OP-Z's sounds sample for sample: they
 have its dials, ranges and quirks, tuned by ear.

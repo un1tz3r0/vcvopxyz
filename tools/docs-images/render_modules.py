@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Renders every vcvopxyz module in a running Rack for the manual, light and dark, each beside a playing Sequencer so
-its status screen shows a track:
+its screen shows a track:
 
     docs/assets/modules/<slug>-large-<theme>.png   the whole panel at 125%
     docs/assets/modules/<slug>-small-<theme>.png   the whole panel at 50%, for tables
@@ -19,6 +19,7 @@ PX_MM = 2.953 * RENDER       # pixels per mm at that zoom
 MENU = 32.2                  # the menu bar's height (px)
 HP, ROW = 5.08, 128.5
 SIZES = dict(large=1.25, small=0.5, label=1.75)
+SOUND_PARAM = 123             # the Sequencer's first track param (SOUND_PARAM in Sequencer.cpp)
 
 rack, plugin = Path(sys.argv[1]), Path(sys.argv[2])
 out = plugin / 'docs/assets/modules'
@@ -51,15 +52,8 @@ def sequencer():
 
 
 def context(slug):
-    """The row to draw `slug` in, and its place there: a Sequencer first, and a Digital sending to the FX modules
-    and beside the Screen."""
-    digital = {'plugin': 'vcvopxyz', 'model': 'Digital', 'params': [{'id': 12, 'value': 0.7}, {'id': 13, 'value': 0.7}]}
-    if slug == 'Sequencer':
-        row = [sequencer()]
-    elif slug == 'Screen' or slug in FX:
-        row = [sequencer(), digital, {'plugin': 'vcvopxyz', 'model': slug, 'params': []}]
-    else:
-        row = [sequencer(), {'plugin': 'vcvopxyz', 'model': slug, 'params': []}]
+    """The row to draw `slug` in, and its place there: a Sequencer first, then the module."""
+    row = [sequencer()] + ([] if slug == 'Sequencer' else [{'plugin': 'vcvopxyz', 'model': slug, 'params': []}])
     x = 0
     for i, m in enumerate(row):
         m.update(id=i + 1, version=version, pos=[x, 0])
@@ -69,6 +63,12 @@ def context(slug):
                 'params': [{'id': 0, 'value': 1.0}]})
     cables = [{'id': 1, 'outputModuleId': 99, 'outputId': 0, 'inputModuleId': 1, 'inputId': 1, 'color': '#ff9352'}]
     return {'version': '2.6.6', 'modules': row, 'cables': cables}, row[-2]['pos'][0]
+
+
+def track_param(track, param):
+    """The Sequencer's param id of a track's param: lanes 0 to 7 for the eight tracks, 9 and 10 for FX 1 and 2 (8, the
+    master track, has none), and the param's index among a track's 22 (P1 0 ... FX 1 12 ... LEVEL 15)."""
+    return SOUND_PARAM + (track if track < 8 else track - 1) * 22 + param
 
 
 # The Sequencer's keys (rect boxes) and dials (circle centres), in panel mm, and where a key is on screen with the
@@ -101,8 +101,6 @@ def clicks(names):
         lines.append('sleep 0.4')
     return lines
 
-
-FX = {m['slug'] for m in manifest['modules'] if 'Effect' in m['tags']}
 
 
 def render(slug):

@@ -65,7 +65,7 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | `res-src/panel.py` | Writes every panel and component graphic into `res/`. |
 | `docs/` | This manual; `docs/assets/` holds its pictures. |
 | `tools/rack-headless/` | `shot.sh`: screenshots of a patch in a headless Rack (Xvfb, software GL), with scripted clicks. |
-| `tools/docs-images/` | The manual's pictures: the modules, the Sequencer's keys in each state, and the guide's scenes. |
+| `tools/docs-images/` | The manual's pictures: the modules, the Sequencer's keys in each state, each plug on its display, and the scenes. |
 
 ## Panels
 
@@ -80,7 +80,7 @@ At runtime, `PanelLayout` reads those positions back, so the panel is the only p
 
 ```cpp
 addParam(createParamCentered<PastelKnob<Pastel::Salmon>>(AT(CUTOFF_PARAM)));
-// AT(CUTOFF_PARAM) expands to: layout.center("CUTOFF_PARAM"), module, Digital::CUTOFF_PARAM
+// AT(CUTOFF_PARAM) expands to: layout.center("CUTOFF_PARAM"), module, MyModule::CUTOFF_PARAM
 ```
 
 To add a control, add a label and a `p.place('NAME_PARAM', x, y)` to the module's panel function, run
@@ -88,22 +88,24 @@ To add a control, add a label and a `p.place('NAME_PARAM', x, y)` to the module'
 
 ## The manual's pictures
 
-Every picture in `docs/assets/{modules,keys,guide}` comes from a running Rack, in light and dark, so they can be
+Every picture in `docs/assets/{modules,keys,plugs,guide}` comes from a running Rack, in light and dark, so they can be
 made again whenever a panel changes. They need a Rack 2 build (`RACK_DIR`, or `tools/rack-headless/Rack`), with
 Fundamental in `tools/rack-headless/Fundamental`, plus `xvfb-run`, `xdotool`, ImageMagick's `import`, `zstd`, `jq`,
 `pngquant` and Pillow, and the plugin built in place:
 
 ```sh
 tools/docs-images/render_modules.py tools/rack-headless . [Slug ...]   # docs/assets/modules: large, small, label
-tools/docs-images/render_keys.py tools/rack-headless . [state ...]     # docs/assets/keys: each key, and the face
+tools/docs-images/render_keys.py tools/rack-headless . [state ...]     # docs/assets/keys and plugs: each key, the face, the plugs
 tools/docs-images/render_guide.py tools/rack-headless . [scene ...]    # docs/assets/guide: the guide's scenes
 ```
 
 Rack draws each at 300% and the scripts scale down: modules at 125% (large), 50% (small) and a square of the panel's
-top at 175% (label); keys at 125%; the face and the guide at 100%. To add one to a page, write a shorthand and run
+top at 175% (label); keys at 125%, and the display's at 160%; the display's plug readout at 125%; the face and the
+guide at 100%. To add one to a page, write a shorthand and run
 `tools/docs-images/expand.py . docs/*.md README.md`, which turns it into a `<picture>` with both themes; `--prune`
 deletes the pictures no page uses. `[[key:track-track|TRACK|32]]` is the TRACK key in the `track` state, 32 px high;
-`[[module:Digital-label|digital|56]]`, `[[face:project|…]]` and `[[guide:bass|…]]` work the same way.
+`[[module:Breakout-label|synth breakout|56]]`, `[[plug:Saw|saw|40]]`, `[[face:project|…]]` and `[[guide:bass|…]]` work
+the same way.
 
 ## Adding a module
 
