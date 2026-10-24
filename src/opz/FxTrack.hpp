@@ -1,13 +1,14 @@
 #pragma once
-#include "TrackWidget.hpp"
+#include "Plugs.hpp"
 #include "../dsp/Delay.hpp"
 
 /*
 An OP-Z FX track (TrackCore.hpp): a send effect playing FX 1 or FX 2, the OP-Z's tracks 9 and 10. It takes what the
-engines send it over the bus, or with IN patched its inputs, and returns the effect alone, through the filter, to the
-mix. Its dials have the OP-Z's two pages: the effect's two dials and the filter, then the LFO. Its notes, from the
+other tracks send it, or a breakout's return while that's patched, and returns the effect alone, through the filter,
+to the mix. Its dials have the OP-Z's two pages: the effect's two dials and the filter, then the LFO. Its notes, from the
 keys while it's selected or from its track's steps, set the effect's time where it has one, the delay's or the
-reverb's predelay: the lowest key is the shortest. The effect is a struct with:
+reverb's predelay: the lowest key is the shortest. The effect registers its plug in its file with `static
+FxPlug<Effect>`, and is a struct with:
 
 	static constexpr const char* SLUG;
 	static constexpr int TIME_KEY;                         // the key its time starts on, or -1 for an effect with none
@@ -23,7 +24,7 @@ reverb's predelay: the lowest key is the shortest. The effect is a struct with:
 namespace opz {
 
 /** Delay's time keys, in sixty-fourths of a bar from 1/64 on the lowest key to 3/8 on the highest, starting on 3/16,
-a dotted eighth. Send FX Breakout's TIME follows the same keys. */
+a dotted eighth. A Send FX Breakout's TIME follows the same keys. */
 struct TempoTime {
 	static constexpr int TIME_KEY = 11;
 
@@ -60,14 +61,6 @@ struct FxCore : TrackCore {
 		timeKey = Effect::TIME_KEY;
 	}
 
-	void configure(Module* m, int base) {
-		Effect::configSound(m, base + P1_PARAM, base + P2_PARAM);
-		configTrack(m, base, {"None"}, "FX tracks have no note style", {paramQuantities[P1_PARAM]->name, paramQuantities[P2_PARAM]->name,
-			"Filter", "Resonance", "Time", "Send", "Pan", "Volume"});
-		paramQuantities[LFO_TARGET_PARAM]->description = "Time moves the delay or predelay up to an octave either way; send is the level into the effect";
-		configDefault(LEVEL_PARAM, 1.f);
-	}
-
 	/** The sound page and the LFO page, and no others. */
 	int dial(int page, int d) const override {
 		return page == PAGE_SOUND || page == PAGE_LFO ? DIALS[page][d] : -1;
@@ -92,6 +85,11 @@ struct FxCore : TrackCore {
 		return std::fmin(outputMeters[LEFT_OUTPUT].peak, 1.f);
 	}
 
+	void setSampleRate(float r) override {
+		rate = r;
+		unit.prepare(rate);
+	}
+
 	void process(const ProcessArgs& args) override {
 		if (args.sampleRate != rate) {
 			rate = args.sampleRate;
@@ -108,7 +106,9 @@ struct FxCore : TrackCore {
 
 		float in[2], out[2];
 		float send = target == TARGET_PITCH ? clamp(1.f + offset, 0.f, 2.f) : 1.f;
-		if (inputs[RETURN_L_INPUT].isConnected()) {
+		if (silenced)
+			in[0] = in[1] = 0.f;
+		else if (inputs[RETURN_L_INPUT].isConnected()) {
 			in[0] = inputs[RETURN_L_INPUT].getVoltageSum();
 			in[1] = inputs[RETURN_R_INPUT].isConnected() ? inputs[RETURN_R_INPUT].getVoltageSum() : in[0];
 		}
@@ -145,21 +145,10 @@ struct FxCore : TrackCore {
 	}
 };
 
-/** An FX module, playing an FX core: by default, the effect's own. */
-template <class Effect, class Core = FxCore<Effect>>
-struct FxTrack : TrackModule<Core> {
-	FxTrack() {
-		this->configInput(Track::RETURN_L_INPUT, "Left, or mono, in place of the bus's send");
-		this->configInput(Track::RETURN_R_INPUT, "Right");
-		this->configInput(Track::VOCT_INPUT, "1V/octave pitch: a note sets the time, from F3 up");
-		this->configInput(Track::GATE_INPUT, "Gate, in place of the bus's notes");
-		this->configOutput(Track::LEFT_OUTPUT, "Left, or mono while right is unpatched, in place of the bus's mix");
-	}
-};
-
+/** An effect's plug, registered from its file. */
 template <class Effect>
-struct FxTrackWidget : TrackWidget {
-	FxTrackWidget(Track* module) : TrackWidget(module, Effect::SLUG) {}
+struct FxPlug : PlugRegistration {
+	explicit FxPlug(int opz = 0) : PlugRegistration({Effect::SLUG, FX, opz, false, Effect::configSound, makeCore<FxCore<Effect>>}) {}
 };
 
 } // namespace opz

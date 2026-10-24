@@ -89,4 +89,4 @@ struct Reverb {
 };
 
 
-Model* modelReverb = createModel<opz::FxTrack<Reverb>, opz::FxTrackWidget<Reverb>>(Reverb::SLUG);
+static opz::FxPlug<Reverb> reverbPlug(35);

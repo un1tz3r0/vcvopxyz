@@ -3,7 +3,7 @@ Organ: the OP-Z's FM organ, eight algorithms of up to four sine carriers sharing
 the registration, from drawbar organs to FM reeds and bells; TWEAK is how hard the modulator drives the carriers,
 from pure drawbars to grit and bark.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
 #include "dsp/Sine.hpp"
 
 struct Organ {
@@ -56,4 +56,4 @@ struct Organ {
 };
 
 
-Model* modelOrgan = createModel<opz::SynthTrack<Organ>, opz::SynthTrackWidget<Organ>>(Organ::SLUG);
+static opz::SynthPlug<Organ> organPlug;

@@ -13,8 +13,9 @@ op-z-sysex (1.2.45 on, tested on the device). Both agree on the offsets. It is l
 always 342844 bytes: a 4-byte header, a 568-byte block of project settings and chains, then 16 patterns of 21392
 bytes. All 16 are read and written, for the eight tracks, the two FX tracks and the master track, with the chain
 playing and the saved chains. Nobody has decoded the track settings' bytes, so those encodings are guesses, marked
-below. Everything else a file holds (mutes, the other tracks, the drum and FX tracks' plugs) is kept from the file a
-project was imported from, so a round trip changes only what a project models.
+below. Each track's plug is read and written by its OP-Z id, and the Sequencer finds it among the track's slots.
+Everything else a file holds (mutes, the other tracks, the drum tracks' kits) is kept from the file a project was
+imported from, so a round trip changes only what a project models.
 */
 namespace opz {
 
@@ -32,8 +33,10 @@ struct Project {
 		int noteLength = 4;             // an index into NOTE_LENGTHS
 		float quantize = 0.f;
 		int channels = 1;
-		bool hasSound = false;          // whether it holds an engine's dials
-		float sound[SOUND_PARAMS] = {}; // the synth track's dials in its own param order, 0 to 1 over each one's range
+		bool hasSound = false;          // whether it holds the track's dials
+		float sound[SOUND_PARAMS] = {}; // the track's dials in its own param order, 0 to 1 over each one's range
+		int plug = -1;                  // the slot whose plug it plays, or -1 to keep the one playing
+		uint32_t opzPlug = 0;           // the plug a file has the track play, by the OP-Z's id; 0 where unknown
 	};
 	/** One of the project's 16 patterns: every track's steps (each a Pattern, in Sequence.hpp's sense), settings and
 	dials, and the mute group it plays with. */
@@ -208,6 +211,7 @@ inline void readScene(const std::vector<uint8_t>& f, size_t at, Project::Scene& 
 		part.stepLength = track[6] >= 1 && track[6] <= 10 ? track[6] - 1 : 0;
 		part.quantize = track[7] / 255.f;
 		part.noteLength = std::min<int>(track[9], std::size(NOTE_LENGTHS) - 1);
+		part.opzPlug = get(f, at + TRACK_CHUNKS + 12 * ft, 4);
 		part.hasSound = t != MASTER;
 		std::fill(part.sound + LFO_DIALS, part.sound + LFO_DIALS + 4, 0x80 / 255.f); // the arp track's LFO, as a blank file's
 		for (int i = 0; part.hasSound && i < FILE_SOUNDS; i++)
@@ -274,6 +278,8 @@ inline void writeScene(std::vector<uint8_t>& f, size_t at, const Project::Scene&
 		track[6] = (uint8_t) (part.stepLength + 1);
 		track[7] = byte(part.quantize);
 		track[9] = (uint8_t) part.noteLength;
+		if (part.opzPlug)
+			put(f, at + TRACK_CHUNKS + 12 * ft, 4, part.opzPlug);
 		if (part.hasSound)
 			for (int i = 0; i < FILE_SOUNDS; i++)
 				f[at + SOUNDS + 18 * ft + i] = byte(part.sound[soundParam(t, i)]);

@@ -1,12 +1,13 @@
 #pragma once
-#include "Track.hpp"
+#include "Plugs.hpp"
 #include "NoteStack.hpp"
 
 /*
 An OP-Z synth track (TrackCore.hpp), whatever its engine: note styles, portamento and polyphony. The engine supplies
-only the sound, through two dials of its own. It is a struct with:
+only the sound, through two dials of its own, and registers its plug in its file with `static SynthPlug<Engine>`. It
+is a struct with:
 
-	static constexpr const char* SLUG;                     // module slug, and the name of its panel in res/
+	static constexpr const char* SLUG;                     // its plug's slug, once its module's
 	static void configSound(Module* m, int p1, int p2);    // configures its two sound dials
 	struct Voice {
 		// One sample, about ±1. `envelope` is the voice's amp envelope, 0 to 1, for an engine with a filter envelope.
@@ -19,17 +20,6 @@ the mix sounds exactly like filtering each voice, for a fraction of the work.
 namespace opz {
 
 enum Style { POLY, MONO, LEGATO, STYLES_LEN };
-
-/** An engine's optional SOUND_SINCE: the version its two dials took their present meaning, so older patches reset
-them rather than load a value meant for something else. */
-template <class Engine, class = void>
-struct SoundSince {
-	static constexpr const char* value = nullptr;
-};
-template <class Engine>
-struct SoundSince<Engine, std::void_t<decltype(Engine::SOUND_SINCE)>> {
-	static constexpr const char* value = Engine::SOUND_SINCE;
-};
 
 template <class Engine>
 struct SynthCore : TrackCore {
@@ -45,12 +35,6 @@ struct SynthCore : TrackCore {
 
 	Voice voices[PORT_MAX_CHANNELS];
 	NoteStack held;
-
-	void configure(Module* m, int base) {
-		Engine::configSound(m, base + P1_PARAM, base + P2_PARAM);
-		configTrack(m, base, {"Poly", "Mono", "Legato"},
-			"Mono plays the newest held note and retriggers on every change; legato slides between held notes without retriggering");
-	}
 
 	const xyz::Adsr* envelope(int voice, float* velocity) const override {
 		if (voice >= PORT_MAX_CHANNELS)
@@ -140,17 +124,10 @@ struct SynthCore : TrackCore {
 	}
 };
 
-/** A synth engine's module. */
+/** An engine's plug, registered from its file. */
 template <class Engine>
-struct SynthTrack : TrackModule<SynthCore<Engine>> {
-	void fromJson(json_t* root) override {
-		Track::fromJson(root);
-		const char* version = json_string_value(json_object_get(root, "version"));
-		if (SoundSince<Engine>::value && (!version || string::Version(version) < string::Version(SoundSince<Engine>::value))) {
-			this->paramQuantities[Track::P1_PARAM]->reset();
-			this->paramQuantities[Track::P2_PARAM]->reset();
-		}
-	}
+struct SynthPlug : PlugRegistration {
+	explicit SynthPlug(int opz = 0) : PlugRegistration({Engine::SLUG, SYNTH, opz, false, Engine::configSound, makeCore<SynthCore<Engine>>}) {}
 };
 
 } // namespace opz

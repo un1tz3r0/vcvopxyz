@@ -1,12 +1,11 @@
 /*
-Sequencer: the OP-Z's front panel, and the master of the OP-Z modules to its right. It keeps the tempo and the
-transport, and sequences the first eight tracks: four drum tracks (kick, snare, perc and sample), then bass, lead,
-arp and chord. Each track has a lane of sixteen steps of up to four notes, filled from the keys or from poly V/OCT,
-GATE and VEL inputs.
+Sequencer: the OP-Z itself. It keeps the tempo and the transport, sequences the first eight tracks: four drum tracks
+(kick, snare, perc and sample), then bass, lead, arp and chord, and plays them all. Each track has a lane of sixteen
+steps of up to four notes, filled from the keys or from poly V/OCT, GATE and VEL inputs.
 
-Each lane plays its track's engine over the bus (Bus.hpp), and the engines' sound comes back to the L and R
-outputs; a Breakout engine sends a synth track's notes out as CV. The four dials are the selected track's: whichever engine
-plays it, they turn its own parameters.
+Each track plays a plug (Host.hpp): a synth engine, the drum tracks' kit player, or an effect, picked in track mode
+from ten slots on the black keys. The tracks' sound comes out at L and R, and a breakout to the right hands a track to
+other modules (Breakout.hpp). The four dials are the selected track's.
 
 Its keys are laid out as on the OP-Z: TRACK, REC and −, PLAY and +, STOP and SHIFT, then the 16 steps along the top,
 the numbered black keys and the white keys from F to E. Rack can't hold one button down while clicking another, so
@@ -18,20 +17,22 @@ SCREEN, shows the battery while it's held.
 
 With SHIFT latched, the steps are picked for step components (blinking green), the white keys put a component on
 them, as the icons above the keys say, and the black keys set its value. While a step is held, the dials lock the
-engine's parameters on it.
+track's parameters on it.
 
-After the eight comes the master track, the OP-Z's 12th: a lane with no engine whose notes move the tracks it
+After the eight comes the master track, the OP-Z's 12th: a lane with no sound whose notes move the tracks it
 transposes, in key, for chord progressions. The key and mode come from the notes of the bass, lead, arp and chord
 tracks, and the ramps, random walks and tonality component play in them too.
 
-Then the two FX tracks, the OP-Z's 9th and 10th, which play the FX modules: the send effects every engine's FX 1 and
-FX 2 dials send to. Their steps lock the effects' dials, and their notes set the effects' time.
+Then the two FX tracks, the OP-Z's 9th and 10th, whose plugs are the send effects every track's FX 1 and FX 2 dials
+send to. Their steps lock the effects' dials, and their notes set the effects' time.
 
-A project has 16 patterns, each every track's steps, settings and dials. The lanes, the params and the engines hold
-the one playing; the others wait in scenes. A chain plays patterns one after another, each starting over from its
+A project has 16 patterns, each every track's steps, settings, plug and dials. The lanes and the params hold the one
+playing; the others wait in scenes. A chain plays patterns one after another, each starting over from its
 first step as the last ends.
 */
-#include "Track.hpp"
+#include "Host.hpp"
+#include "../ui.hpp"
+#include "KitCore.hpp"
 #include "Sequence.hpp"
 #include "Project.hpp"
 #include <mutex>
@@ -232,8 +233,10 @@ struct Sequencer : Module, Hub {
 		MASTER_PARAM, MASTER_LENGTH_PARAM, MASTER_QUANTIZE_PARAM, MASTER_STEP_COUNT_PARAM, MASTER_STEP_LENGTH_PARAM, MASTER_STYLE_PARAM,
 		// The FX tracks' settings, after those again.
 		ENUMS(FX_LENGTH_PARAM, FX_TRACKS), ENUMS(FX_QUANTIZE_PARAM, FX_TRACKS), ENUMS(FX_STEP_COUNT_PARAM, FX_TRACKS), ENUMS(FX_STEP_LENGTH_PARAM, FX_TRACKS),
-		// The FX tracks' keys, last of all.
+		// The FX tracks' keys.
 		ENUMS(FX_SELECT_PARAM, FX_TRACKS),
+		// Each track's own params, 22 a track, the master track having none: last of all.
+		ENUMS(SOUND_PARAM, (LANES - 1) * SOUND_PARAMS),
 		PARAMS_LEN
 	};
 	enum InputId { CLOCK_INPUT, RUN_INPUT, RESET_INPUT, CONT_INPUT, ADVANCE_INPUT, VOCT_INPUT, GATE_INPUT, VELOCITY_INPUT, INPUTS_LEN };
@@ -333,8 +336,12 @@ struct Sequencer : Module, Hub {
 			static const char* const values[] = {"×1", "×2", "×3", "×4", "×5", "×6", "×7", "×8", "×16", "one per ADV trigger"};
 			Sequencer* m = static_cast<Sequencer*>(module);
 			int key = paramId - KEY_PARAM, value = keyValue(key);
-			if (m->trackMode && value >= 0)
+			if (m->trackMode && value >= 0 && m->setsStepLength())
 				return string::f("Step length %s", values[value]);
+			if (m->trackMode && value >= 0) {
+				std::string name = m->slotName(m->track, value);
+				return string::f("Slot %d: ", (value + 1) % 10) + (name.empty() ? "empty" : name) + (value == m->hosted[m->track].slot ? " (playing)" : "");
+			}
 			if (m->tempoMode)
 				return value >= 0 ? string::f("Tempo digit %d", (value + 1) % 10) : "Tap tempo";
 			if (m->projectMode)
@@ -527,7 +534,8 @@ struct Sequencer : Module, Hub {
 	bool external = false;
 	long pulses = 0, lastTick = -1, lastBeat = -1;
 	float sincePulse = 0.f, pulsePeriod = 0.f; // seconds; a period of 0 is unknown
-	Upstream engines;            // the last the engines sent back
+	HostedTrack hosted[LANES];   // every track's cores, by lane; the master track has none
+	Downstream down;             // what the cores take, written afresh each frame
 	dsp::ClockDivider controlDivider, lightDivider, scaleDivider;
 	Meter inputMeters[INPUTS_LEN], outputMeters[JACKS];
 	float blink = 0.f;
@@ -613,6 +621,21 @@ struct Sequencer : Module, Hub {
 		configOutput(CONT_OUTPUT, "Continue, as it plays on");
 		configOutput(LEFT_OUTPUT, "Left, the engines' mix");
 		configOutput(RIGHT_OUTPUT, "Right, the engines' mix");
+		for (int t = 0; t < LANES; t++)
+			if (t != MASTER) {
+				configTrack(this, trackParam(t, 0), t, &hosted[t].plug);
+				hosted[t].init(t, this, trackParam(t, 0));
+				if (KitCore* k = hosted[t].kits())
+					k->kitFile = [=](int s, bool make) {
+						return system::join(make ? createPatchStorageDirectory() : getPatchStorageDirectory(), string::f("kit-%d-%d.wav", t + 1, s + 1));
+					};
+			}
+		defaultSlots();
+		for (int t = 0; t < LANES; t++)
+			if (t != MASTER) {
+				hosted[t].settle();
+				resetSoundDials(t);
+			}
 		memory.add(Note());
 		controlDivider.setDivision(16);
 		lightDivider.setDivision(64);
@@ -621,6 +644,60 @@ struct Sequencer : Module, Hub {
 
 	Lane& lane() {
 		return lanes[track];
+	}
+
+	/** One of a track's 22 params among the Sequencer's. The master track has none. */
+	static int trackParam(int t, int p) {
+		return SOUND_PARAM + (t < MASTER ? t : t - 1) * SOUND_PARAMS + p;
+	}
+
+	/** The plugs on the black keys as a new Sequencer has them: the OP-Z's own engines first, as it starts its tracks,
+	then the rest; the effects; and each drum track's OP-Z kits, then its built-in one. */
+	void defaultSlots() {
+		static const char* const synths[SYNTH_TRACKS][HostedTrack::SLOTS] = {
+			{"Saw", "Uranus", "Electric", "Digital", "Volt", "Bow", "Analog", "Organ", "EP", "Cluster"},
+			{"Volt", "Digital", "Cluster", "Saw", "Electric", "Bow", "Analog", "Organ", "EP", "Uranus"},
+			{"Saw", "Digital", "Cluster", "Volt", "Electric", "Bow", "Analog", "Organ", "EP", "Uranus"},
+			{"Shade", "Saw", "Cluster", "Digital", "Volt", "Bow", "Analog", "Organ", "EP", "Electric"},
+		};
+		static const char* const effects[] = {"Delay", "Reverb", "Rymd", "Chorus", "Crush", "Dist"};
+		for (int t = 0; t < LANES; t++) {
+			HostedTrack& h = hosted[t];
+			if (t == MASTER)
+				continue;
+			for (int s = 0; s < HostedTrack::SLOTS; s++)
+				h.slots[s] = h.kind == SYNTH ? plugIndex(SYNTH, synths[t - DRUM_TRACKS][s])
+					: h.kind == FX && s < (int) std::size(effects) ? plugIndex(FX, effects[s]) : -1;
+			h.slot = t == FX1 + 1 ? 1 : 0;
+			if (KitCore* k = h.kits())
+				k->fillDefaults(t);
+		}
+	}
+
+	/** A track's sound dials where its plug starts them. */
+	void resetSoundDials(int t) {
+		if (const Plug* p = hosted[t].plug)
+			for (int d = 0; d < 2; d++)
+				params[trackParam(t, TrackIds::P1_PARAM + d)].setValue(p->defaultShare(d));
+	}
+
+	/** A track's param at a share of its travel, as scenes and the row record keep them. */
+	void setShare(int t, int i, float share) {
+		ParamQuantity* q = paramQuantities[trackParam(t, i)];
+		float v = math::rescale(clamp(share, 0.f, 1.f), 0.f, 1.f, q->getMinValue(), q->getMaxValue());
+		params[trackParam(t, i)].setValue(q->snapEnabled ? std::round(v) : v);
+	}
+
+	/** TRACK and a black key: the track plays the plug in that slot, its sound dials where the plug starts them. An
+	empty slot does nothing. A drum track's slots are kits, which leave its dials as they are. */
+	void pickSlot(int t, int s) {
+		HostedTrack& h = hosted[t];
+		if (t == MASTER || s == h.slot || !h.filled(s))
+			return;
+		h.slot = s;
+		if (h.kind != DRUM)
+			for (int d = 0; d < 2; d++)
+				params[trackParam(t, TrackIds::P1_PARAM + d)].setValue(plugs(h.kind)[h.plugIn(s)]->defaultShare(d));
 	}
 
 	/** The keys run from F3 to E5, an octave either side of middle C, before − and + move them. */
@@ -665,18 +742,44 @@ struct Sequencer : Module, Hub {
 		return external && pulsePeriod > 0.f ? 60.f / (pulsePeriod * ppqn) : params[TEMPO_PARAM].getValue();
 	}
 
-	/** The core of the engine playing a track, found as the bus finds it; for the UI thread. None plays the master
-	track. */
+	/** The core playing a track, for either thread; none plays the master track. Every core of a track plays by the
+	same params, so their quantities are the same whichever it is. */
 	TrackCore* engine(int t) {
-		int taken[3] = {};
-		for (Module* m = rightExpander.module; onBus(m); m = m->rightExpander.module)
-			if (Track* e = dynamic_cast<Track*>(m)) {
-				TrackCore& c = e->getCore();
-				int& k = taken[c.kind()];
-				if (k < c.tracks() && c.firstTrack() + k++ == t)
-					return &c;
-			}
-		return nullptr;
+		return t == MASTER ? nullptr : hosted[t].shown.load();
+	}
+
+	TrackCore* trackCore(int t) override {
+		return t >= 0 && t < LANES ? engine(t) : nullptr;
+	}
+
+	/** What the track plays, for a Screen: its plug, or a drum track's kit. */
+	std::string plugName(int t) override {
+		if (t < 0 || t >= LANES || t == MASTER)
+			return "";
+		HostedTrack& h = hosted[t];
+		if (h.shown == h.breakoutCore())
+			return "breakout";
+		if (KitCore* k = h.kits()) {
+			std::string name = k->kitName(h.slot, false);
+			return name.empty() ? "no kit" : name;
+		}
+		const Plug* p = h.plug;
+		return p ? p->slug : "";
+	}
+
+	int selectedTrack() override {
+		return track;
+	}
+
+	/** What a track's slot holds, for menus and labels on the UI thread: a plug or a kit, or nothing. */
+	std::string slotName(int t, int s) {
+		if (t == MASTER)
+			return "";
+		HostedTrack& h = hosted[t];
+		if (KitCore* k = h.kits())
+			return k->kitName(s);
+		int p = h.plugIn(s);
+		return p >= 0 ? plugs(h.kind)[p]->slug : "";
 	}
 
 	/** The engine dial `d` locks on the held step: the selected track's, on its page. */
@@ -829,18 +932,18 @@ struct Sequencer : Module, Hub {
 			part.noteLength = (int) params[laneParam(LENGTH_PARAM, t)].getValue();
 			part.quantize = params[laneParam(QUANTIZE_PARAM, t)].getValue();
 			part.channels = lanes[t].settings.channels;
-			TrackCore* e = engine(t);
-			part.hasSound = e;
-			for (int i = 0; e && i < SOUND_PARAMS; i++)
-				part.sound[i] = e->paramQuantities[i]->getScaledValue();
+			part.hasSound = t != MASTER;
+			part.plug = t != MASTER ? (int) hosted[t].slot : -1;
+			for (int i = 0; part.hasSound && i < SOUND_PARAMS; i++)
+				part.sound[i] = paramQuantities[trackParam(t, i)]->getScaledValue();
 		}
 		scene.muteGroup = muteGroup;
 		scene.used = true;
 	}
 
-	/** A scene into the pattern playing, leaving the notes sounding to ring. Engines take the dials it saved; a track
-	saved without an engine leaves its engine's dials as they are. A scene's values are always in range, since
-	projectFromJson and opzfile::read clamp what they read. */
+	/** A scene into the pattern playing, leaving the notes sounding to ring. Tracks take the plugs and dials it
+	saved; a track saved without them keeps its own, as does one whose slot is now empty. A scene's values are always
+	in range, since projectFromJson and opzfile::read clamp what they read. */
 	void recallScene(const Project::Scene& scene) {
 		for (int t = 0; t < LANES; t++) {
 			const Project::Part& part = scene.parts[t];
@@ -850,12 +953,12 @@ struct Sequencer : Module, Hub {
 			params[laneParam(STEP_LENGTH_PARAM, t)].setValue(part.stepLength);
 			params[laneParam(LENGTH_PARAM, t)].setValue(part.noteLength);
 			params[laneParam(QUANTIZE_PARAM, t)].setValue(part.quantize);
-			TrackCore* e = engine(t);
-			for (int i = 0; e && part.hasSound && i < SOUND_PARAMS; i++) {
-				ParamQuantity* q = e->paramQuantities[i];
-				float v = math::rescale(part.sound[i], 0.f, 1.f, q->getMinValue(), q->getMaxValue());
-				e->params[i].setValue(q->snapEnabled ? std::round(v) : v);
-			}
+			if (t == MASTER)
+				continue;
+			if (part.plug >= 0 && hosted[t].filled(part.plug))
+				hosted[t].slot = part.plug;
+			for (int i = 0; part.hasSound && i < SOUND_PARAMS; i++)
+				setShare(t, i, part.sound[i]);
 		}
 		muteGroup = scene.muteGroup;
 		readSettings();
@@ -1210,8 +1313,18 @@ struct Sequencer : Module, Hub {
 		}
 		else if (!trackMode)
 			noteDown(key, keyPitch(key), (keyPitch(key) - 60) / 12.f, 100);
-		else if (keyValue(key) >= 0)
+		else if (keyValue(key) < 0)
+			return;
+		else if (setsStepLength())
 			params[laneParam(STEP_LENGTH_PARAM, track)].setValue(keyValue(key));
+		else
+			pickSlot(track, keyValue(key));
+	}
+
+	/** In track mode the black keys pick a plug, or with SHIFT latched, set the step length; on the master track,
+	which has no plugs, they always set it. */
+	bool setsStepLength() const {
+		return shifted || track == MASTER;
 	}
 
 	/** The tracks' settings from their params. */
@@ -1228,12 +1341,13 @@ struct Sequencer : Module, Hub {
 
 	void handleControls(float dt) {
 		readSettings();
-		// The arp track's engine sends its arp dials back; without one, the arp is off.
+		// The arp track's arp dials, as turned.
 		Arp& arp = lanes[ARP_TRACK].settings.arp;
-		arp.speed = clamp((int) engines.arp[0], 0, ARP_SPEEDS);
-		arp.pattern = clamp((int) engines.arp[1], 0, ARP_PATTERNS - 1);
-		arp.style = clamp((int) engines.arp[2], 0, ARP_STYLES - 1);
-		arp.range = clamp(engines.arp[3], 0.f, 1.f);
+		auto arpDial = [&](int i) { return params[trackParam(ARP_TRACK, TrackIds::ARP_SPEED_PARAM + i)].getValue(); };
+		arp.speed = clamp((int) arpDial(0), 0, ARP_SPEEDS);
+		arp.pattern = clamp((int) arpDial(1), 0, ARP_PATTERNS - 1);
+		arp.style = clamp((int) arpDial(2), 0, ARP_STYLES - 1);
+		arp.range = clamp(arpDial(3), 0.f, 1.f);
 		// Latch plays the master track's notes on the steps, as the OP-Z does.
 		if (params[MASTER_STYLE_PARAM].getValue() == LATCH)
 			lanes[MASTER].settings.quantize = 1.f;
@@ -1642,51 +1756,63 @@ struct Sequencer : Module, Hub {
 		}
 	}
 
-	/** Each lane to the bus for its engine, then the mix and the transport to the jacks. */
-	void writeOutputs(float dt, int64_t frame) {
-		Downstream* bus = onBus(rightExpander.module) ? &downstream(frame) : nullptr;
+	/** Each lane to its track's core, then the cores: the drum and synth tracks, the FX tracks with this frame's
+	sends, then the mix and the transport to the jacks. */
+	void writeOutputs(const ProcessArgs& args) {
+		float dt = args.sampleTime;
 		for (int t = 0; t < LANES; t++) {
 			if (t == MASTER)
 				continue;
 			Lane& l = lanes[t];
 			int n = clamp(l.settings.channels, 1, CHANNELS);
-			if (bus) {
-				Downstream::Lane& out = bus->lanes[t];
-				out.channels = n;
-				// The FX tracks have no group level: muted, their effect is.
-				float group = t >= FX1 ? 1.f : params[LEVEL_PARAM + (t < DRUM_TRACKS ? DRUM_LEVEL : SYNTH_LEVEL)].getValue();
-				out.level = audioMuted(t) || (t >= FX1 && muted(t)) ? 0.f : group * group;
-				// The playhead's step locks the engine's dials; while stopped, a held step does, to hear it.
-				int s = l.player.running ? l.player.locking() : t == track && !modal() ? held : -1;
-				const Step* step = s >= 0 ? &l.pattern.steps[s] : nullptr;
-				out.locks = step ? step->locks : 0;
-				if (step)
-					std::copy(std::begin(step->lockValues), std::end(step->lockValues), out.lockValues);
-				const Player::Channel* voices = l.player.voices();
-				bool mute = muted(t);
-				for (int c = 0; c < n; c++) {
-					const Player::Channel& channel = voices[c];
-					out.pitch[c] = channel.pitch;
-					out.velocity[c] = channel.velocity;
-					out.gate[c] = channel.gate && !channel.retrigger && !mute;
-				}
-				for (int k = 0; k < SWEEP_TARGETS; k++)
-					out.sweep[k] = l.player.sweep(k);
+			Downstream::Lane& out = down.lanes[t];
+			out.channels = n;
+			// The FX tracks have no group level: muted, their effect is.
+			float group = t >= FX1 ? 1.f : params[LEVEL_PARAM + (t < DRUM_TRACKS ? DRUM_LEVEL : SYNTH_LEVEL)].getValue();
+			out.level = audioMuted(t) || (t >= FX1 && muted(t)) ? 0.f : group * group;
+			// The playhead's step locks the track's dials; while stopped, a held step does, to hear it.
+			int s = l.player.running ? l.player.locking() : t == track && !modal() ? held : -1;
+			const Step* step = s >= 0 ? &l.pattern.steps[s] : nullptr;
+			out.locks = step ? step->locks : 0;
+			if (step)
+				std::copy(std::begin(step->lockValues), std::end(step->lockValues), out.lockValues);
+			const Player::Channel* voices = l.player.voices();
+			bool mute = muted(t);
+			for (int c = 0; c < n; c++) {
+				const Player::Channel& channel = voices[c];
+				out.pitch[c] = channel.pitch;
+				out.velocity[c] = channel.velocity;
+				out.gate[c] = channel.gate && !channel.retrigger && !mute;
 			}
+			for (int k = 0; k < SWEEP_TARGETS; k++)
+				out.sweep[k] = l.player.sweep(k);
 			for (int c = 0; c < n; c++)
 				l.player.channels[c].retrigger = l.player.arped[c].retrigger = false;
 		}
-		if (bus) {
-			bus->secondsPerBeat = 60.f / bpm();
-			bus->selected = track;
-			bus->trackMode = trackMode;
-			bus->page = page;
-			bus->pageRequests = pageRequests;
-			std::copy(std::begin(engines.send), std::end(engines.send), bus->send);
-		}
-		engines = bus ? gather(frame, track) : Upstream();
+		down.secondsPerBeat = 60.f / bpm();
+		down.selected = track;
+		down.trackMode = trackMode;
+		down.page = page;
+		down.pageRequests = pageRequests;
+
+		float left = 0.f, right = 0.f, send[FX_TRACKS] = {};
+		auto playTrack = [&](int t) {
+			HostedTrack& h = hosted[t];
+			h.play(args, &down, lastJacksIn(t, args.frame));
+			left += h.sound.left;
+			right += h.sound.right;
+			for (int k = 0; k < FX_TRACKS; k++)
+				send[k] += h.sound.send[k];
+			if (h.bound)
+				h.giveJacks(jacksOut(t, args.frame));
+		};
+		for (int t = 0; t < TRACKS; t++)
+			playTrack(t);
+		std::copy(std::begin(send), std::end(send), down.send);
+		for (int t = FX1; t < LANES; t++)
+			playTrack(t);
+
 		// The mix: punch, the metronome while playing, then the master level.
-		float left = engines.left, right = engines.right;
 		punch.process(left, right, params[LEVEL_PARAM + PUNCH].getValue(), dt);
 		float level = params[METRONOME_LEVEL_PARAM].getValue(), click = metronome.process(dt) * 5.f * level * level;
 		float master = params[LEVEL_PARAM + MASTER_LEVEL].getValue();
@@ -1706,7 +1832,7 @@ struct Sequencer : Module, Hub {
 		handleInputs();
 		handleTransport();
 		runClock(args.sampleTime);
-		writeOutputs(args.sampleTime, args.frame);
+		writeOutputs(args);
 		if (lightDivider.process())
 			updateLights(args.sampleTime * lightDivider.getDivision());
 	}
@@ -1746,7 +1872,7 @@ struct Sequencer : Module, Hub {
 		std::pair<Module*, int> target = dialTarget(d);
 		if (target.first == this)
 			return paramQuantities[target.second]->getScaledValue();
-		return projectMode ? -1.f : engines.dials[d];
+		return projectMode || track == MASTER ? -1.f : hosted[track].active->dialValues[d];
 	}
 
 	void updateLights(float dt) {
@@ -1854,10 +1980,17 @@ struct Sequencer : Module, Hub {
 		};
 		NVGcolor keyColor = NOTE_COLOR;
 		const Player::Channel* voices = l.player.voices();
-		if (trackMode) {
+		if (trackMode && setsStepLength()) {
 			keyColor = led::BLUE;
 			for (int v = 0; v < 10; v++)
 				level[valueKey(v)] = v == (int) params[laneParam(STEP_LENGTH_PARAM, track)].getValue() ? 1.f : 0.15f;
+		}
+		else if (trackMode) {
+			// The track's slots: bright for the one playing, dim for the others with something in them.
+			keyColor = led::WHITE;
+			const HostedTrack& h = hosted[track];
+			for (int v = 0; v < HostedTrack::SLOTS; v++)
+				level[valueKey(v)] = v == h.slot ? 1.f : h.filled(v) ? 0.2f : 0.f;
 		}
 		else if (tempoMode) {
 			keyColor = led::WHITE;
@@ -1907,8 +2040,8 @@ struct Sequencer : Module, Hub {
 				if (voices[c].gate)
 					light(60 + (int) std::round(voices[c].pitch * 12.f), 0.4f);
 			// On an FX track, the key that set its effect's time.
-			if (track >= FX1 && engines.timeKey[track - FX1] >= 0)
-				light(FX_LOWEST + engines.timeKey[track - FX1], 0.3f);
+			if (track >= FX1 && hosted[track].active->timeKey >= 0)
+				light(FX_LOWEST + hosted[track].active->timeKey, 0.3f);
 			for (const Live& n : live)
 				if (n.on && n.lane == track)
 					light(n.pitch, 1.f);
@@ -1929,7 +2062,7 @@ struct Sequencer : Module, Hub {
 			else
 				setKeyLight(key, t == track ? led::WHITE : NOTE_COLOR, t == track ? 1.f : busy(t) ? 0.8f : 0.f);
 		}
-		int shown = modal() || track == MASTER ? -1 : engines.page[track];
+		int shown = modal() || track == MASTER ? -1 : hosted[track].active->page;
 		for (int p = 0; p < PAGES; p++)
 			setKeyLight(PAGE_PARAM + p, PAGE_COLORS[p], shown < 0 ? 0.f : p == shown ? 1.f : 0.12f);
 		for (int d = 0; d < 4; d++) {
@@ -1991,7 +2124,16 @@ struct Sequencer : Module, Hub {
 		return tempo < 0.f ? "---" : string::f("%3d", std::min((int) std::round(tempo), 999));
 	}
 
+	/** Every track back to its default slots, playing straight away, before the params reset: the sound dials reset to
+	where the plugs now playing start them. */
 	void onReset(const ResetEvent& e) override {
+		defaultSlots();
+		for (int t = 0; t < LANES; t++)
+			if (t != MASTER) {
+				hosted[t].settle();
+				for (std::unique_ptr<TrackCore>& c : hosted[t].cores)
+					c->resetSettings();
+			}
 		Module::onReset(e);
 		for (int t = 0; t < LANES; t++) {
 			Lane& l = lanes[t];
@@ -2163,6 +2305,8 @@ struct Sequencer : Module, Hub {
 			json_object_set_new(t, "components", componentsToJson(part.pattern));
 			json_object_set_new(t, "locks", locksToJson(part.pattern));
 			json_object_set_new(t, "settings", json_pack("[iiifi]", part.stepCount, part.stepLength, part.noteLength, part.quantize, part.channels));
+			if (part.plug >= 0)
+				json_object_set_new(t, "plug", json_integer(part.plug));
 			if (part.hasSound) {
 				json_t* sound = json_array();
 				for (float v : part.sound)
@@ -2201,6 +2345,8 @@ struct Sequencer : Module, Hub {
 			part.noteLength = clamp(part.noteLength, 0, (int) std::size(NOTE_LENGTHS) - 1);
 			part.quantize = clamp(part.quantize, 0.f, 1.f);
 			part.channels = clamp(part.channels, 1, CHANNELS);
+			if (json_t* plug = json_object_get(t, "plug"); plug && i != MASTER)
+				part.plug = clamp((int) json_integer_value(plug), 0, HostedTrack::SLOTS - 1);
 			if (json_t* sound = json_object_get(t, "sound"); sound && i != MASTER) {
 				part.hasSound = true;
 				for (int k = 0; k < SOUND_PARAMS; k++)
@@ -2316,17 +2462,117 @@ struct Sequencer : Module, Hub {
 			projects[i] = projectFromJson(json_array_get(a, i));
 	}
 
-	/** The engines playing its tracks, by track, null where none does: what a version without engine modules sets each
-	track's sound by. For the UI thread. */
-	json_t* rowToJson() {
-		json_t* row = json_array();
-		for (int t = 0; t < LANES; t++)
-			json_array_append_new(row, json_null());
-		for (Module* m = rightExpander.module; onBus(m); m = m->rightExpander.module)
-			if (Track* e = dynamic_cast<Track*>(m))
-				if (int t = e->getCore().busTrack; e->hub == this && t >= 0)
-					json_array_set_new(row, t, e->rowJson());
-		return row;
+	/** A project's plugs as an OP-Z file keeps them, by id: each pattern's plug on the synth and FX tracks, found in
+	or written from their slots; a plug the OP-Z has no id for, or one not in a slot, leaves the pattern as it is. A
+	drum track's kits stay as the file has them. Under the slots' lock. */
+	void plugsFromOpz(Project& p) {
+		for (Project::Scene& scene : p.scenes)
+			for (int t = DRUM_TRACKS; t < LANES; t++) {
+				Project::Part& part = scene.parts[t];
+				HostedTrack& h = hosted[t];
+				for (int s = 0; t != MASTER && part.opzPlug && s < HostedTrack::SLOTS; s++)
+					if (h.plugIn(s) >= 0 && plugs(h.kind)[h.plugIn(s)]->opz == (int) part.opzPlug) {
+						part.plug = s;
+						break;
+					}
+			}
+	}
+
+	void plugsToOpz(Project& p) {
+		for (Project::Scene& scene : p.scenes)
+			for (int t = DRUM_TRACKS; t < LANES; t++) {
+				Project::Part& part = scene.parts[t];
+				int plug = t != MASTER && part.plug >= 0 ? hosted[t].plugIn(part.plug) : -1;
+				if (plug >= 0 && plugs(hosted[t].kind)[plug]->opz)
+					part.opzPlug = plugs(hosted[t].kind)[plug]->opz;
+			}
+	}
+
+	/** Each track's plugs: its slots, by slug (a drum track's kits are its kit player's), the slot playing, and every
+	core's settings, by its plug's slug. Null for the master track. */
+	json_t* plugsToJson() {
+		json_t* a = json_array();
+		for (int t = 0; t < LANES; t++) {
+			if (t == MASTER) {
+				json_array_append_new(a, json_null());
+				continue;
+			}
+			HostedTrack& h = hosted[t];
+			json_t* j = json_object();
+			if (h.kind != DRUM) {
+				json_t* slots = json_array();
+				for (int s = 0; s < HostedTrack::SLOTS; s++) {
+					int p = h.slots[s];
+					json_array_append_new(slots, p >= 0 ? json_string(plugs(h.kind)[p]->slug.c_str()) : json_null());
+				}
+				json_object_set_new(j, "slots", slots);
+			}
+			json_object_set_new(j, "slot", json_integer(h.slot));
+			json_t* data = json_object();
+			for (size_t c = 0; c < h.cores.size(); c++) {
+				json_t* d = json_object();
+				h.cores[c]->dataToJson(d);
+				json_object_set_new(data, h.plugOf[c]->slug.c_str(), d);
+			}
+			json_object_set_new(j, "data", data);
+			json_array_append_new(a, j);
+		}
+		return a;
+	}
+
+	/** A slug no plug has any more leaves its slot empty. */
+	void plugsFromJson(json_t* a) {
+		for (int t = 0; t < LANES; t++) {
+			json_t* j = json_array_get(a, t);
+			HostedTrack& h = hosted[t];
+			if (t == MASTER || !json_is_object(j))
+				continue;
+			if (json_t* slots = json_object_get(j, "slots"); slots && h.kind != DRUM)
+				for (int s = 0; s < HostedTrack::SLOTS; s++) {
+					const char* slug = json_string_value(json_array_get(slots, s));
+					h.slots[s] = slug ? plugIndex(h.kind, slug) : -1;
+				}
+			json_t* data = json_object_get(j, "data");
+			for (size_t c = 0; c < h.cores.size(); c++)
+				if (json_t* d = json_object_get(data, h.plugOf[c]->slug.c_str()))
+					h.cores[c]->dataFromJson(d);
+			h.slot = clamp((int) json_integer_value(json_object_get(j, "slot")), 0, HostedTrack::SLOTS - 1);
+			h.settle();
+		}
+	}
+
+	/** Before 2.1.0 a module beside the Sequencer played each track, and from 2.0.25 on the Sequencer recorded which in
+	its row, with the module's dials and settings: each track now plays that plug, from its slot, or from the last
+	slot where it has none. A track whose module was a breakout keeps its plug, and its breakout takes it over again.
+	A drum track's kit from a file is lost, its samples having been the module's. */
+	void rowFromJson(json_t* row) {
+		for (int t = 0; t < LANES; t++) {
+			json_t* j = json_array_get(row, t);
+			const char* slug = json_string_value(json_object_get(j, "slug"));
+			HostedTrack& h = hosted[t];
+			if (t == MASTER || !slug)
+				continue;
+			json_t* data = json_object_get(j, "data");
+			int p = plugIndex(h.kind, slug);
+			TrackCore* core = p >= 0 ? h.cores[p].get() : slug == breakoutPlug(h.kind)->slug ? h.breakoutCore() : nullptr;
+			if (KitCore* k = h.kits(); k && p >= 0) {
+				if (int s = k->oldKit(data, t); s >= 0)
+					h.slot = s;
+			}
+			else if (p >= 0) {
+				int s = 0;
+				while (s < HostedTrack::SLOTS - 1 && h.slots[s] != p)
+					s++;
+				h.slots[s] = p;
+				h.slot = s;
+			}
+			if (core && data)
+				core->dataFromJson(data);
+			json_t* sound = json_object_get(j, "sound");
+			for (int i = 0; sound && i < SOUND_PARAMS; i++)
+				setShare(t, i, (float) json_number_value(json_array_get(sound, i)));
+			h.settle();
+		}
 	}
 
 	json_t* dataToJson() override {
@@ -2353,7 +2599,7 @@ struct Sequencer : Module, Hub {
 		json_object_set_new(root, "mutes", masksToJson(mutes));
 		json_object_set_new(root, "audioMutes", masksToJson(audioMutes));
 		json_object_set_new(root, "muteGroup", json_integer(muteGroup));
-		json_object_set_new(root, "row", rowToJson());
+		json_object_set_new(root, "plugs", plugsToJson());
 		{
 			std::lock_guard<std::mutex> lock(projectsMutex);
 			scenesToJson(root, scenes, pattern, chain, chains);
@@ -2391,7 +2637,7 @@ struct Sequencer : Module, Hub {
 		if (json_t* j = json_object_get(root, "octave"))
 			octave = clamp((int) json_integer_value(j), -3, 3);
 		if (json_t* j = json_object_get(root, "ppqn"))
-			if (std::count(std::begin(Track::PPQN), std::end(Track::PPQN), json_integer_value(j)))
+			if (std::count(std::begin(TrackIds::PPQN), std::end(TrackIds::PPQN), json_integer_value(j)))
 				ppqn = (int) json_integer_value(j);
 		if (json_t* j = json_object_get(root, "longPressHolds"))
 			longPressHolds = json_boolean_value(j);
@@ -2407,6 +2653,10 @@ struct Sequencer : Module, Hub {
 		masksFromJson(json_object_get(root, "audioMutes"), audioMutes);
 		if (json_t* j = json_object_get(root, "muteGroup"))
 			muteGroup = clamp((int) json_integer_value(j), 0, MUTE_GROUPS - 1);
+		if (json_t* j = json_object_get(root, "plugs"))
+			plugsFromJson(j);
+		else if (json_t* j = json_object_get(root, "row"))
+			rowFromJson(j);
 		// The pattern playing is in the tracks and the params; the rest, and the chains, are here.
 		std::lock_guard<std::mutex> lock(projectsMutex);
 		scenesFromJson(root, scenes, &pattern, &chain, chains);
@@ -2428,6 +2678,8 @@ struct Sequencer : Module, Hub {
 	/** The .opz files the slots were imported from live in the patch's storage, so an export keeps what they hold
 	beyond what a slot models. */
 	void onSave(const SaveEvent& e) override {
+		for (int t = 0; t < DRUM_TRACKS; t++)
+			hosted[t].kits()->saveKits();
 		std::lock_guard<std::mutex> lock(projectsMutex);
 		bool any = std::any_of(std::begin(projects), std::end(projects), [](const Project& p) { return !p.opz.empty(); });
 		std::string dir = any ? createPatchStorageDirectory() : getPatchStorageDirectory();
@@ -2440,7 +2692,10 @@ struct Sequencer : Module, Hub {
 		}
 	}
 
+	/** Drum tracks' kits from files keep their samples there too. */
 	void onAdd(const AddEvent& e) override {
+		for (int t = 0; t < DRUM_TRACKS; t++)
+			hosted[t].kits()->readSavedKits();
 		std::lock_guard<std::mutex> lock(projectsMutex);
 		std::string dir = getPatchStorageDirectory();
 		for (int i = 0; i < PROJECTS; i++) {
@@ -2452,6 +2707,11 @@ struct Sequencer : Module, Hub {
 
 	void onExpanderChange(const ExpanderChangeEvent& e) override {
 		busMoved();
+	}
+
+	void onSampleRateChange(const SampleRateChangeEvent& e) override {
+		for (int t = 0; t < LANES; t++)
+			hosted[t].setSampleRate(e.sampleRate);
 	}
 };
 
@@ -2720,8 +2980,11 @@ inline void exportOpz(Sequencer* m) {
 	{
 		std::lock_guard<std::mutex> lock(m->projectsMutex);
 		for (int i = 0; i < PROJECTS; i++)
-			if (m->projects[i].used)
-				files[i] = opzfile::write(m->projects[i]);
+			if (m->projects[i].used) {
+				auto p = std::make_unique<Project>(m->projects[i]);
+				m->plugsToOpz(*p);
+				files[i] = opzfile::write(*p);
+			}
 	}
 	for (int i = 0; i < PROJECTS; i++)
 		if (!files[i].empty())
@@ -2748,6 +3011,7 @@ inline void importOpzFolder(Sequencer* m) {
 		Project p;
 		if (system::isFile(path) && readOpz(path, p)) {
 			std::lock_guard<std::mutex> lock(m->projectsMutex);
+			m->plugsFromOpz(p);
 			m->projects[i] = p;
 			found++;
 		}
@@ -2764,6 +3028,7 @@ inline void importOpz(Sequencer* m) {
 	if (path.empty() || !readOpz(path, p))
 		return;
 	std::lock_guard<std::mutex> lock(m->projectsMutex);
+	m->plugsFromOpz(p);
 	m->projects[m->project] = p;
 	m->reload = m->project;
 }
@@ -2895,20 +3160,73 @@ struct SequencerWidget : ModuleWidget {
 		}
 	}
 
+	/** A track's ten slots, each a submenu to put a plug or a kit in it. The slot playing can't be emptied. */
+	static void appendSlotsMenu(Menu* menu, Sequencer* module, int t) {
+		HostedTrack& h = module->hosted[t];
+		menu->addChild(createMenuLabel("TRACK and a black key plays one"));
+		for (int s = 0; s < HostedTrack::SLOTS; s++) {
+			std::string name = module->slotName(t, s);
+			std::string label = string::f("Slot %d: ", (s + 1) % 10) + (name.empty() ? "empty" : name);
+			menu->addChild(createSubmenuItem(label, s == h.slot ? "playing" : "", [=, &h](Menu* menu) {
+				if (KitCore* k = h.kits())
+					return appendKitMenu(menu, k, s, s == h.slot);
+				const std::vector<const Plug*>& list = plugs(h.kind);
+				for (int p = 0; p < (int) list.size(); p++)
+					menu->addChild(createCheckMenuItem(list[p]->slug, "", [=, &h]() { return h.slots[s] == p; }, [=, &h]() { h.slots[s] = p; }));
+				menu->addChild(new MenuSeparator);
+				menu->addChild(createMenuItem("Empty", "", [=, &h]() { h.slots[s] = -1; }, s == h.slot));
+			}));
+		}
+	}
+
+	/** A drum track's slot: an OP-Z kit, a built-in one, or one from a file, and saving it as a kit file. */
+	static void appendKitMenu(Menu* menu, KitCore* k, int s, bool playing) {
+		menu->addChild(createSubmenuItem("OP-Z kit", "", [=](Menu* sub) {
+			const std::vector<FactoryKit>& kits = factoryKits();
+			if (kits.empty())
+				sub->addChild(createMenuLabel("None in the plugin's res/kits"));
+			for (int i = 0; i < (int) kits.size(); i++) {
+				if (i > 0 && kits[i].track != kits[i - 1].track)
+					sub->addChild(new MenuSeparator);
+				sub->addChild(createCheckMenuItem(kits[i].name, "", [=]() { return !k->filedKit(s) && k->slots[s].factory == i; },
+					[=]() {
+						if (!k->setFactory(s, i))
+							osdialog_message(OSDIALOG_WARNING, OSDIALOG_OK, ("Couldn't read the kit " + kits[i].id + " in the plugin's res/kits.").c_str());
+					}));
+			}
+		}));
+		menu->addChild(createSubmenuItem("Built-in kit", "", [=](Menu* sub) {
+			static const char* const names[DRUM_TRACKS] = {"Kick", "Snare", "Perc", "Sample"};
+			for (int i = 0; i < DRUM_TRACKS; i++)
+				sub->addChild(createCheckMenuItem(names[i], "", [=]() { return !k->filedKit(s) && k->slots[s].builtin == i; },
+					[=]() { k->setBuiltin(s, i); }));
+		}));
+		menu->addChild(createMenuItem("Load a kit file…", "OP-1, OP-Z, AIFF or WAV", [=]() { loadKit(k, s, false); }));
+		menu->addChild(createMenuItem("Load a folder of sounds…", "one per key", [=]() { loadKit(k, s, true); }));
+		menu->addChild(createMenuItem("Save as a kit file…", "OP-1 and OP-Z", [=]() { saveKit(k, s); }, !k->filled(s)));
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuItem("Empty", "", [=]() { k->clearSlot(s); }, playing));
+	}
+
 	void appendContextMenu(Menu* menu) override {
 		Sequencer* module = getModule<Sequencer>();
 		std::vector<std::string> ppqn, channels;
-		for (int n : Track::PPQN)
+		for (int n : TrackIds::PPQN)
 			ppqn.push_back(string::f("%d PPQN", n));
 		for (int n = 1; n <= CHANNELS; n++)
 			channels.push_back(string::f("%d", n));
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createIndexSubmenuItem("Clock pulses per beat", ppqn,
-			[=]() { return std::find(std::begin(Track::PPQN), std::end(Track::PPQN), module->ppqn) - std::begin(Track::PPQN); },
-			[=](size_t i) { module->ppqn = Track::PPQN[i]; }));
+			[=]() { return std::find(std::begin(TrackIds::PPQN), std::end(TrackIds::PPQN), module->ppqn) - std::begin(TrackIds::PPQN); },
+			[=](size_t i) { module->ppqn = TrackIds::PPQN[i]; }));
 		menu->addChild(createIndexSubmenuItem(trackName(module->track) + ": polyphony", channels,
 			[=]() { return module->lane().settings.channels - 1; },
 			[=](size_t i) { module->lane().settings.channels = i + 1; }));
+		menu->addChild(createSubmenuItem("Plug slots", "", [=](Menu* menu) {
+			for (int t = 0; t < LANES; t++)
+				if (t != MASTER)
+					menu->addChild(createSubmenuItem(trackName(t), "", [=](Menu* menu) { appendSlotsMenu(menu, module, t); }));
+		}));
 		menu->addChild(createBoolPtrMenuItem("Long-press toggles hold", "", &module->longPressHolds));
 		menu->addChild(createBoolPtrMenuItem(RACK_MOD_CTRL_NAME "-click toggles hold", "", &module->ctrlClickHolds));
 		menu->addChild(createSubmenuItem("Projects", "", [=](Menu* menu) {

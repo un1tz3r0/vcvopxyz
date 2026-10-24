@@ -64,4 +64,4 @@ struct Dist {
 };
 
 
-Model* modelDist = createModel<opz::FxTrack<Dist>, opz::FxTrackWidget<Dist>>(Dist::SLUG);
+static opz::FxPlug<Dist> distPlug(99);

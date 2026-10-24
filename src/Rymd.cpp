@@ -70,4 +70,4 @@ struct Rymd {
 };
 
 
-Model* modelRymd = createModel<opz::FxTrack<Rymd>, opz::FxTrackWidget<Rymd>>(Rymd::SLUG);
+static opz::FxPlug<Rymd> rymdPlug;

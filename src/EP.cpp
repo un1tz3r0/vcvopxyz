@@ -3,7 +3,7 @@ EP: the OP-Z's FM electric piano, eight algorithms of a sine carrier and its mod
 over the top. The amp envelope drives the modulation, so a note strikes bright and mellows as it fades. ALGORITHM
 picks the piano, from tines and reeds to bells, glass and a toy; TONE is how hard the hammer strikes.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
 #include "dsp/Sine.hpp"
 
 struct EP {
@@ -53,4 +53,4 @@ struct EP {
 };
 
 
-Model* modelEP = createModel<opz::SynthTrack<EP>, opz::SynthTrackWidget<EP>>(EP::SLUG);
+static opz::SynthPlug<EP> epPlug;

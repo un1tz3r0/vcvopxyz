@@ -3,7 +3,7 @@ Cluster: the OP-Z's clustered oscillators, seven saws per note spread around its
 together, from a wide smear of almost two semitones each way to a single saw. TONE softens them, with a low-pass
 that follows the note, from a near sine to fully bright.
 */
-#include "opz/SynthTrackWidget.hpp"
+#include "opz/SynthTrack.hpp"
 #include "dsp/Blep.hpp"
 
 struct Cluster {
@@ -53,4 +53,4 @@ struct Cluster {
 };
 
 
-Model* modelCluster = createModel<opz::SynthTrack<Cluster>, opz::SynthTrackWidget<Cluster>>(Cluster::SLUG);
+static opz::SynthPlug<Cluster> clusterPlug(11);

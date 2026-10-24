@@ -1,10 +1,10 @@
 #pragma once
-#include "Track.hpp"
+#include "Plugs.hpp"
 
 /*
-An OP-Z drum track (TrackCore.hpp), whatever plays its sounds: Drum's kit, or Drum Breakout's modules outside. It
-takes one of tracks 1 to 4, its keys pick one of 24 sounds, its sound dials are PITCH and REVERSE, its note styles are
-the OP-Z's drum ones, and it has no portamento.
+An OP-Z drum track (TrackCore.hpp), whatever plays its sounds: a kit (KitCore.hpp), or a Drum Breakout's modules
+outside. It plays one of tracks 1 to 4, its keys pick one of 24 sounds, its sound dials are PITCH and REVERSE, its
+note styles are the OP-Z's drum ones, and it has no portamento.
 */
 namespace opz {
 
@@ -16,15 +16,9 @@ struct DrumCore : TrackCore {
 		drum = true;
 	}
 
-	void configure(Module* m, int base) {
-		m->configParam(base + P1_PARAM, -12.f, 12.f, 0.f, "Pitch", " semitones")->description = "Tunes every sound, up to an octave either way";
-		m->configSwitch(base + P2_PARAM, 0.f, 1.f, 0.f, "Reverse", {"Off", "On"})->description = "Plays each sound from its end, as it starts";
-		configTrack(m, base, {"Retrig", "Mono", "Gate", "Loop"},
-			"Retrig plays each sound to its end, and mono cuts the last one off; gate stops it with its note, and loop repeats it while the note is held",
-			{"Pitch", "Reverse", "Filter", "Resonance", "Attack", "Pitch, 2 octaves", "Pan", "Volume"});
-		configDefault(SUSTAIN_PARAM, 1.f);
-		configDefault(RELEASE_PARAM, 0.4f);
-		paramQuantities[GLIDE_PARAM]->description = "Synth tracks only";
+	static void configSound(Module* m, int p1, int p2) {
+		m->configParam(p1, -12.f, 12.f, 0.f, "Pitch", " semitones")->description = "Tunes every sound, up to an octave either way";
+		m->configSwitch(p2, 0.f, 1.f, 0.f, "Reverse", {"Off", "On"})->description = "Plays each sound from its end, as it starts";
 	}
 
 	/** Drum tracks have no portamento. */
