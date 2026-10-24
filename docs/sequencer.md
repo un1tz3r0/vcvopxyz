@@ -22,7 +22,11 @@ A new Sequencer fills the slots for you: the OP-Z's own engines first on each sy
 them, then the rest; Delay, Reverb, Rymd, Chorus-80, Crush and Dist on both FX tracks, FX 1 playing the Delay and FX 2
 the Reverb; and on each drum track the OP-Z kits sampled for it, then its built-in kit. Change them in the context
 menu's **Plug slots**: a submenu for each track, and one for each slot, with every plug of the track's kind, or for a
-drum track, the [kits](kits.md) and the files to load into the slot.
+drum track, the [kits](kits.md) and the files to load into the slot. Each change there is one step of Rack's undo.
+
+A patch from before 2.1.0, when each track's engine was a module beside the Sequencer, opens with every track playing
+the plug its module was, with that module's dials and settings, and a Drum module's kit from a file back in a slot.
+Rack still lists the old modules as missing; save the patch again in this version and it no longer needs them.
 
 Every track mixes into **L** and **R** at its level and pan, through the mixer's levels and punch. Modules placed to
 the right reach the tracks over a bus along the row, with no cables:
@@ -149,7 +153,7 @@ preset loaded lights brightly and the stored ones dimly. Preset 1 starts as the 
 in Rack's user folder, under `vcvopxyz/presets/`, as soon as they're stored.
 
 **REC** in track mode randomizes the sound, envelope and LFO pages, leaving the mix page as it is. A load, a
-randomize and a plug picked are each one step of Rack's undo.
+store, a randomize and a plug picked are each one step of Rack's undo.
 
 ## Patterns and chains
 

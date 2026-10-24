@@ -286,6 +286,10 @@ struct TrackCore : TrackIds {
 		lfo = from.lfo;
 		lfoValue = from.lfoValue;
 		std::copy(std::begin(from.dialValues), std::end(from.dialValues), dialValues);
+		// Its gates start low, so the notes held as it comes in start on it, where a fresh trigger would wait for them
+		// to fall first.
+		for (dsp::SchmittTrigger& g : gates)
+			g.s = dsp::SchmittTrigger::LOW;
 		silenced = false;
 		controlDivider.clock = controlDivider.division - 1;
 	}

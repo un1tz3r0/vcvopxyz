@@ -27,12 +27,8 @@ the display (2.1.2) and the manual rewritten for it (2.1.3). Next:
 
 Whatever turns up off the plan's path, each for a PR of its own afterwards.
 
-- [ ] Editing a track's plug slots from the context menu isn't undoable, nor is storing a preset.
-- [ ] A plug switched in while notes are held doesn't start them: it plays from the next note on.
 - [ ] Every track now runs in the Sequencer's process, on one engine thread, where the engine modules could spread
       across Rack's threads.
-- [ ] Kits loaded from files into old Drum modules aren't migrated (a warning is logged); the OP-Z's and the
-      built-in kits are.
 
 ## Loose ends
 
@@ -42,7 +38,6 @@ Whatever turns up off the plan's path, each for a PR of its own afterwards.
       loop follow the note). Check them against the hardware.
 - [ ] **OP-1 kit files:** the slices' pitch and volume encodings are guesses. Check them with a kit whose sounds
       are retuned or turned down on an OP-1 or OP-Z.
-- [ ] Loading a kit from the context menu isn't undoable.
 - [ ] A preset keeps a loaded kit's slices but not its sounds, which live in the patch's storage folder.
 - [ ] Jack LEDs on unpatched outputs stay dark, since an unpatched output has no channels to meter.
 - [ ] The RUN, RESET and CONT inputs aren't tested in a running Rack yet.
