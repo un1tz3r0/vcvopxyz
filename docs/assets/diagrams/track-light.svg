@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="600" viewBox="0 0 780 600" font-family="Nunito, 'Segoe UI', -apple-system, Helvetica, Arial, sans-serif"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8c959f"/></marker></defs>
+<text x="24" y="32" font-size="17" font-weight="700" fill="#1f2328" text-anchor="start">Each breakout jack you patch takes one stage of the track outside</text>
+<text x="24" y="54" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">A Synth Breakout shown. The Drum and Send FX Breakouts follow the same rule.</text>
+<text x="40" y="90" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">One track, from its notes to the mix</text>
+<text x="340" y="90" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">Patch this breakout jack, and…</text>
+<rect x="40" y="108" width="240" height="40" rx="8" fill="none" stroke="#8c959f" stroke-width="1.25"/>
+<text x="160" y="133" font-size="14" font-weight="400" fill="#1f2328" text-anchor="middle">Notes: steps, keys, inputs</text>
+<path d="M160 148V179" fill="none" stroke="#8c959f" stroke-width="1.25" marker-end="url(#arrow)"/>
+<path d="M280 128H340" fill="none" stroke="#8c959f" stroke-width="1.25" stroke-dasharray="4 4"/>
+<rect x="340" y="100" width="416" height="56" rx="8" fill="#eef0f2" stroke="#8c959f" stroke-width="1.25"/>
+<text x="356" y="124" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">V/OCT and GATE out</text>
+<text x="356" y="143" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start">The plug stops. Outside modules play the notes.</text>
+<rect x="40" y="180" width="240" height="40" rx="8" fill="none" stroke="#8c959f" stroke-width="1.25"/>
+<text x="160" y="205" font-size="14" font-weight="400" fill="#1f2328" text-anchor="middle">Plug voices</text>
+<path d="M160 220V251" fill="none" stroke="#8c959f" stroke-width="1.25" marker-end="url(#arrow)"/>
+<path d="M280 200H340" fill="none" stroke="#8c959f" stroke-width="1.25" stroke-dasharray="4 4"/>
+<rect x="340" y="172" width="416" height="56" rx="8" fill="#eef0f2" stroke="#8c959f" stroke-width="1.25"/>
+<text x="356" y="196" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">RET L and RET R in</text>
+<text x="356" y="215" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start">Their sound takes the place of the plug.</text>
+<rect x="40" y="252" width="240" height="40" rx="8" fill="none" stroke="#8c959f" stroke-width="1.25"/>
+<text x="160" y="277" font-size="14" font-weight="400" fill="#1f2328" text-anchor="middle">Envelope</text>
+<path d="M160 292V323" fill="none" stroke="#8c959f" stroke-width="1.25" marker-end="url(#arrow)"/>
+<path d="M280 272H340" fill="none" stroke="#8c959f" stroke-width="1.25" stroke-dasharray="4 4"/>
+<rect x="340" y="244" width="416" height="56" rx="8" fill="#eef0f2" stroke="#8c959f" stroke-width="1.25"/>
+<text x="356" y="268" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">ENV out</text>
+<text x="356" y="287" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start">The track stops enveloping the return.</text>
+<rect x="40" y="324" width="240" height="40" rx="8" fill="none" stroke="#8c959f" stroke-width="1.25"/>
+<text x="160" y="349" font-size="14" font-weight="400" fill="#1f2328" text-anchor="middle">Filter</text>
+<path d="M160 364V395" fill="none" stroke="#8c959f" stroke-width="1.25" marker-end="url(#arrow)"/>
+<path d="M280 344H340" fill="none" stroke="#8c959f" stroke-width="1.25" stroke-dasharray="4 4"/>
+<rect x="340" y="316" width="416" height="56" rx="8" fill="#eef0f2" stroke="#8c959f" stroke-width="1.25"/>
+<text x="356" y="340" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">FILTER and RESO out</text>
+<text x="356" y="359" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start">The track stops filtering the return.</text>
+<rect x="40" y="396" width="240" height="40" rx="8" fill="none" stroke="#8c959f" stroke-width="1.25"/>
+<text x="160" y="421" font-size="14" font-weight="400" fill="#1f2328" text-anchor="middle">Level and FX sends</text>
+<path d="M160 436V467" fill="none" stroke="#8c959f" stroke-width="1.25" marker-end="url(#arrow)"/>
+<path d="M280 416H340" fill="none" stroke="#8c959f" stroke-width="1.25" stroke-dasharray="4 4"/>
+<rect x="340" y="388" width="416" height="56" rx="8" fill="#eef0f2" stroke="#8c959f" stroke-width="1.25"/>
+<text x="356" y="412" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">FX 1 and FX 2 out</text>
+<text x="356" y="431" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start">The sends go to the jacks, not to tracks 9 and 10.</text>
+<rect x="40" y="468" width="240" height="40" rx="8" fill="none" stroke="#8c959f" stroke-width="1.25"/>
+<text x="160" y="493" font-size="14" font-weight="400" fill="#1f2328" text-anchor="middle">Pan</text>
+<path d="M160 508V539" fill="none" stroke="#8c959f" stroke-width="1.25" marker-end="url(#arrow)"/>
+<path d="M280 488H340" fill="none" stroke="#8c959f" stroke-width="1.25" stroke-dasharray="4 4"/>
+<rect x="340" y="460" width="416" height="56" rx="8" fill="#eef0f2" stroke="#8c959f" stroke-width="1.25"/>
+<text x="356" y="484" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">L and R out</text>
+<text x="356" y="503" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start">The plug plays, but out of these jacks, not the mix.</text>
+<rect x="40" y="540" width="240" height="40" rx="8" fill="#7A8AA0" fill-opacity="0.13" stroke="#7A8AA0" stroke-width="2"/>
+<text x="160" y="565" font-size="14" font-weight="700" fill="#1f2328" text-anchor="middle">Sequencer mix: L and R</text>
+<text x="356" y="565" font-size="13" font-weight="400" fill="#59636e" text-anchor="start">With nothing patched, the whole track stays inside.</text>
+</svg>

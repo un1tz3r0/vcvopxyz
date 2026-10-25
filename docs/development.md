@@ -65,7 +65,8 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | `res-src/panel.py` | Writes every panel and component graphic into `res/`. |
 | `docs/` | This manual; `docs/assets/` holds its pictures. |
 | `tools/rack-headless/` | `shot.sh`: screenshots of a patch in a headless Rack (Xvfb, software GL), with scripted clicks. |
-| `tools/docs-images/` | The manual's pictures: the modules, the Sequencer's keys in each state, each plug on its display, and the scenes. |
+| `tools/docs-images/` | The manual's pictures: the modules, the Sequencer's keys in each state, each plug on its display, the scenes, and the diagrams. |
+| `tools/docs-lint.py` | Checks the manual against [STYLE.md](STYLE.md). |
 
 ## Panels
 
@@ -106,6 +107,15 @@ guide at 100%. To add one to a page, write a shorthand and run
 deletes the pictures no page uses. `[[key:track-track|TRACK|32]]` is the TRACK key in the `track` state, 32 px high;
 `[[module:Breakout-label|synth breakout|56]]`, `[[plug:Saw|saw|40]]`, `[[face:project|…]]` and `[[guide:bass|…]]` work
 the same way.
+
+The diagrams in `docs/assets/diagrams` need no Rack: `tools/docs-images/diagrams.py` draws them as light and dark
+SVGs.
+
+## The manual's style
+
+[STYLE.md](STYLE.md) sets the rules: plain sentences after ASD-STE100, one term for each thing, one job for each page.
+`tools/docs-lint.py` checks sentence length, semicolons and the words to avoid on the pages that follow the rules, and
+CI runs it. Add a page to its `PAGES` once it follows them.
 
 ## Adding a module
 
