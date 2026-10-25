@@ -54,6 +54,12 @@ jobs:
           fi
           echo "bumped=$bumped" >> "$GITHUB_OUTPUT"
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/docs-lint.py
+
   linux:
     runs-on: ubuntu-latest
     # An older distribution's glibc, so the plugin also loads on older Linux systems.

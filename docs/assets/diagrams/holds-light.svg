@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="388" viewBox="0 0 960 388" font-family="Nunito, 'Segoe UI', -apple-system, Helvetica, Arial, sans-serif"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8c959f"/></marker></defs>
+<text x="24" y="32" font-size="17" font-weight="700" fill="#1f2328" text-anchor="start">A project slot holds 16 patterns, and each track plays one of its plug slots</text>
+<rect x="16" y="56" width="520" height="300" rx="8" fill="none" stroke="#8c959f" stroke-width="1.25"/>
+<text x="32" y="80" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">Project slot</text>
+<text x="32" y="97" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">Ten in a Sequencer. Tempo, swing, metronome, mixer, mute groups, chains.</text>
+<rect x="32" y="116" width="488" height="224" rx="8" fill="none" stroke="#8c959f" stroke-width="1.25"/>
+<text x="48" y="140" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">Pattern</text>
+<text x="48" y="157" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">Sixteen in a project. One plays at a time.</text>
+<rect x="48" y="176" width="456" height="148" rx="8" fill="none" stroke="#8c959f" stroke-width="1.25"/>
+<text x="64" y="200" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">Track</text>
+<text x="64" y="217" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">Eleven: 1 to 10, and 12 (master). Note length, note style, quantize,</text>
+<text x="64" y="234" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">step count, step length, the plug slot it plays, and its dials.</text>
+<rect x="64" y="258" width="320" height="52" rx="8" fill="#eef0f2" stroke="#8c959f" stroke-width="1.25"/>
+<text x="80" y="280" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">Step</text>
+<text x="80" y="297" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">Sixteen in a track. Notes, locks, components.</text>
+<rect x="600" y="116" width="344" height="56" rx="8" fill="none" stroke="#8c959f" stroke-width="1.25"/>
+<text x="616" y="140" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">Plug slots</text>
+<text x="616" y="157" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">Ten for each track, filled from the context menu.</text>
+<rect x="600" y="200" width="344" height="56" rx="8" fill="#7A8AA0" fill-opacity="0.13" stroke="#7A8AA0" stroke-width="2"/>
+<text x="616" y="224" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">Plug</text>
+<text x="616" y="241" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">An engine, a kit or an effect.</text>
+<path d="M772 172V200" fill="none" stroke="#8c959f" stroke-width="1.25" marker-end="url(#arrow)"/>
+<rect x="600" y="284" width="344" height="56" rx="8" fill="none" stroke="#8c959f" stroke-width="1.25"/>
+<text x="616" y="308" font-size="14" font-weight="700" fill="#1f2328" text-anchor="start">Presets</text>
+<text x="616" y="325" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">Fourteen for each plug, in Rack&#x27;s user folder.</text>
+<path d="M772 256V284" fill="none" stroke="#8c959f" stroke-width="1.25" marker-end="url(#arrow)"/>
+<path d="M504 216H556V144H600" fill="none" stroke="#8c959f" stroke-width="1.25" marker-end="url(#arrow)"/>
+<text x="562" y="186" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">plays</text>
+<text x="600" y="372" font-size="12" font-weight="400" fill="#59636e" text-anchor="start">The plug slots and presets belong to no project.</text>
+</svg>
