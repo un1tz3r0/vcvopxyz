@@ -4,7 +4,15 @@
 
 ## What is it?
 
-An ode to the [Teenage Engineering OP-Z](https://teenage.engineering/products/op-z), this project is a [VCV Rack](http://vcvrack.com/) plugin that adds a set of modules and expanders which work together to bring the magic and fun of the OP-Z from your pocket into to your (virtual) eurorack modular system.
+An ode to the [Teenage Engineering OP-Z](https://teenage.engineering/products/op-z), this is a [VCV Rack](http://vcvrack.com/) plugin which re-imagines the iconic pocket synthesizer as a virtual eurorack module.
+
+## How do I use it?
+
+You will need [VCV Rack](http://vcvrack.com/). Although the free version will do, *please* consider purchasing the full version to support it's awesome creators.
+
+Grab the `.vcvplugin` file for your OS and architecture from the newest version at the top of the project's [Releases](https://github.com/un1tz3r0/vcvopxyz/releases) page, and drop it into your VCV Rack plugins folder... If you're not sure how to find that, have a look at the **Install** instructions for your platform: [Linux](INSTALL.linux.md), [MacOS](INSTALL.macos.md) and [Windows](INSTALL.windows.md).
+
+The main **Sequencer** module can be used stand-alone, just like the real OP-Z, or in combination with **Breakout** expander modules for patching individual sequencer tracks to external chains in place of the builtin sounds.
 
 ## What it is not
 
@@ -14,12 +22,12 @@ Rather than try and make a sample-perfect clone of each sound and FX engine, the
 
 ## Intros
 
-These two documents will be helpful for those with no prior experience with the OP-Z or those with some experience who could use a reminder.
+These pages will be helpful for those with little or no prior experience with the OP-Z.
 
-- [Beginner's Guide](docs/guide.md): steo-by-step instructions starting with an empty rack to making a simple loop, with screenshots, for those without any experience with the OP-Z.
-- [Quickstart](docs/quickstart.md): a cheatsheet running down most of the core features for those with some OP-Z experience who just need a refresher to jog their memory.
+- [Beginner's Guide](docs/guide.md): step-by-step instructions starting with an empty rack to making a simple loop, with screenshots, for those without any experience with the OP-Z.
+- [Quickstart](docs/quickstart.md): a brief rundown of the core features for those with some prior OP-Z experience who could use a refresher.
 
-To see some examples of music that can be made with this, then check out the example patches in [patches/](patches). 
+If you just want to see what it can do, have a look at the example patches in [patches/](patches). 
 
 ## Modules
 
