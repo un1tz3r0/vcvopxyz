@@ -140,9 +140,29 @@ def holds(theme):
     return s
 
 
+def keys(theme):
+    s = Svg(784, 236, theme, 'The keys, at their home octave: F3 to E5')
+    whites = 'F3 G3 A3 B3 C4 D4 E4 F4 G4 A4 B4 C5 D5 E5'.split()
+    blacks = [(0, 'F#3'), (1, 'G#3'), (2, 'A#3'), (4, 'C#4'), (5, 'D#4'), (7, 'F#4'), (8, 'G#4'), (9, 'A#4'),
+              (11, 'C#5'), (12, 'D#5')]
+    x = lambda i: 28 + 52 * i
+    for i, name in enumerate(whites):
+        s.box(x(i), 128, 44, 56)
+        s.text(x(i) + 22, 161, str(i + 1), 15, 700, anchor='middle')
+        s.text(x(i) + 22, 204, name, 12, color='quiet', anchor='middle')
+    for n, (i, name) in enumerate(blacks):
+        cx = x(i) + 48
+        s.parts.append(f'<circle cx="{cx}" cy="96" r="17" fill="{s.c["ink"]}"/>')
+        s.text(cx, 101, str((n + 1) % 10), 14, 700, color='#ffffff' if theme == 'light' else '#0d1117', anchor='middle')
+        s.text(cx, 68, name, 12, color='quiet', anchor='middle')
+    s.text(24, 226, 'Click − to move every key down an octave, and + to move it up. The numbers name the keys in this '
+           'manual.', 12, color='quiet')
+    return s
+
+
 def main(out):
     out.mkdir(parents=True, exist_ok=True)
-    for draw in (row, track, holds):
+    for draw in (row, track, holds, keys):
         for theme in THEMES:
             (out / f'{draw.__name__}-{theme}.svg').write_text(str(draw(theme)), encoding='utf-8')
 

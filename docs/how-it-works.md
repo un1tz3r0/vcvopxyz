@@ -3,7 +3,7 @@
 The **Sequencer** makes every sound. The other modules give one of its tracks jacks, or show a track on a screen.
 This page explains that model. The [guide](guide.md) shows it step by step.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="assets/guide/band-dark.png"><img alt="A Sequencer playing kick, snare, bass and chords, with a Screen beside it" src="assets/guide/band-light.png"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/guide/band-dark.png"><img alt="A Sequencer playing the six tracks of the first song, with a Screen beside it" src="assets/guide/band-light.png"></picture>
 
 ## One box
 

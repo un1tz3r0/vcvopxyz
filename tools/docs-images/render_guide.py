@@ -4,61 +4,84 @@ taking the mix, and the clicks that set it up.
 
     docs/assets/guide/<scene>-<theme>.png
 
+It also writes the song they play, from song.py, as patches/first-song.vcv.
+
     render_guide.py <rack-headless dir> <plugin dir> [scene ...]
 """
-import json, os, subprocess, sys, tempfile
+import json, math, os, subprocess, sys, tempfile
 from pathlib import Path
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
+import song  # noqa: E402
 from render_modules import HP, PX_MM, RENDER, ROW, X0, Y0, clicks, hp, plugin, rack, save, track_param, version  # noqa: E402
 
 out = plugin / 'docs/assets/guide'
 out.mkdir(parents=True, exist_ok=True)
 
-EMPTY = [[]] * 16
-KICK = [[[53, 100, 0, 0]] if s % 4 == 0 else [] for s in range(16)]
-SNARE = [[[54, 100, 0, 0]] if s % 8 == 4 else [] for s in range(16)]
-BASS = [[[n, 100, 0, 0]] if n else [] for n in (45, 0, 0, 45, 0, 0, 57, 0, 43, 0, 0, 43, 0, 55, 0, 48)]
-CHORDS = [[[57, 100, 0, 96], [60, 100, 0, 96], [64, 100, 0, 96]]] + [[]] * 7 + \
-         [[[55, 100, 0, 96], [59, 100, 0, 96], [62, 100, 0, 96]]] + [[]] * 7
-ARP = [[[57, 100, 0, 384], [60, 100, 0, 384], [64, 100, 0, 384]]] + [[]] * 15
-FOREIGN_HP = dict(AudioInterface2=5, VCO=9)
-
-
-def sequencer(track, params=(), **patterns):
-    """A Sequencer with `track` selected, the named tracks' patterns (kick, snare, bass, lead, arp, chord) and params
-    as (lane, param, value)."""
-    names = ['kick', 'snare', 'perc', 'sample', 'bass', 'lead', 'arp', 'chord']
-    channels = [2, 2, 2, 2, 1, 3, 1, 4]
-    tracks = [{'pattern': patterns.get(n, EMPTY), 'channels': c} for n, c in zip(names, channels)]
-    return {'plugin': 'vcvopxyz', 'model': 'Sequencer', 'params': [{'id': track_param(t, p), 'value': v} for t, p, v in params],
-            'data': {'tracks': tracks, 'track': track, 'ppqn': 4, 'longPressHolds': True, 'ctrlClickHolds': True}}
-
-
-def module(slug, plugin='vcvopxyz'):
-    return {'plugin': plugin, 'model': slug, 'params': []}
-
-
+FOREIGN_HP = dict(AudioInterface2=5, VCO=9, VCF=7, **{'VCA-1': 3}, Scope=13, Delay=9)
 FX1, ARP_SPEED = 12, 18       # a track's FX 1 send and arp speed, among its params
+BASS, LEAD, ARP = 4, 5, 6     # lanes
+SONG = ('kick', 'snare', 'perc', 'bass', 'lead', 'arp')
+MIX = [(0, song.TEMPO), (track_param(ARP, FX1), song.FX1_SEND)]
+
+
+def sequencer(track, params=(), names=SONG, octave=0):
+    """A Sequencer with `track` selected, the song's named tracks, params as (id, value) and the keyboard's octave."""
+    return {'plugin': 'vcvopxyz', 'model': 'Sequencer', 'params': [{'id': i, 'value': v} for i, v in params],
+            'data': {'tracks': song.tracks(*names), 'track': track, 'octave': octave, 'ppqn': 4,
+                     'longPressHolds': True, 'ctrlClickHolds': True}}
+
+
+def module(slug, plugin='vcvopxyz', **params):
+    return {'plugin': plugin, 'model': slug, 'params': [{'id': int(i[1:]), 'value': v} for i, v in params.items()]}
+
+
+def fundamental(slug, **params):
+    return module(slug, 'Fundamental', **params)
+
+
 DIGITAL = 'KEY8'              # the bass track's fourth slot, Digital, on the fourth black key
+# The VCF with its cutoff fully down and its FREQ and RES inputs' dials fully up.
+VCF = fundamental('VCF', p0=(math.log2(261.626 / 8000) + 5) / 10, p3=1.0, p5=1.0)
+# Your first patch, a stage at a time: (module, output, module, input) by place in the row, the Sequencer 0.
+VOCT, ENV, FILTER, RESO, SEND_L, RET_L = 4, 6, 10, 11, 17, 6
+SAW, LPF, VCA_OUT, WET = 2, 0, 0, 1
+VCO_ONLY = [(1, VOCT, 2, 0), (2, SAW, 1, RET_L)]
+FILTERED = [(1, VOCT, 2, 0), (2, SAW, 3, 3), (3, LPF, 1, RET_L), (1, FILTER, 3, 0), (1, RESO, 3, 2)]
+ENVELOPED = FILTERED[:2] + FILTERED[3:] + [(3, LPF, 4, 1), (4, VCA_OUT, 1, RET_L), (1, ENV, 4, 0)]
+# With a second breakout at 2, the VCO and the rest move one place along.
+moved = lambda cables, by: [(a + by * (a > 1), o, b + by * (b > 1), i) for a, o, b, i in cables]
+VOICE = [module('Breakout'), fundamental('VCO'), VCF, fundamental('VCA-1')]
 
 # scene: (Sequencer, the modules after it, keys to click, scale of the picture, options): `shown`, the first and last
 # module in the picture; `cables`, (module, output, module, input) by their place in the row.
 SCENES = {
-    'audio': (sequencer(4), [], [], 1.0, {}),
-    'bass': (sequencer(4, bass=BASS), [], ['PLAY'], 1.0, {}),
-    'slots': (sequencer(4, bass=BASS), [], ['PLAY', 'TRACK', DIGITAL], 1.0, {}),
-    'drum': (sequencer(0, kick=KICK, bass=BASS), [], ['PLAY'], 1.0, {}),
-    'delay': (sequencer(4, [(4, FX1, 0.6)], kick=KICK, bass=BASS), [], ['PLAY', 'PAGE3'], 1.0, {}),
-    'breakout': (sequencer(4, kick=KICK, bass=BASS), [module('Breakout'), module('VCO', 'Fundamental')], ['PLAY'], 1.0,
-                 dict(cables=[(1, 4, 2, 0), (2, 2, 1, 6)])),
-    'band': (sequencer(7, kick=KICK, snare=SNARE, bass=BASS, chord=CHORDS), [module('Screen')], ['PLAY'], 0.75, {}),
-    'screen': (sequencer(4, bass=BASS), [module('Screen')], ['PLAY'], 1.0, dict(shown=(1, 1))),
-    'arp-screen': (sequencer(6, [(6, ARP_SPEED, 4)], arp=ARP), [module('Screen')], ['PLAY', 'PAGE2'], 1.0,
-                   dict(shown=(1, 1))),
+    # Your first song
+    'audio': (sequencer(BASS, names=()), [], [], 1.0, {}),
+    'bass': (sequencer(BASS, names=('bass',), octave=-1), [], ['PLAY'], 1.0, {}),
+    'slots': (sequencer(BASS, names=('bass',), octave=-1), [], ['PLAY', 'TRACK', DIGITAL], 1.0, {}),
+    'drums': (sequencer(2, names=('kick', 'snare', 'perc', 'bass')), [], ['PLAY'], 1.0, {}),
+    'length': (sequencer(ARP), [], ['~STEP0'], 1.0, {}),
+    'delay': (sequencer(ARP, MIX[1:]), [], ['PLAY', 'PAGE3'], 1.0, {}),
+    'tempo': (sequencer(ARP, MIX), [], ['PLAY', 'METRONOME'], 1.0, {}),
+    'song': (sequencer(ARP, MIX), [], ['PLAY'], 0.75, {}),
+    'band': (sequencer(ARP, MIX), [module('Screen')], ['PLAY'], 0.75, {}),
+    # Your first patch
+    'breakout': (sequencer(BASS, MIX), VOICE[:2], ['PLAY'], 0.75, dict(cables=VCO_ONLY)),
+    'breakout-filter': (sequencer(BASS, MIX), VOICE[:3], ['PLAY'], 1.0, dict(shown=(1, 4), cables=FILTERED)),
+    'breakout-env': (sequencer(BASS, MIX), VOICE, ['PLAY'], 1.0, dict(shown=(1, 5), cables=ENVELOPED)),
+    'breakout-out': (sequencer(BASS, MIX), VOICE[:1] + [module('Breakout')] + VOICE[1:] + [fundamental('Scope')],
+                     ['PLAY'], 0.75, dict(shown=(1, 8), cables=moved(ENVELOPED, 1) + [(2, 0, 7, 0)])),
+    'send': (sequencer(BASS, MIX), VOICE[:1] + [module('Breakout'), module('FxBreakout')] + VOICE[1:] +
+             [fundamental('Scope'), fundamental('Delay')], ['PLAY'], 0.75,
+             dict(shown=(1, 10), cables=moved(ENVELOPED, 2) + [(3, SEND_L, 9, 4), (9, WET, 3, RET_L)])),
+    # The Screen
+    'screen': (sequencer(BASS, names=('bass',)), [module('Screen')], ['PLAY'], 1.0, dict(shown=(1, 1))),
+    'arp-screen': (sequencer(ARP, [(track_param(ARP, ARP_SPEED), 4)], names=('arp',)), [module('Screen')],
+                   ['PLAY', 'PAGE2'], 1.0, dict(shown=(1, 1))),
     # KIT, on the Screen just after the Sequencer
-    'kit-screen': (sequencer(0, kick=KICK), [module('Screen')], ['PLAY', (hp('Sequencer'), 50.86, 22.3)], 1.0,
+    'kit-screen': (sequencer(0, names=('kick',)), [module('Screen')], ['PLAY', (hp('Sequencer'), 50.86, 22.3)], 1.0,
                    dict(shown=(1, 1))),
 }
 
@@ -70,13 +93,14 @@ def render(scene):
     x = 0
     for i, m in enumerate(row):
         ours = m['plugin'] == 'vcvopxyz'
-        m.update(id=i + 1, version=version if ours else '2.6.6' if m['plugin'] == 'Core' else '2.6.4', pos=[x, 0])
+        m = row[i] = dict(m, id=i + 1, version=version if ours else '2.6.6' if m['plugin'] == 'Core' else '2.6.4', pos=[x, 0])
         x += hp(m['model']) if ours else FOREIGN_HP[m['model']]
     width = x * HP
     left, right = row[first]['pos'][0] * HP, (row[last + 1]['pos'][0] if last + 1 < len(row) else x) * HP
     # The mix into the Audio-2, then the scene's own cables.
     wires = [(0, 4, len(row) - 1, 0, '#f3374b'), (0, 5, len(row) - 1, 1, '#0986ad')]
-    wires += [(*c, colour) for c, colour in zip(options.get('cables', []), ('#ffb437', '#a34cc4', '#2cb64e', '#e9536a'))]
+    colours = ('#ffb437', '#a34cc4', '#2cb64e', '#e9536a', '#3695ef')
+    wires += [(*c, colours[i % len(colours)]) for i, c in enumerate(options.get('cables', []))]
     cables = [{'id': i + 1, 'outputModuleId': a + 1, 'outputId': o, 'inputModuleId': b + 1, 'inputId': n, 'color': c}
               for i, (a, o, b, n, c) in enumerate(wires)]
     window = f'{round((width + 10) * PX_MM)}x{round(ROW * PX_MM + 140)}'
@@ -86,7 +110,7 @@ def render(scene):
         (tmp / 'actions.sh').write_text('\n'.join(['sleep 4'] + clicks(keys) + ['xdotool mousemove 3 3']) + '\n')
         for theme, dark in (('light', '0'), ('dark', '1')):
             subprocess.run([rack / 'shot.sh', plugin, tmp / 'patch.json', tmp / 'shot.png', '2', window], check=True,
-                           env=dict(os.environ, ZOOM=str(RENDER), DARK=dark, CABLES='0' if 'shown' in options else '0.8',
+                           env=dict(os.environ, ZOOM=str(RENDER), DARK=dark, CABLES='0' if 'shown' in options and 'cables' not in options else '0.8',
                                     ACTIONS=str(tmp / 'actions.sh')),
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             shot = Image.open(tmp / 'shot.png').convert('RGB')
@@ -97,5 +121,9 @@ def render(scene):
     print(scene, flush=True)
 
 
+song.write(plugin / 'patches/first-song.vcv', [dict(sequencer(ARP, MIX), id=1, version=version, pos=[0, 0]),
+           dict(module('AudioInterface2', 'Core'), id=2, version='2.6.6', pos=[hp('Sequencer'), 0])],
+           [{'id': i + 1, 'outputModuleId': 1, 'outputId': 4 + i, 'inputModuleId': 2, 'inputId': i, 'color': c}
+            for i, c in enumerate(('#f3374b', '#0986ad'))])
 for scene in sys.argv[3:] or SCENES:
     render(scene)
