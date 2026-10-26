@@ -12,6 +12,9 @@ the display (2.1.2) and the manual rewritten for it (2.1.3). Next:
       Kick 4 pads 3 and 13). `split.py` prints the list.
 - [ ] **Voice presets 2 to 4** of each synth engine by ear (Vic), store them, and copy the files from Rack's user
       folder (`vcvopxyz/presets/<slug>/`) into `res/presets/` as the factory ones.
+- [ ] **Reshoot the manual's pictures** for 2.1.5's key look (smaller step LEDs, tight windows, grey numbers on the
+      light panel) once Vic settles the Appearance defaults: `render_keys.py`, `render_modules.py`, `render_guide.py`,
+      `render_recipes.py` and `render_gifs.py`.
 - [ ] **Sample,** the OP-Z's last synth engine: a PCM sample player with a crush dial, which could load its sound
       through `Kit`.
 
@@ -40,8 +43,6 @@ Whatever turns up off the plan's path, each for a PR of its own afterwards.
       are retuned or turned down on an OP-1 or OP-Z.
 - [ ] A preset keeps a loaded kit's slices but not its sounds, which live in the patch's storage folder.
 - [ ] Jack LEDs on unpatched outputs stay dark, since an unpatched output has no channels to meter.
-- [ ] On the light panel, a white light on a black key doesn't show: track mode's plug slots and tempo mode's keys
-  light only on the dark panel (seen in the guide's `slots` renders).
 - [ ] The RUN, RESET and CONT inputs aren't tested in a running Rack yet.
 - [ ] **OP-Z project files** are untested on a real OP-Z. Check an export loads, and work out the track settings'
       bytes (step count, step length, note length, quantize) and swing, which are guesses.

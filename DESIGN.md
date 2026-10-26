@@ -271,7 +271,15 @@ selected track's plug with its icon, slot and preset; `TempoDisplay` is the seve
 same params the round keys were, so patches, MIDI maps and the keys' gestures carry over. A track key's icon takes its
 colour from the key's three lights, as a round key's symbol does, so the module still decides every key's colour in
 one place; `BOUND_LIGHT` tells it a breakout has the track. The plug icons are white symbols from `opz.py`, like the
-lit key symbols, tinted as they're drawn.
+key symbols, tinted as they're drawn.
+
+The round keys' rings and the black keys' discs are printed, but each key draws its own symbol (`SymbolLight`), off in
+the theme's colours and lit in its LED's, so that the Appearance menu can change the look live: how a held key glows,
+whether a press shades it, the dot's size and how an LED shows (`keys::Style` in `ui.hpp`). The style is one for every
+Sequencer, in Rack's settings through the plugin's `settingsToJson()`, since it is a taste, not part of a patch. A press
+shades a key at once and fades out over 0.15 s, so a quick click shows; the held glow grows from 0.1 s to 0.4 s, the
+long press, so a click doesn't flash it. The options came from mockup boards (`previews/buttons` in the project files)
+that Vic chose from: halo, pressed-in shading, a 2.2 mm dot and the tight window are the defaults.
 
 The OP-Z's artwork, name and logo stay off the panels: the icons are redrawn, and the modules are named by what they
 do, so the plugin can go to the VCV Library some day.

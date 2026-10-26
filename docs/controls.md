@@ -50,6 +50,10 @@ OP-Z **latches** here: it stays on after you release the mouse button.
 The Sequencer's context menu has **Long-press toggles hold** and **Ctrl-click toggles hold**. Clear one to stop
 that gesture from latching keys.
 
+A key shows each press. A click shades the key, as if it sinks into the panel. While you hold the mouse button down, a
+halo grows around the key. The halo is full at 0.4 s, when a long press latches. The
+[Appearance](sequencer.md#appearance) menu changes these looks.
+
 | Gesture | |
 | --- | --- |
 | A long press latches a step. A click releases it. | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/gifs/long-press-dark.gif"><img alt="The pointer presses step 1 until it blinks, then clicks it again to release it" src="assets/gifs/long-press-light.gif" width="451"></picture> |

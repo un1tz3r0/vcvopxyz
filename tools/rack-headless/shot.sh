@@ -21,13 +21,14 @@
 #   ACTIONS=f    source script f after zooming (xdotool clicks; "snap name.png" captures)
 #   KEEP=1        keep the temporary work dir (user folder, log.txt) and print its path
 #   THREADS=n     engine threads (default 1), to test modules across cores
+#   PLUGIN_SETTINGS='{"vcvopxyz": {...}}'  Rack's per-plugin settings (pluginSettings in settings.json)
 #   RACK_DIR=...  Rack build to use (default: ./Rack next to this script)
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RACK_DIR=${RACK_DIR:-$HERE/Rack}
 
-usage() { sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---------------------------------------------------------------------------
 # Inner part: runs inside xvfb-run (DISPLAY is set).
@@ -175,6 +176,7 @@ for slug in $(jq -r '[.modules[]?.plugin] | unique | .[]' "$PJ"); do
 done
 
 # --- Settings: no tips, no update checks, no tooltips, fixed window ------
+PLUGIN_SETTINGS_J=${PLUGIN_SETTINGS:-'{}'}
 cat >"$U/settings.json" <<EOF
 {
   "language": "en",
@@ -194,7 +196,8 @@ cat >"$U/settings.json" <<EOF
   "verifyHttpsCerts": false,
   "showTipsOnLaunch": false,
   "tipIndex": 0,
-  "allowCursorLock": false
+  "allowCursorLock": false,
+  "pluginSettings": $PLUGIN_SETTINGS_J
 }
 EOF
 

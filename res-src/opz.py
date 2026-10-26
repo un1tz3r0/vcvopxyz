@@ -116,49 +116,56 @@ COMPONENTS = ['pulse', 'pulse_hold', 'multiply', 'velocity', 'ramp_up', 'ramp_do
               'portamento', 'sweep', 'tonality', 'jump', 'parameter_spark', 'component_spark', 'trigger_spark']
 
 
-def icon(name, x, y, size, color, background='{panel}'):
-    """ICONS[name], `size` mm across, centred on (x, y)."""
+def icon(name, x, y, size, color, background='{panel}', edge=0.0):
+    """ICONS[name], `size` mm across, centred on (x, y). `edge` grows its lines and shapes by that many mm all round."""
     scale = size / 2
     body = ''.join(ICONS[name]).replace('@', color).replace('%', background)
+    if edge:
+        body = body.replace(' stroke="none"', '')
     return (f'<g transform="translate({num(x)} {num(y)}) scale({num(scale)})" fill="none" stroke="{color}" '
-            f'stroke-width="{num(STROKE / scale)}" stroke-linecap="round" stroke-linejoin="round">{body}</g>')
+            f'stroke-width="{num((STROKE + 2 * edge) / scale)}" stroke-linecap="round" stroke-linejoin="round">{body}</g>')
 
 
 SCALE = 2.16    # how much bigger than the OP-Z's own face the Sequencer draws it, keys and lit symbols included
 KEY = 4.2       # a key's diameter (mm), before scaling
 RING = 0.3      # its ring's line weight (mm)
 NUMERAL = 2.7   # the black keys' numbers (mm)
-# The symbols that are also LEDs, and how big each is drawn (mm).
-SYMBOLS = dict(dot=2.0, rec=2.4, track=2.2, minus=2.2, plus=2.2, play=2.0, stop=1.9, shift=2.2, metronome=2.3,
+# The symbols that are also LEDs, and how big each is drawn (mm). The keys draw them, off and lit, so that their look
+# can follow the Sequencer's Appearance menu; the step and white keys' dots are circles drawn in code.
+SYMBOLS = dict(rec=2.4, track=2.2, minus=2.2, plus=2.2, play=2.0, stop=1.9, shift=2.2, metronome=2.3,
                project=2.2, mixer=2.2, screen=2.3,
                kick=2.3, snare=2.3, perc=2.3, sample=2.3, bass=2.3, lead=2.3, arp=2.3, chord=2.3, master=2.3, fx1=2.3,
                fx2=2.3, **{f'plug_{name}': 3.6 for name in PLUGS})
+# The round keys' symbols, which also get an edge: the symbol grown by EDGE (mm, on the panel), for the dark keyline
+# some LED styles draw behind a lit one.
+KEY_SYMBOLS = ['track', 'rec', 'minus', 'play', 'plus', 'stop', 'shift', 'project', 'mixer', 'metronome', 'screen',
+               *'0123456789']
+EDGE = 0.3
 
 
-def symbol(name, x, y, color):
-    """A key's symbol: a number for a black key, else one of SYMBOLS."""
+def symbol(name, x, y, color, edge=0.0):
+    """A key's symbol: a number for a black key, else one of SYMBOLS, its outline grown by `edge` mm."""
     if name.isdigit():
-        return f'<path d="{NUNITO.path(name, x, y, NUMERAL)}" fill="{color}"/>'
-    return icon(name, x, y, SYMBOLS[name], color)
+        grow = f' stroke="{color}" stroke-width="{num(2 * edge)}" stroke-linejoin="round"' if edge else ''
+        return f'<path d="{NUNITO.path(name, x, y, NUMERAL)}" fill="{color}"{grow}/>'
+    return icon(name, x, y, SYMBOLS[name], color, edge=edge)
 
 
-def symbol_svg(name):
-    """The lit symbol, white on a key-sized canvas at the Sequencer's scale, for the module to tint with its LED's
-    colour. A lit dot glows bigger than the printed one."""
-    body = icon('dot', KEY / 2, KEY / 2, 3.6, '#FFFFFF') if name == 'dot' else symbol(name, KEY / 2, KEY / 2, '#FFFFFF')
+def symbol_svg(name, edge=0.0):
+    """A symbol, white on a key-sized canvas at the Sequencer's scale, for the module to draw in any colour. `edge` is
+    in the panel's mm."""
+    body = symbol(name, KEY / 2, KEY / 2, '#FFFFFF', edge / SCALE)
     return document(KEY * SCALE, KEY * SCALE, f'  <g transform="scale({num(SCALE)})">{body}</g>')
 
 
-def round_key(p, name, x, y, sym='dot'):
-    """A key printed as a ring around its symbol, and the box its widget takes."""
+def round_key(p, name, x, y):
+    """A key's ring, and the box its widget takes. The widget draws the symbol inside."""
     p.art.append(f'<circle cx="{num(x)}" cy="{num(y)}" r="{num((KEY - RING) / 2)}" fill="none" stroke="{{ink}}" '
                  f'stroke-width="{num(RING)}"/>')
-    p.art.append(symbol(sym, x, y, '{glyph}'))
     p.place(name, x - KEY / 2, y - KEY / 2, KEY, KEY)
 
 
-def number_key(p, name, x, y, digit):
-    """A black key: a solid disc with its number knocked out of it."""
+def number_key(p, name, x, y):
+    """A black key's disc, and the box its widget takes. The widget draws the number on it."""
     p.art.append(f'<circle cx="{num(x)}" cy="{num(y)}" r="{num(KEY / 2)}" fill="{{ink}}"/>')
-    p.art.append(symbol(digit, x, y, '{panel}'))
     p.place(name, x - KEY / 2, y - KEY / 2, KEY, KEY)
