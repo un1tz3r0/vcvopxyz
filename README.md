@@ -40,6 +40,7 @@ The [manual](docs/README.md) has every module, page and key. To build the plugin
 The **Sequencer** makes every sound, so a Sequencer and an audio module are all you need. To send a track to other
 modules, put a **breakout** to the Sequencer's right. A **Screen** in the same row shows the selected track's dials.
 The modules in the row need no cables between them. [How it works](docs/how-it-works.md) explains the rest.
+[Patch recipes](docs/recipes.md) use it with MIDI, clocks, recorders and other modules, each with a demo patch.
 
 ## License
 

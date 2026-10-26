@@ -8,9 +8,10 @@ Find yourself in the left column, and read the pages in order.
 
 | You are | Read |
 | --- | --- |
-| New to the OP-Z and to VCV Rack | Install ([Linux](../INSTALL.linux.md), [macOS](../INSTALL.macos.md), [Windows](../INSTALL.windows.md)), [Rack in two minutes](rack-basics.md), [How it works](how-it-works.md), [Your first song](guide.md), [Your first patch](patching.md) |
-| A VCV user, new to the OP-Z | [How it works](how-it-works.md), [Your first song](guide.md), [Your first patch](patching.md), [Quickstart](quickstart.md) |
-| An OP-Z owner | [Quickstart](quickstart.md), [For OP-Z owners](op-z-owners.md), [How it works](how-it-works.md), [Your first patch](patching.md) |
+| New to the OP-Z and to VCV Rack | Install ([Linux](../INSTALL.linux.md), [macOS](../INSTALL.macos.md), [Windows](../INSTALL.windows.md)), [Rack in two minutes](rack-basics.md), [How it works](how-it-works.md), [Your first song](guide.md), [Your first patch](patching.md), [Patch recipes](recipes.md) |
+| A VCV user, new to the OP-Z | [How it works](how-it-works.md), [Your first song](guide.md), [Your first patch](patching.md), [Quickstart](quickstart.md), [Patch recipes](recipes.md) |
+| An OP-Z owner | [Quickstart](quickstart.md), [For OP-Z owners](op-z-owners.md), [How it works](how-it-works.md), [Your first patch](patching.md), [Patch recipes](recipes.md) |
+| Stuck on a problem | [Troubleshooting](troubleshooting.md), then [Controls](controls.md) |
 
 [How it works](how-it-works.md) has a [glossary](how-it-works.md#glossary) of every term.
 
@@ -54,6 +55,7 @@ click a black key to choose one. The Sequencer's context menu, **Plug slots**, f
 
 - Start: [Rack in two minutes](rack-basics.md), [How it works](how-it-works.md), [Your first song](guide.md),
   [Your first patch](patching.md), [Quickstart](quickstart.md).
+- Do: [Patch recipes](recipes.md), with their demo patches, and [Troubleshooting](troubleshooting.md).
 - The Sequencer: [Sequencer](sequencer.md), [Controls](controls.md), [steps](steps.md),
   [step components](step-components.md), [track](track.md), [project](project.md), [mixer](mixer.md),
   [tempo](tempo.md), [master track](master.md).

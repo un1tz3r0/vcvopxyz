@@ -19,8 +19,8 @@ TRACKS = ['kick', 'snare', 'perc', 'sample', 'bass', 'lead', 'arp', 'chord']
 CHANNELS = [2, 2, 2, 2, 1, 3, 1, 4]
 
 
-def pattern(name):
-    notes = NOTES.get(name, {})
+def pattern(name, notes=None):
+    notes = NOTES.get(name, {}) if notes is None else notes
     return [[[notes[s][0], 100, 0, notes[s][1]]] if s in notes else [] for s in range(1, STEPS + 1)]
 
 

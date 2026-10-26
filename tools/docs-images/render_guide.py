@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""The manual's scenes, light and dark: each is a row of modules after a Sequencer, an Audio-2 at the end of the row
-taking the mix, and the clicks that set it up.
+"""The manual's scenes, light and dark: each is a row of modules after a Sequencer, an audio module at the end of the
+row taking the mix, and the clicks that set it up.
 
     docs/assets/guide/<scene>-<theme>.png
 
@@ -19,7 +19,8 @@ from render_modules import HP, PX_MM, RENDER, ROW, X0, Y0, clicks, hp, plugin, r
 out = plugin / 'docs/assets/guide'
 out.mkdir(parents=True, exist_ok=True)
 
-FOREIGN_HP = dict(AudioInterface2=5, VCO=9, VCF=7, **{'VCA-1': 3}, Scope=13, Delay=9)
+FOREIGN_HP = dict(AudioInterface2=5, AudioInterface16=19, MIDIToCVInterface=8, VCO=9, VCF=7, VCA=5, Scope=13, Delay=9,
+                  LFO=9, ADSR=9, SEQ3=22, **{'VCA-1': 3, 'MIDI-Map': 10})
 FX1, ARP_SPEED = 12, 18       # a track's FX 1 send and arp speed, among its params
 BASS, LEAD, ARP = 4, 5, 6     # lanes
 SONG = ('kick', 'snare', 'perc', 'bass', 'lead', 'arp')
@@ -33,8 +34,9 @@ def sequencer(track, params=(), names=SONG, octave=0):
                      'longPressHolds': True, 'ctrlClickHolds': True}}
 
 
-def module(slug, plugin='vcvopxyz', **params):
-    return {'plugin': plugin, 'model': slug, 'params': [{'id': int(i[1:]), 'value': v} for i, v in params.items()]}
+def module(slug, plugin='vcvopxyz', data=None, **params):
+    m = {'plugin': plugin, 'model': slug, 'params': [{'id': int(i[1:]), 'value': v} for i, v in params.items()]}
+    return dict(m, data=data) if data else m
 
 
 def fundamental(slug, **params):
@@ -55,7 +57,8 @@ moved = lambda cables, by: [(a + by * (a > 1), o, b + by * (b > 1), i) for a, o,
 VOICE = [module('Breakout'), fundamental('VCO'), VCF, fundamental('VCA-1')]
 
 # scene: (Sequencer, the modules after it, keys to click, scale of the picture, options): `shown`, the first and last
-# module in the picture; `cables`, (module, output, module, input) by their place in the row.
+# module in the picture; `cables`, (module, output, module, input) by their place in the row, AUDIO for the audio module;
+# `audio`, that module's slug; `mix=False` leaves the Sequencer's outputs to the scene's cables.
 SCENES = {
     # Your first song
     'audio': (sequencer(BASS, names=()), [], [], 1.0, {}),
@@ -86,23 +89,33 @@ SCENES = {
 }
 
 
-def render(scene):
-    seq, rest, keys, scale, options = SCENES[scene]
-    row = [seq] + rest + [module('AudioInterface2', 'Core')]
-    first, last = options.get('shown', (0, len(row) - 1))
+AUDIO = -1
+
+
+def layout(scene):
+    """A scene's patch: its row, with ids and places, and its cables; and the row's width in HP."""
+    seq, rest, keys, scale, options = scene
+    row = [seq] + rest + [module(options.get('audio', 'AudioInterface2'), 'Core')]
     x = 0
     for i, m in enumerate(row):
         ours = m['plugin'] == 'vcvopxyz'
         m = row[i] = dict(m, id=i + 1, version=version if ours else '2.6.6' if m['plugin'] == 'Core' else '2.6.4', pos=[x, 0])
         x += hp(m['model']) if ours else FOREIGN_HP[m['model']]
-    width = x * HP
-    left, right = row[first]['pos'][0] * HP, (row[last + 1]['pos'][0] if last + 1 < len(row) else x) * HP
-    # The mix into the Audio-2, then the scene's own cables.
-    wires = [(0, 4, len(row) - 1, 0, '#f3374b'), (0, 5, len(row) - 1, 1, '#0986ad')]
+    # The mix into the audio module, then the scene's own cables.
+    wires = [] if options.get('mix') is False else [(0, 4, AUDIO, 0, '#f3374b'), (0, 5, AUDIO, 1, '#0986ad')]
     colours = ('#ffb437', '#a34cc4', '#2cb64e', '#e9536a', '#3695ef')
     wires += [(*c, colours[i % len(colours)]) for i, c in enumerate(options.get('cables', []))]
-    cables = [{'id': i + 1, 'outputModuleId': a + 1, 'outputId': o, 'inputModuleId': b + 1, 'inputId': n, 'color': c}
-              for i, (a, o, b, n, c) in enumerate(wires)]
+    cables = [{'id': i + 1, 'outputModuleId': a % len(row) + 1, 'outputId': o, 'inputModuleId': b % len(row) + 1,
+               'inputId': n, 'color': c} for i, (a, o, b, n, c) in enumerate(wires)]
+    return row, cables, x
+
+
+def render(name, scene, out=out):
+    seq, rest, keys, scale, options = scene
+    row, cables, x = layout(scene)
+    first, last = options.get('shown', (0, len(row) - 1))
+    width = x * HP
+    left, right = row[first]['pos'][0] * HP, (row[last + 1]['pos'][0] if last + 1 < len(row) else x) * HP
     window = f'{round((width + 10) * PX_MM)}x{round(ROW * PX_MM + 140)}'
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -117,13 +130,11 @@ def render(scene):
             image = shot.crop((round(X0 + left * PX_MM), round(Y0), round(X0 + right * PX_MM), round(Y0 + ROW * PX_MM)))
             zoom = scale / RENDER
             save(image.resize((round(image.width * zoom), round(image.height * zoom)), Image.LANCZOS),
-                 out / f'{scene}-{theme}.png')
-    print(scene, flush=True)
+                 out / f'{name}-{theme}.png')
+    print(name, flush=True)
 
 
-song.write(plugin / 'patches/first-song.vcv', [dict(sequencer(ARP, MIX), id=1, version=version, pos=[0, 0]),
-           dict(module('AudioInterface2', 'Core'), id=2, version='2.6.6', pos=[hp('Sequencer'), 0])],
-           [{'id': i + 1, 'outputModuleId': 1, 'outputId': 4 + i, 'inputModuleId': 2, 'inputId': i, 'color': c}
-            for i, c in enumerate(('#f3374b', '#0986ad'))])
-for scene in sys.argv[3:] or SCENES:
-    render(scene)
+if __name__ == '__main__':
+    song.write(plugin / 'patches/first-song.vcv', *layout((sequencer(ARP, MIX), [], [], 1.0, {}))[:2])
+    for scene in sys.argv[3:] or SCENES:
+        render(scene, SCENES[scene])
