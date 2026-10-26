@@ -4,6 +4,7 @@ Each state is one run of Rack with clicks played into it; every key named for th
 
     docs/assets/keys/<key>-<state>-<theme>.png     at 125%, or 160% for the display's keys
     docs/assets/keys/face-<state>-<theme>.png      the whole face, at 100%
+    docs/assets/keys/face-numbered-<theme>.png     the face at 125%, its parts numbered (numbered.py)
     docs/assets/plugs/<slug>-<theme>.png           the display showing each plug, at 125% (state "plugs")
 
     render_keys.py <rack-headless dir> <plugin dir> [state ...]
@@ -13,6 +14,7 @@ from pathlib import Path
 from PIL import Image, ImageStat
 
 sys.path.insert(0, str(Path(__file__).parent))
+from numbered import numbered  # noqa: E402
 from render_modules import BOXES, CENTRES, HP, PX_MM, RENDER, ROW, X0, Y0, at, clicks, hp, save, sequencer  # noqa: E402
 
 rack, plugin = Path(sys.argv[1]), Path(sys.argv[2])
@@ -115,6 +117,8 @@ def render(state):
             save(scaled(image, DISPLAY_ZOOM if name in DISPLAY else ZOOM), out / f'{name.lower()}-{state}-{theme}.png')
         face = crop(shots[0], (0, 0, hp('Sequencer') * HP, ROW))
         save(scaled(face, 1.0), out / f'face-{state}-{theme}.png')
+        if state == 'off':
+            save(numbered(scaled(face, ZOOM), PX_MM / RENDER * ZOOM), out / f'face-numbered-{theme}.png')
 
     run(seq, playing, actions(presses), shot)
     print(state, flush=True)

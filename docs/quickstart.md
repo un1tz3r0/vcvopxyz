@@ -11,7 +11,7 @@ same facts in tables, and [Your first song](guide.md) uses them to make music.
 > - TRACK, SHIFT and a black key set the step length. TRACK, SHIFT and a step set the step count.
 > - The breakouts give a track jacks, so that other VCV modules can play its notes or change its sound.
 >
-> [Controls](controls.md#for-op-z-owners) gives each OP-Z combination and the clicks that do the same thing here.
+> [For OP-Z owners](op-z-owners.md) gives each OP-Z combination and the clicks that do the same thing here.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="assets/keys/face-off-dark.png"><img alt="The Sequencer's face, with no notes on any track" src="assets/keys/face-off-light.png"></picture>
 
@@ -97,7 +97,8 @@ To remove the lock, latch the step and double-click the dial.
 2. Click a white key to choose a component, then a black key to choose its value.
 3. Release **SHIFT**.
 
-Each white key has the icon of its component under it. [The Sequencer](sequencer.md) tells what each one does.
+Each white key has the icon of its component above it. [Step components](step-components.md) tells what each one
+does.
 
 ## Set the tempo
 
@@ -139,5 +140,5 @@ Every change on the face is one step of Rack's undo, so Ctrl+Z returns it.
 ## Next
 
 - [Controls](controls.md): every key, mode and colour, in tables.
-- [The Sequencer](sequencer.md): each control in full.
+- [The Sequencer](sequencer.md): its chapters, which tell about each control in full.
 - [Your first patch](patching.md): the breakouts, and the Sequencer with other VCV modules.
