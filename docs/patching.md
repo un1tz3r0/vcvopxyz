@@ -93,6 +93,7 @@ passes the row on, so a breakout to its right still works.
 
 ## Next
 
+- [Patch recipes](recipes.md): MIDI, clocks, recording and more, each with a demo patch.
 - [Breakouts](breakout.md): every jack of the three breakouts.
 - [Quickstart](quickstart.md): every key and mode on one page.
 - [The Screen](screen.md), and its kit editor for the drum tracks.

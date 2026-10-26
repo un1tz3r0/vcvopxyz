@@ -50,6 +50,12 @@ OP-Z **latches** here: it stays on after you release the mouse button.
 The Sequencer's context menu has **Long-press toggles hold** and **Ctrl-click toggles hold**. Clear one to stop
 that gesture from latching keys.
 
+| Gesture | |
+| --- | --- |
+| A long press latches a step. A click releases it. | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/gifs/long-press-dark.gif"><img alt="The pointer presses step 1 until it blinks, then clicks it again to release it" src="assets/gifs/long-press-light.gif" width="451"></picture> |
+| A click latches **TRACK**, and a second click releases it. | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/gifs/click-latch-dark.gif"><img alt="A click latches TRACK, the black keys choose plug slots 4 and 1, and a click on TRACK releases it" src="assets/gifs/click-latch-light.gif" width="451"></picture> |
+| Hold **STOP** for a second to clear. | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/gifs/hold-stop-dark.gif"><img alt="With TRACK latched, the pointer holds STOP while the steps fill red, and the track is then empty" src="assets/gifs/hold-stop-light.gif" width="860"></picture> |
+
 ## Modes
 
 **TRACK**, **PROJECT**, **MIXER** and **TEMPO** are one mode at a time. **SHIFT**, a latched step and **REC** work

@@ -65,7 +65,7 @@ set once, as `RACK_SDK_VERSION` at the top of the workflow.
 | `res-src/panel.py` | Writes every panel and component graphic into `res/`. |
 | `docs/` | This manual; `docs/assets/` holds its pictures. |
 | `tools/rack-headless/` | `shot.sh`: screenshots of a patch in a headless Rack (Xvfb, software GL), with scripted clicks. |
-| `tools/docs-images/` | The manual's pictures: the modules, the Sequencer's keys in each state, each plug on its display, the scenes, and the diagrams. |
+| `tools/docs-images/` | The manual's pictures: the modules, the Sequencer's keys in each state, each plug on its display, the scenes, the recipes and their demo patches, the gestures, and the diagrams. |
 | `tools/docs-lint.py` | Checks the manual against [STYLE.md](STYLE.md). |
 
 ## Panels
@@ -98,12 +98,14 @@ Fundamental in `tools/rack-headless/Fundamental`, plus `xvfb-run`, `xdotool`, Im
 tools/docs-images/render_modules.py tools/rack-headless . [Slug ...]   # docs/assets/modules: large, small, label
 tools/docs-images/render_keys.py tools/rack-headless . [state ...]     # docs/assets/keys and plugs: each key, the face, the plugs
 tools/docs-images/render_guide.py tools/rack-headless . [scene ...]    # docs/assets/guide: the tutorials' scenes, and patches/first-song.vcv
+tools/docs-images/render_recipes.py tools/rack-headless . [recipe ...] # docs/assets/recipes, and the recipes' demo patches in patches/
+tools/docs-images/render_gifs.py tools/rack-headless . [gesture ...]   # docs/assets/gifs: the gestures, recorded with ffmpeg
 ```
 
 Rack draws each at 300% and the scripts scale down: modules at 125% (large), 50% (small) and a square of the panel's
 top at 175% (label); keys at 125%, and the display's at 160%; the display's plug readout at 125%; the face and the
-guide at 100%. The tutorials' song is in `tools/docs-images/song.py`: change it there, and the scenes and the patch
-follow. To add one to a page, write a shorthand and run
+guide at 100%. The tutorials' song is in `tools/docs-images/song.py`: change it there, and the scenes and the patches
+follow. The recipes and the gestures need `ffmpeg` as well. To add a picture to a page, write a shorthand and run
 `tools/docs-images/expand.py . docs/*.md README.md`, which turns it into a `<picture>` with both themes; `--prune`
 deletes the pictures no page uses. `[[key:track-track|TRACK|32]]` is the TRACK key in the `track` state, 32 px high;
 `[[module:Breakout-label|synth breakout|56]]`, `[[plug:Saw|saw|40]]`, `[[face:project|…]]` and `[[guide:bass|…]]` work

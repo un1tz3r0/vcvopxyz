@@ -19,6 +19,7 @@ SOURCES += $(wildcard src/*.cpp src/*/*.cpp)
 DISTRIBUTABLES += res
 DISTRIBUTABLES += $(wildcard LICENSE*)
 DISTRIBUTABLES += $(wildcard presets)
+DISTRIBUTABLES += $(wildcard patches)
 
 # `make panels` needs only Python, not the SDK
 ifneq ($(MAKECMDGOALS),panels)

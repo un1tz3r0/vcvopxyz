@@ -31,7 +31,11 @@ the track's [step count](track.md#step-count-and-step-length) lights a dim orang
 ## Latch a step
 
 A latched step stays on, so that you can change it with other keys. To latch a step, long-press it, or Ctrl+click it
-(⌘+click on a Mac). The step blinks. While a step is latched:
+(⌘+click on a Mac). The step blinks.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/gifs/long-press-dark.gif"><img alt="The pointer presses step 1 until it blinks, then clicks it again to release it" src="assets/gifs/long-press-light.gif" width="451"></picture>
+
+While a step is latched:
 
 - Click a key to add that note to the step, or to remove it.
 - Click a later step to make the notes last to the end of that step. Blue lights show how far. Click the same step
@@ -83,6 +87,8 @@ One turn of a dial is one step of Rack's undo. Click **REC** again to stop recor
 ## Clear
 
 Hold **STOP** for a second. The steps fill red as you hold it. Release it before they are full to keep everything.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/gifs/hold-stop-dark.gif"><img alt="With TRACK latched, the pointer holds STOP while the steps fill red, and the track is then empty" src="assets/gifs/hold-stop-light.gif" width="860"></picture>
 
 | Hold STOP with | Clears |
 | --- | --- |
