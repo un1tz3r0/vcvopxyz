@@ -207,4 +207,4 @@ own slot first.
 
 - [Your first patch](patching.md): play the bassline on other modules, with the breakouts.
 - [Quickstart](quickstart.md): every key and mode on one page.
-- [The Sequencer](sequencer.md): parameter locks, recording, step components, patterns and chains.
+- [Steps](steps.md) and [Project](project.md): parameter locks, recording, patterns and chains.

@@ -10,7 +10,7 @@ Find yourself in the left column, and read the pages in order.
 | --- | --- |
 | New to the OP-Z and to VCV Rack | Install ([Linux](../INSTALL.linux.md), [macOS](../INSTALL.macos.md), [Windows](../INSTALL.windows.md)), [Rack in two minutes](rack-basics.md), [How it works](how-it-works.md), [Your first song](guide.md), [Your first patch](patching.md) |
 | A VCV user, new to the OP-Z | [How it works](how-it-works.md), [Your first song](guide.md), [Your first patch](patching.md), [Quickstart](quickstart.md) |
-| An OP-Z owner | [Quickstart](quickstart.md), the [table for OP-Z owners](controls.md#for-op-z-owners), [How it works](how-it-works.md), [Your first patch](patching.md) |
+| An OP-Z owner | [Quickstart](quickstart.md), [For OP-Z owners](op-z-owners.md), [How it works](how-it-works.md), [Your first patch](patching.md) |
 
 [How it works](how-it-works.md) has a [glossary](how-it-works.md#glossary) of every term.
 
@@ -18,7 +18,7 @@ Find yourself in the left column, and read the pages in order.
 
 | | Module | Plays | What it is |
 | --- | --- | --- | --- |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Sequencer-label-dark.png"><img alt="sequencer" src="assets/modules/Sequencer-label-light.png" height="56"></picture> | [Sequencer](sequencer.md) | Every track | The OP-Z: its face, its tracks and every sound. Steps, [step components](step-components.md), recording, the mixer, patterns and projects. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Sequencer-label-dark.png"><img alt="sequencer" src="assets/modules/Sequencer-label-light.png" height="56"></picture> | [Sequencer](sequencer.md) | Every track | The OP-Z: its face, its tracks and every sound. Its chapters: [steps](steps.md), [track](track.md), [project](project.md), [mixer](mixer.md), [tempo](tempo.md), [master track](master.md). |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Breakout-label-dark.png"><img alt="synth breakout" src="assets/modules/Breakout-label-light.png" height="56"></picture> | [Synth Breakout](breakout.md) | Tracks 5 to 8 | Takes a synth track's sound out, or sends its notes and CVs out and takes your voice in. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/DrumBreakout-label-dark.png"><img alt="drum breakout" src="assets/modules/DrumBreakout-label-light.png" height="56"></picture> | [Drum Breakout](breakout.md#drum-breakout) | Tracks 1 to 4 | Takes a drum track's sound out, or sends its triggers and CVs out and takes your drums in. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/FxBreakout-label-dark.png"><img alt="send fx breakout" src="assets/modules/FxBreakout-label-light.png" height="56"></picture> | [Send FX Breakout](breakout.md#send-fx-breakout) | FX 1 or 2 | Takes an FX track's effect out, or sends its send and CVs out and takes your effect in. |
@@ -54,7 +54,10 @@ click a black key to choose one. The Sequencer's context menu, **Plug slots**, f
 
 - Start: [Rack in two minutes](rack-basics.md), [How it works](how-it-works.md), [Your first song](guide.md),
   [Your first patch](patching.md), [Quickstart](quickstart.md).
-- The Sequencer: [Controls](controls.md), [Sequencer](sequencer.md), [step components](step-components.md).
+- The Sequencer: [Sequencer](sequencer.md), [Controls](controls.md), [steps](steps.md),
+  [step components](step-components.md), [track](track.md), [project](project.md), [mixer](mixer.md),
+  [tempo](tempo.md), [master track](master.md).
+- For OP-Z owners: [the combinations and the differences](op-z-owners.md).
 - The plugs: [synth tracks](synth-tracks.md), [drum tracks](drum-tracks.md), [kits](kits.md),
   [FX tracks](fx-tracks.md).
 - The other modules: [breakouts](breakout.md), [Screen](screen.md).

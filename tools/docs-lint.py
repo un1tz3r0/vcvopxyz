@@ -10,10 +10,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The pages written to docs/STYLE.md so far, each from the heading given (None: the whole page). Each rewritten page
-# joins the list. The README's top is Vic's own voice, so its check starts below it.
-PAGES = {'README.md': '## In a patch', 'docs/README.md': None, 'docs/STYLE.md': None, 'docs/how-it-works.md': None,
-         'docs/rack-basics.md': None, 'docs/guide.md': None, 'docs/patching.md': None, 'docs/quickstart.md': None}
+# Every page of the manual, each from the heading given (None: the whole page). The README's top is Vic's own voice,
+# so its check starts below it, and development.md is for contributors, as DESIGN.md is.
+PAGES = {'README.md': '## In a patch',
+         **{f'docs/{p.name}': None for p in sorted((ROOT / 'docs').glob('*.md')) if p.name != 'development.md'}}
 
 STEP_WORDS, TEXT_WORDS = 20, 25
 
@@ -67,7 +67,8 @@ def blocks(lines):
             yield from flush()
             if not re.fullmatch(r'[|\s:-]+', stripped):
                 for cell in stripped.strip('|').split('|'):
-                    yield n, 'cell', cell
+                    if cell.strip().endswith('.'):   # a cell without a full stop is a label or a list of names
+                        yield n, 'cell', cell
             continue
         item = re.match(r'(\d+\.|[-*])\s+(.*)', stripped)
         if item or not buf:
