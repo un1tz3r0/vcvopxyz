@@ -1,6 +1,6 @@
 # vcvopxyz
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/guide/band-dark.png"><img alt="A Sequencer playing kick, snare, bass and chords, with a Screen beside it" src="docs/assets/guide/band-light.png"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/guide/band-dark.png"><img alt="A Sequencer playing the six tracks of the first song, with a Screen beside it" src="docs/assets/guide/band-light.png"></picture>
 
 ## What is it?
 

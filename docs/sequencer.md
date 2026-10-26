@@ -8,7 +8,7 @@ to, and the [master track](#master-track) that transposes them in key. Each trac
 slots, and has 16 steps of up to four notes, with micro timing, note lengths, step count and step length. A project
 has 16 [patterns](#patterns-and-chains) of them all, chained to play in turn, and ten project slots save it all.
 
-New to it? Start with [your first sound](guide.md) and the [quickstart](quickstart.md).
+New to it? Start with [your first song](guide.md) and the [quickstart](quickstart.md).
 
 ## Plugs
 

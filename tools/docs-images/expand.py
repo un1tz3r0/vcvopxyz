@@ -7,6 +7,7 @@
     [[module:Digital-small|Digital]]    docs/assets/modules/Digital-small-*.png
     [[guide:bass|Alt]]                  docs/assets/guide/bass-*.png
     [[plug:Saw|Alt|36]]                 docs/assets/plugs/Saw-*.png
+    [[diagram:row|Alt]]                 docs/assets/diagrams/row-*.svg
 
 and with --prune, deletes the images under docs/assets/{keys,modules,guide,plugs} that no Markdown file refers to.
 
@@ -15,7 +16,7 @@ and with --prune, deletes the images under docs/assets/{keys,modules,guide,plugs
 import os, re, sys
 from pathlib import Path
 
-DIRS = dict(key='keys', dial='keys', face='keys', module='modules', guide='guide', plug='plugs')
+DIRS = dict(key='keys', dial='keys', face='keys', module='modules', guide='guide', plug='plugs', diagram='diagrams')
 SHORTHAND = re.compile(r'\[\[(\w+):([\w-]+)\|([^|\]]+)(?:\|(\d+))?\]\]')
 
 plugin = Path(sys.argv[1])
@@ -26,14 +27,15 @@ assets = plugin / 'docs/assets'
 
 def picture(md, kind, name, alt, height):
     stem = f'face-{name}' if kind == 'face' else name
+    ext = 'svg' if kind == 'diagram' else 'png'
     base = assets / DIRS[kind] / stem
     for theme in ('light', 'dark'):
-        if not base.with_name(f'{stem}-{theme}.png').exists():
-            sys.exit(f'{md}: no {base}-{theme}.png')
+        if not base.with_name(f'{stem}-{theme}.{ext}').exists():
+            sys.exit(f'{md}: no {base}-{theme}.{ext}')
     rel = os.path.relpath(base, md.parent)
     size = f' height="{height}"' if height else ''
-    return (f'<picture><source media="(prefers-color-scheme: dark)" srcset="{rel}-dark.png">'
-            f'<img alt="{alt}" src="{rel}-light.png"{size}></picture>')
+    return (f'<picture><source media="(prefers-color-scheme: dark)" srcset="{rel}-dark.{ext}">'
+            f'<img alt="{alt}" src="{rel}-light.{ext}"{size}></picture>')
 
 
 CODE = re.compile(r'(```.*?```|`[^`\n]*`)', re.S)

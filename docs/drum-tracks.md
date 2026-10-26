@@ -1,6 +1,6 @@
 # Drum tracks
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="assets/guide/drum-dark.png"><img alt="The kick track selected, playing on every beat under the bassline" src="assets/guide/drum-light.png"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/guide/drums-dark.png"><img alt="The perc track selected, with the kick, snare and perc tracks playing under the bassline" src="assets/guide/drums-light.png"></picture>
 
 Tracks 1 to 4, kick, snare, perc and sample, are the OP-Z's drum tracks. Each plays a **kit** of 24 sounds, one per
 key, picked from its ten slots with **TRACK** and a black key, as a synth track picks an engine. They are the same

@@ -1,6 +1,6 @@
 # vcvopxyz manual
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="assets/guide/band-dark.png"><img alt="A Sequencer playing kick, snare, bass and chords, with a Screen beside it" src="assets/guide/band-light.png"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/guide/band-dark.png"><img alt="A Sequencer playing the six tracks of the first song, with a Screen beside it" src="assets/guide/band-light.png"></picture>
 
 ## Where to start
 
@@ -8,9 +8,9 @@ Find yourself in the left column, and read the pages in order.
 
 | You are | Read |
 | --- | --- |
-| New to the OP-Z and to VCV Rack | Install ([Linux](../INSTALL.linux.md), [macOS](../INSTALL.macos.md), [Windows](../INSTALL.windows.md)), [How it works](how-it-works.md), [Your first sound](guide.md), [Breakouts](breakout.md) |
-| A VCV user, new to the OP-Z | [How it works](how-it-works.md), [Your first sound](guide.md), [Quickstart](quickstart.md), [Breakouts](breakout.md) |
-| An OP-Z owner | [Quickstart](quickstart.md) and its [table for OP-Z owners](quickstart.md#for-op-z-owners), [How it works](how-it-works.md), [Breakouts](breakout.md) |
+| New to the OP-Z and to VCV Rack | Install ([Linux](../INSTALL.linux.md), [macOS](../INSTALL.macos.md), [Windows](../INSTALL.windows.md)), [Rack in two minutes](rack-basics.md), [How it works](how-it-works.md), [Your first song](guide.md), [Your first patch](patching.md) |
+| A VCV user, new to the OP-Z | [How it works](how-it-works.md), [Your first song](guide.md), [Your first patch](patching.md), [Quickstart](quickstart.md) |
+| An OP-Z owner | [Quickstart](quickstart.md), the [table for OP-Z owners](controls.md#for-op-z-owners), [How it works](how-it-works.md), [Your first patch](patching.md) |
 
 [How it works](how-it-works.md) has a [glossary](how-it-works.md#glossary) of every term.
 
@@ -52,8 +52,9 @@ click a black key to choose one. The Sequencer's context menu, **Plug slots**, f
 
 ## Every page
 
-- Start: [How it works](how-it-works.md), [Your first sound](guide.md), [Quickstart](quickstart.md).
-- The Sequencer: [Sequencer](sequencer.md), [step components](step-components.md).
+- Start: [Rack in two minutes](rack-basics.md), [How it works](how-it-works.md), [Your first song](guide.md),
+  [Your first patch](patching.md), [Quickstart](quickstart.md).
+- The Sequencer: [Controls](controls.md), [Sequencer](sequencer.md), [step components](step-components.md).
 - The plugs: [synth tracks](synth-tracks.md), [drum tracks](drum-tracks.md), [kits](kits.md),
   [FX tracks](fx-tracks.md).
 - The other modules: [breakouts](breakout.md), [Screen](screen.md).

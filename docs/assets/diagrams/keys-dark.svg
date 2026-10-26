@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="784" height="236" viewBox="0 0 784 236" font-family="Nunito, 'Segoe UI', -apple-system, Helvetica, Arial, sans-serif"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6e7681"/></marker></defs>
+<text x="24" y="32" font-size="17" font-weight="700" fill="#e6edf3" text-anchor="start">The keys, at their home octave: F3 to E5</text>
+<rect x="28" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="50" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">1</text>
+<text x="50" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">F3</text>
+<rect x="80" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="102" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">2</text>
+<text x="102" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">G3</text>
+<rect x="132" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="154" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">3</text>
+<text x="154" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">A3</text>
+<rect x="184" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="206" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">4</text>
+<text x="206" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">B3</text>
+<rect x="236" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="258" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">5</text>
+<text x="258" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">C4</text>
+<rect x="288" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="310" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">6</text>
+<text x="310" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">D4</text>
+<rect x="340" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="362" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">7</text>
+<text x="362" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">E4</text>
+<rect x="392" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="414" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">8</text>
+<text x="414" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">F4</text>
+<rect x="444" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="466" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">9</text>
+<text x="466" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">G4</text>
+<rect x="496" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="518" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">10</text>
+<text x="518" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">A4</text>
+<rect x="548" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="570" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">11</text>
+<text x="570" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">B4</text>
+<rect x="600" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="622" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">12</text>
+<text x="622" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">C5</text>
+<rect x="652" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="674" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">13</text>
+<text x="674" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">D5</text>
+<rect x="704" y="128" width="44" height="56" rx="8" fill="none" stroke="#6e7681" stroke-width="1.25"/>
+<text x="726" y="161" font-size="15" font-weight="700" fill="#e6edf3" text-anchor="middle">14</text>
+<text x="726" y="204" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">E5</text>
+<circle cx="76" cy="96" r="17" fill="#e6edf3"/>
+<text x="76" y="101" font-size="14" font-weight="700" fill="#0d1117" text-anchor="middle">1</text>
+<text x="76" y="68" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">F#3</text>
+<circle cx="128" cy="96" r="17" fill="#e6edf3"/>
+<text x="128" y="101" font-size="14" font-weight="700" fill="#0d1117" text-anchor="middle">2</text>
+<text x="128" y="68" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">G#3</text>
+<circle cx="180" cy="96" r="17" fill="#e6edf3"/>
+<text x="180" y="101" font-size="14" font-weight="700" fill="#0d1117" text-anchor="middle">3</text>
+<text x="180" y="68" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">A#3</text>
+<circle cx="284" cy="96" r="17" fill="#e6edf3"/>
+<text x="284" y="101" font-size="14" font-weight="700" fill="#0d1117" text-anchor="middle">4</text>
+<text x="284" y="68" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">C#4</text>
+<circle cx="336" cy="96" r="17" fill="#e6edf3"/>
+<text x="336" y="101" font-size="14" font-weight="700" fill="#0d1117" text-anchor="middle">5</text>
+<text x="336" y="68" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">D#4</text>
+<circle cx="440" cy="96" r="17" fill="#e6edf3"/>
+<text x="440" y="101" font-size="14" font-weight="700" fill="#0d1117" text-anchor="middle">6</text>
+<text x="440" y="68" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">F#4</text>
+<circle cx="492" cy="96" r="17" fill="#e6edf3"/>
+<text x="492" y="101" font-size="14" font-weight="700" fill="#0d1117" text-anchor="middle">7</text>
+<text x="492" y="68" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">G#4</text>
+<circle cx="544" cy="96" r="17" fill="#e6edf3"/>
+<text x="544" y="101" font-size="14" font-weight="700" fill="#0d1117" text-anchor="middle">8</text>
+<text x="544" y="68" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">A#4</text>
+<circle cx="648" cy="96" r="17" fill="#e6edf3"/>
+<text x="648" y="101" font-size="14" font-weight="700" fill="#0d1117" text-anchor="middle">9</text>
+<text x="648" y="68" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">C#5</text>
+<circle cx="700" cy="96" r="17" fill="#e6edf3"/>
+<text x="700" y="101" font-size="14" font-weight="700" fill="#0d1117" text-anchor="middle">0</text>
+<text x="700" y="68" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">D#5</text>
+<text x="24" y="226" font-size="12" font-weight="400" fill="#9198a1" text-anchor="start">Click − to move every key down an octave, and + to move it up. The numbers name the keys in this manual.</text>
+</svg>

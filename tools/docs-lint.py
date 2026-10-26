@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # The pages written to docs/STYLE.md so far, each from the heading given (None: the whole page). Each rewritten page
 # joins the list. The README's top is Vic's own voice, so its check starts below it.
-PAGES = {'README.md': '## In a patch', 'docs/README.md': None, 'docs/STYLE.md': None, 'docs/how-it-works.md': None}
+PAGES = {'README.md': '## In a patch', 'docs/README.md': None, 'docs/STYLE.md': None, 'docs/how-it-works.md': None,
+         'docs/rack-basics.md': None, 'docs/guide.md': None, 'docs/patching.md': None, 'docs/quickstart.md': None}
 
 STEP_WORDS, TEXT_WORDS = 20, 25
 
@@ -45,7 +46,7 @@ def plain(text):
 
 
 def blocks(lines):
-    """Yields (line number, kind, text) for each paragraph, list item and table cell outside code blocks."""
+    """Yields (line number, kind, text) for each paragraph, list item and table cell outside code blocks, in quotes too."""
     fenced, start, buf, kind = False, 0, [], 'text'
 
     def flush():
@@ -58,7 +59,7 @@ def blocks(lines):
             fenced = not fenced
             yield from flush()
             continue
-        stripped = line.strip()
+        stripped = re.sub(r'^(>\s?)+', '', line.strip()).strip()   # a quote's lines are read as any others
         if fenced or not stripped or stripped.startswith('#'):
             yield from flush()
             continue
