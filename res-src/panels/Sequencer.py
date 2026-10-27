@@ -85,10 +85,10 @@ def face(f):
         f.line(COLUMN * k, 0, COLUMN * k, CELL)
 
     # The index keys, project, mixer, tempo and screen, straddle the top edge in the corner, each in a gap in it.
-    for i, (name, symbol) in enumerate([('PROJECT', 'project'), ('MIXER', 'mixer'), ('METRONOME', 'metronome'), ('SCREEN', 'screen')]):
+    for i, name in enumerate(['PROJECT', 'MIXER', 'METRONOME', 'SCREEN']):
         cx = 4.0 + KEY_PITCH * i
         f.art.append(f'<circle cx="{num(cx)}" cy="0" r="{num(KEY / 2 + 0.5)}" fill="{{panel}}"/>')
-        round_key(f, f'{name}_PARAM', cx, 0, symbol)
+        round_key(f, f'{name}_PARAM', cx, 0)
 
     # Beside the dials, where the OP-Z's speaker is: the display, its track keys in the OP-Z's order, the eight tracks,
     # the two FX tracks, then the master track.
@@ -101,10 +101,9 @@ def face(f):
         f.place(f'DIAL{d}_LIGHT', left + 1.6, CELL - 1.8)
 
     # The keys.
-    for (column, y), (name, symbol) in {(1, TOP): ('TRACK', 'track'), (1, MID): ('REC', 'rec'), (1, BOTTOM): ('OCTAVE_DOWN', 'minus'),
-                                        (2, MID): ('PLAY', 'play'), (2, BOTTOM): ('OCTAVE_UP', 'plus'),
-                                        (3, MID): ('STOP', 'stop'), (3, BOTTOM): ('SHIFT', 'shift')}.items():
-        round_key(f, f'{name}_PARAM', x(column), y, symbol)
+    for (column, y), name in {(1, TOP): 'TRACK', (1, MID): 'REC', (1, BOTTOM): 'OCTAVE_DOWN', (2, MID): 'PLAY',
+                              (2, BOTTOM): 'OCTAVE_UP', (3, MID): 'STOP', (3, BOTTOM): 'SHIFT'}.items():
+        round_key(f, f'{name}_PARAM', x(column), y)
     for i, track in enumerate(TRACKS):
         f.art.append(icon(track, x(i + 2), TOP - ICON, 2.2, '{ink}'))
         round_key(f, f'STEP{i}_PARAM', x(i + 2), TOP)
@@ -113,7 +112,7 @@ def face(f):
         round_key(f, f'KEY{12 * (i // 7) + WHITE[i % 7]}_PARAM', x(i + 4), BOTTOM)
     lines = [4, 5, 6, 8, 9, 11, 12, 13, 15, 16]  # the column line each black key sits on, after that column
     for value, line in enumerate(lines):
-        number_key(f, f'KEY{12 * (value // 5) + BLACK[value % 5]}_PARAM', COLUMN * line, MID, str((value + 1) % 10))
+        number_key(f, f'KEY{12 * (value // 5) + BLACK[value % 5]}_PARAM', COLUMN * line, MID)
 
 
 def panel():

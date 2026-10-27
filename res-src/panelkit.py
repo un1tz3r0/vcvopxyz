@@ -51,12 +51,12 @@ class Font:
 
 NUNITO = Font(ROOT / 'res-src/fonts/Nunito-Bold.ttf')
 
-# Colour roles, filled into the artwork per theme. Rack picks the dark panel when the user prefers dark panels. A
-# glyph is a symbol that's also an LED, printed dimmer on a dark panel so the LED outshines it when lit.
+# Colour roles, filled into the artwork per theme. Rack picks the dark panel when the user prefers dark panels. The
+# keys' symbols are drawn by the keys (src/ui.hpp), in colours that follow these.
 THEMES = {
-    '': dict(panel='#ECEBE8', ink='#3A3A3C', glyph='#3A3A3C', title='#2B2B2D', line='#C4C2BE', footer='#A9A8A4',
+    '': dict(panel='#ECEBE8', ink='#3A3A3C', title='#2B2B2D', line='#C4C2BE', footer='#A9A8A4',
              bezel='#2F3032', glass='#030304', box='#2D2E31', box_ink='#E4E3E0'),
-    '-dark': dict(panel='#2B2C2E', ink='#C9C8C4', glyph='#878785', title='#ECEBE8', line='#4A4B50', footer='#707175',
+    '-dark': dict(panel='#2B2C2E', ink='#C9C8C4', title='#ECEBE8', line='#4A4B50', footer='#707175',
                   bezel='#141516', glass='#030304', box='#1C1D1F', box_ink='#C9C8C4'),
 }
 PASTELS = dict(yellow='#F4D394', green='#C4DDAB', teal='#A4D9D5', lavender='#B7C0F2',

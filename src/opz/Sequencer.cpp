@@ -3214,11 +3214,59 @@ NVGcolor lit(engine::Module* m, int light) {
 	return top > 0.f ? nvgRGBAf(c[0] / top, c[1] / top, c[2] / top, std::sqrt(top)) : nvgRGBAf(0.f, 0.f, 0.f, 0.f);
 }
 
+/** A display key's press and hold, round its `frame`, as keys::style says: the shading of a press and a glow, under
+its icon, or with `over`, an outline, a lit ring or 2.1.4's grey fill over it. The glow takes the key's LED colour, or
+the display's ink while that's off. */
+void held(NVGcontext* vg, PressKey* key, math::Rect frame, float radius, NVGcolor led, bool over) {
+	float h = key->hold(), p = key->push();
+	int glow = keys::style.glow;
+	NVGcolor color = led.a > 0.f ? nvgTransRGBAf(led, 1.f) : INK;
+	auto rounded = [&](float grow) {
+		nvgRoundedRect(vg, frame.pos.x - grow, frame.pos.y - grow, frame.size.x + 2 * grow, frame.size.y + 2 * grow, radius + grow);
+	};
+	if (!over) {
+		if (keys::style.pressedIn && p > 0.f) {
+			nvgBeginPath(vg);
+			rounded(0.f);
+			nvgFillColor(vg, nvgRGBAf(0.f, 0.f, 0.f, 0.6f * p));
+			nvgFill(vg);
+		}
+		if (h > 0.f && (glow == keys::HALO || glow == keys::REFLECTION)) {
+			bool halo = glow == keys::HALO;
+			float g = mm2px(halo ? 0.45f : 1.2f), feather = mm2px(halo ? 1.6f : 3.f);
+			nvgBeginPath(vg);
+			rounded(g + feather);
+			if (halo) {
+				rounded(0.f);
+				nvgPathWinding(vg, NVG_HOLE);
+			}
+			nvgFillPaint(vg, nvgBoxGradient(vg, frame.pos.x - g, frame.pos.y - g, frame.size.x + 2 * g, frame.size.y + 2 * g, radius + g,
+				feather, nvgTransRGBAf(color, h * (halo ? 0.75f : 0.32f)), nvgTransRGBAf(color, 0.f)));
+			nvgFill(vg);
+		}
+		return;
+	}
+	if (h > 0.f && (glow == keys::OUTLINE || glow == keys::RIM)) {
+		nvgBeginPath(vg);
+		rounded(glow == keys::OUTLINE ? mm2px(0.65f) : 0.f);
+		nvgStrokeColor(vg, nvgTransRGBAf(glow == keys::OUTLINE ? INK : color, h));
+		nvgStrokeWidth(vg, mm2px(glow == keys::OUTLINE ? 0.3f : 0.6f));
+		nvgStroke(vg);
+	}
+	else if (glow == keys::GREY_FILL && key->pressed()) {
+		nvgBeginPath(vg);
+		rounded(0.f);
+		nvgFillColor(vg, nvgTransRGBAf(INK, 0.15f));
+		nvgFill(vg);
+	}
+}
+
 } // namespace display
 
 /** A track's key on the display: its icon, grey at rest and lighter under the pointer, lit as its LED says (white
 while selected, orange with the track's loudest voice, cyan for a moment at each note), outlined while selected,
-and with a jack beside it while a breakout has the track. Its name is in its tooltip. */
+pressed and held as display::held says, and with a jack beside it while a breakout has the track. Its name is in its
+tooltip. */
 struct TrackKey : PressKey {
 	int lane = 0, light = 0;
 	std::shared_ptr<window::Svg> icon, jack = loadSymbol("plug_Breakout");
@@ -3229,8 +3277,10 @@ struct TrackKey : PressKey {
 			Sequencer* m = dynamic_cast<Sequencer*>(module);
 			math::Vec c = box.size.div(2);
 			float size = 1.35f * box.size.x, r = 0.14f * box.size.x; // a track symbol fills 55% of its canvas
-			drawSymbol(vg, icon, c, size, nvgTransRGBAf(display::INK, hovered ? 0.85f : 0.45f));
+			math::Rect frame(1.f, 1.f, box.size.x - 2.f, box.size.y - 2.f);
 			NVGcolor color = display::lit(module, light);
+			display::held(vg, this, frame, r, color, false);
+			drawSymbol(vg, icon, c, size, nvgTransRGBAf(display::INK, hovered ? 0.85f : 0.45f));
 			if (color.a > 0.f) {
 				nvgBeginPath(vg);
 				nvgCircle(vg, c.x, c.y, 0.5f * box.size.x);
@@ -3240,17 +3290,12 @@ struct TrackKey : PressKey {
 			}
 			if (m ? m->track == lane : lane == DRUM_TRACKS) {
 				nvgBeginPath(vg);
-				nvgRoundedRect(vg, 1.f, 1.f, box.size.x - 2.f, box.size.y - 2.f, r);
+				nvgRoundedRect(vg, VEC_ARGS(frame.pos), VEC_ARGS(frame.size), r);
 				nvgStrokeColor(vg, display::INK);
 				nvgStrokeWidth(vg, mm2px(0.3f));
 				nvgStroke(vg);
 			}
-			if (pressed()) {
-				nvgBeginPath(vg);
-				nvgRoundedRect(vg, 1.f, 1.f, box.size.x - 2.f, box.size.y - 2.f, r);
-				nvgFillColor(vg, nvgTransRGBAf(display::INK, 0.15f));
-				nvgFill(vg);
-			}
+			display::held(vg, this, frame, r, color, true);
 			if (m && m->lights[Sequencer::BOUND_LIGHT + lane].getBrightness() > 0.f)
 				drawSymbol(vg, jack, box.size.mult(0.84f), 0.34f * box.size.x, display::INK);
 		}
@@ -3259,7 +3304,7 @@ struct TrackKey : PressKey {
 };
 
 /** A page on the display: a dot in its colour, lit as its LED says, and its name, bright for the page showing and
-gone for one the track hasn't. */
+gone for one the track hasn't. It's shaded under the pointer, and pressed and held as display::held says. */
 struct PageKey : PressKey {
 	int page = 0, light = 0;
 
@@ -3271,16 +3316,20 @@ struct PageKey : PressKey {
 			std::string name = m ? m->pageName(page) : TrackCore::PAGE_NAMES[page];
 			float h = box.size.y, b = m ? m->lights[light].getBrightness() + m->lights[light + 1].getBrightness() + m->lights[light + 2].getBrightness() : 0.f;
 			bool showing = b > 0.5f;
+			math::Rect frame(0.f, 0.08f * h, box.size.x, 0.84f * h);
+			NVGcolor color = showing ? PAGE_COLORS[page] : nvgRGBAf(0.f, 0.f, 0.f, 0.f);
+			display::held(vg, this, frame, 0.2f * h, color, false);
 			nvgBeginPath(vg);
 			nvgCircle(vg, 0.3f * h, h / 2, (showing ? 0.17f : 0.13f) * h);
 			nvgFillColor(vg, nvgTransRGBAf(PAGE_COLORS[page], name.empty() ? 0.15f : showing ? 1.f : 0.45f));
 			nvgFill(vg);
-			if (pressed() || hovered) {
+			if (hovered && !pressed()) {
 				nvgBeginPath(vg);
-				nvgRoundedRect(vg, 0.f, 0.08f * h, box.size.x, 0.84f * h, 0.2f * h);
-				nvgFillColor(vg, nvgTransRGBAf(display::INK, pressed() ? 0.15f : 0.07f));
+				nvgRoundedRect(vg, VEC_ARGS(frame.pos), VEC_ARGS(frame.size), 0.2f * h);
+				nvgFillColor(vg, nvgTransRGBAf(display::INK, 0.07f));
 				nvgFill(vg);
 			}
+			display::held(vg, this, frame, 0.2f * h, color, true);
 			nvgFontFaceId(vg, font->handle);
 			nvgFontSize(vg, 0.5f * h);
 			nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
@@ -3739,6 +3788,18 @@ struct SequencerWidget : ModuleWidget {
 			menu->addChild(createMenuItem("Import a projects folder…", "", [=]() { files::importOpzFolder(module); }));
 			menu->addChild(createMenuItem(string::f("Import a project into slot %d…", module->project + 1), "", [=]() { files::importOpz(module); }));
 		}));
+		menu->addChild(createSubmenuItem("Appearance", "", [=](Menu* menu) { appendAppearanceMenu(menu); }));
+	}
+
+	/** The keys' look, for every Sequencer. */
+	static void appendAppearanceMenu(Menu* menu) {
+		menu->addChild(createMenuLabel("For every Sequencer"));
+		menu->addChild(createIndexPtrSubmenuItem("Held key", std::vector<std::string>(keys::GLOW_NAMES, keys::GLOW_NAMES + keys::GLOWS), &keys::style.glow));
+		menu->addChild(createBoolPtrMenuItem("Shade a pressed key", "", &keys::style.pressedIn));
+		menu->addChild(createIndexPtrSubmenuItem("Step and white key LEDs", std::vector<std::string>(keys::DOT_NAMES, keys::DOT_NAMES + keys::DOTS), &keys::style.dot));
+		menu->addChild(createIndexPtrSubmenuItem("LEDs", std::vector<std::string>(keys::LED_NAMES, keys::LED_NAMES + keys::LEDS), &keys::style.led));
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuItem("Reset to the defaults", "", []() { keys::style = keys::Style(); }));
 	}
 };
 

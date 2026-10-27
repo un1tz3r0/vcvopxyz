@@ -9,7 +9,7 @@ Needs fontTools:  python3 -m pip install fonttools
 """
 import importlib
 
-from opz import SCALE, SYMBOLS, symbol_svg
+from opz import EDGE, KEY_SYMBOLS, SCALE, SYMBOLS, symbol_svg
 from panelkit import (BUTTON_R, DIALS, KNOB_R, PASTELS, ROOT, SMALL_DIAL_R, SOFT_R, THEMES, button, dial_bg,
                       dial_pointer, knob_bg, knob_pointer, write)
 
@@ -31,3 +31,5 @@ if __name__ == '__main__':
     write(components / 'SmallDial.svg', dial_pointer(SMALL_DIAL_R * SCALE))
     for name in [*SYMBOLS, *'0123456789']:
         write(components / f'symbols/{name}.svg', symbol_svg(name))
+    for name in KEY_SYMBOLS:
+        write(components / f'symbols/{name}_edge.svg', symbol_svg(name, EDGE))

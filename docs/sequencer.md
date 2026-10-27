@@ -72,3 +72,32 @@ Right-click the Sequencer to open its context menu.
 | **Long-press toggles hold** | Lets a long press latch a step or **SHIFT**. On at the start. |
 | **Ctrl-click toggles hold** | Lets a Ctrl+click (⌘+click on a Mac) latch a step or **SHIFT**. On at the start. |
 | **Projects** | Saves the project on a switch, and moves the project slots in and out of [files](project.md#project-files). |
+| **Appearance** | Sets how the keys look. See [Appearance](#appearance). |
+
+### Appearance
+
+The **Appearance** menu sets how the keys look. Its settings apply to every Sequencer, and Rack keeps them with its own
+settings. The defaults are **Halo**, **Shade a pressed key** on, 2.2 mm dots and **Tight window**.
+
+| Item | Does |
+| --- | --- |
+| **Held key** | Sets what shows around a key while you hold the mouse button on it. |
+| **Shade a pressed key** | Shades a key on each press, as if it sinks into the panel. On at the start. |
+| **Step and white key LEDs** | Sets the size of the dot on the steps and white keys, off and lit: 1.7, 2.2 or 2.6 mm. |
+| **LEDs** | Sets how a light shows on its key. |
+
+| Held key | Look |
+| --- | --- |
+| **Halo** | A soft glow around the key, in the colour of its light. With no light, or white light on the light panel, the glow is grey. |
+| **Reflection** | A wider and fainter glow, as if the light falls on the panel around your finger. |
+| **Outline** | A thin second ring around the key. |
+| **Lit ring** | The key's ring becomes thicker, in the colour of its light. |
+| **None** | No change. |
+| **Grey fill (2.1.4)** | A grey fill on the key, as in version 2.1.4. |
+
+| LEDs | Look |
+| --- | --- |
+| **Tight window** | A lit symbol is on a dark disc, at each brightness. Dim white is clear on both panels. |
+| **Dark grey** | A symbol is dark grey while its light is off. A lit symbol has a thin dark edge. |
+| **Dark lens** | Each symbol is on a dark disc, lit or off. |
+| **Window (2.1.4)** | The dark disc fades in with the light, as in version 2.1.4. |
