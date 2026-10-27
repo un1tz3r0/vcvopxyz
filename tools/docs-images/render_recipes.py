@@ -19,7 +19,7 @@ out = plugin / 'docs/assets/recipes'
 out.mkdir(parents=True, exist_ok=True)
 
 PERC, CHORD = 2, 7                                   # lanes
-ATTACK, SUSTAIN, RELEASE, FILTER = 4, 6, 7, 2        # among a track's params
+ATTACK, SUSTAIN, RELEASE, FILTER, LEVEL = 4, 6, 7, 2, 15   # among a track's params
 LEAD_STEP_LENGTH, MASTER_LEVEL, PER_ADV = 31, 37, 9  # Sequencer params, and the step length that waits for ADV
 seconds = lambda s: math.log(s / 1e-3) / math.log(1e4)  # an envelope dial, an ADSR's or a Delay's time, at s seconds
 # Breakout jacks: inputs, then outputs (TrackIds in TrackCore.hpp).
@@ -67,7 +67,8 @@ RECIPES = {
                                                   (4, 0, 1, B_RET_L)])),
     'outside-effect': (sequencer(ARP, MIX), [module('FxBreakout'), fundamental('Delay', p0=seconds(0.75 * 60 / song.TEMPO), p1=0.45)],
                        ['PLAY'], 0.75, dict(cables=[(1, B_SEND_L, 2, 4), (2, 1, 1, B_RET_L)])),
-    'pump': (chord(sequencer(CHORD, MIX), PUMP, 1, [(ATTACK, seconds(0.25)), (SUSTAIN, 1), (RELEASE, seconds(0.01))]),
+    'pump': (chord(sequencer(CHORD, MIX), PUMP, 1, [(ATTACK, seconds(0.25)), (SUSTAIN, 1), (RELEASE, seconds(0.01)),
+                                                    (LEVEL, 0)]),
              [module('Breakout', p0=4), fundamental('VCA'), fundamental('Scope')], ['PLAY'], 0.75,
              dict(mix=False, cables=[(0, L_OUT, 2, 2), (0, R_OUT, 2, 5), (2, 0, AUDIO, 0), (2, 1, AUDIO, 1),
                                      (1, B_GATE_OUT, 3, 0), (1, B_ENV, 3, 1), (1, B_ENV, 2, 1), (1, B_ENV, 2, 4)])),

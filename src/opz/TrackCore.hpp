@@ -229,6 +229,7 @@ struct TrackCore : TrackIds {
 	const Downstream* bus = nullptr;
 	Slot* slot = nullptr;
 	bool silenced = false;       // ringing out after a switch of plug: it takes no notes, and an effect no send
+	bool following = false;      // a breakout's core beside the plug, for its CVs: its sound and lights go nowhere
 	bool selected = false;       // the Sequencer's keys and dials are on its track
 
 	int style = 0;               // the note style playing, which a change of the dial lets every note go for
@@ -274,8 +275,9 @@ struct TrackCore : TrackIds {
 	}
 
 	/** Takes over its track from the core that played it: the page and the master's keys, the clock and the LFO, so
-	a switch of plug carries on where the last one was. Its dials catch up on its first sample. */
-	void takeOver(const TrackCore& from) {
+	a switch of plug carries on where the last one was. Its dials catch up on its first sample. A core that `followed`
+	the same notes beside it keeps its gates. */
+	void takeOver(const TrackCore& from, bool followed = false) {
 		page = from.page;
 		trackMode = from.trackMode;
 		masterTrackMode = from.masterTrackMode;
@@ -288,8 +290,9 @@ struct TrackCore : TrackIds {
 		std::copy(std::begin(from.dialValues), std::end(from.dialValues), dialValues);
 		// Its gates start low, so the notes held as it comes in start on it, where a fresh trigger would wait for them
 		// to fall first.
-		for (dsp::SchmittTrigger& g : gates)
-			g.s = dsp::SchmittTrigger::LOW;
+		if (!followed)
+			for (dsp::SchmittTrigger& g : gates)
+				g.s = dsp::SchmittTrigger::LOW;
 		silenced = false;
 		controlDivider.clock = controlDivider.division - 1;
 	}
@@ -548,8 +551,8 @@ struct TrackCore : TrackIds {
 		scopeEnd = (scopeEnd + 1) % Snapshot::SCOPE;
 		sendUpstream(panned[0], panned[1], mono);
 
-		// A core ringing out after a switch leaves the lights to the one playing.
-		if (lightDivider.process() && !silenced)
+		// A core ringing out after a switch, or following, leaves the lights to the one playing.
+		if (lightDivider.process() && !silenced && !following)
 			updateLights(sampleTime * lightDivider.getDivision());
 	}
 

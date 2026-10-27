@@ -4,11 +4,10 @@
 
 /*
 An OP-Z FX track (TrackCore.hpp): a send effect playing FX 1 or FX 2, the OP-Z's tracks 9 and 10. It takes what the
-other tracks send it, or a breakout's return while that's patched, and returns the effect alone, through the filter,
-to the mix. Its dials have the OP-Z's two pages: the effect's two dials and the filter, then the LFO. Its notes, from the
-keys while it's selected or from its track's steps, set the effect's time where it has one, the delay's or the
-reverb's predelay: the lowest key is the shortest. The effect registers its plug in its file with `static
-FxPlug<Effect>`, and is a struct with:
+other tracks send it and returns the effect alone, through the filter, to the mix. Its dials have the OP-Z's two pages:
+the effect's two dials and the filter, then the LFO. Its notes, from the keys while it's selected or from its track's
+steps, set the effect's time where it has one, the delay's or the reverb's predelay: the lowest key is the shortest. The
+effect registers its plug in its file with `static FxPlug<Effect>`, and is a struct with:
 
 	static constexpr const char* SLUG;
 	static constexpr int TIME_KEY;                         // the key its time starts on, or -1 for an effect with none
@@ -106,14 +105,7 @@ struct FxCore : TrackCore {
 
 		float in[2], out[2];
 		float send = target == TARGET_PITCH ? clamp(1.f + offset, 0.f, 2.f) : 1.f;
-		if (silenced)
-			in[0] = in[1] = 0.f;
-		else if (inputs[RETURN_L_INPUT].isConnected()) {
-			in[0] = inputs[RETURN_L_INPUT].getVoltageSum();
-			in[1] = inputs[RETURN_R_INPUT].isConnected() ? inputs[RETURN_R_INPUT].getVoltageSum() : in[0];
-		}
-		else
-			in[0] = in[1] = busTrack >= 0 && bus ? bus->send[busTrack - FX1] : 0.f;
+		in[0] = in[1] = !silenced && busTrack >= 0 && bus ? bus->send[busTrack - FX1] : 0.f;
 		for (float& x : in)
 			x = std::isfinite(x) ? x * send : 0.f;
 		unit.process(in, out, fx);

@@ -20,7 +20,8 @@ is not here, [Controls](controls.md) tells what each key does now.
 - **A breakout has the track.** The track's key on the display shows a small jack. The breakout's patched jacks decide
   where the sound goes:
   - **L** or **R** patched: the track plays at the breakout's jacks, not in the mix.
-  - A note output patched, but nothing at **RET L**: the track plays your modules, and they return no sound.
+  - **RET L** or **RET R** patched, but your modules make no sound: the return replaces the track's plug, so the
+    track is silent. Check the modules, or remove the return's cables.
   See [Two ways out](breakout.md#two-ways-out).
 - **The drum track's kit is gone.** See [A copied Sequencer has a silent drum track](#a-copied-sequencer-has-a-silent-drum-track).
 - **The track has no notes.** Steps with notes light orange. A dim orange step is past the step count, so the track

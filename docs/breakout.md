@@ -18,17 +18,20 @@ of track:
 
 The jacks that you patch decide what a breakout does.
 
-- **Audio out:** patch **L** and **R**, or **L** alone for mono. The track's plug plays, but its sound goes to these
-  jacks, not to the Sequencer's mix. Use this for your own effects, mixer or recorder.
-- **A sound from outside:** patch the note outputs. These are **V/OCT** or **GATE** on a Synth Breakout, **TRIG** or
-  **GATE** on a Drum Breakout, and **SEND** on a Send FX Breakout. The track's plug stops, and your modules make the
-  sound.
+- **Audio out:** patch **L** and **R**, or **L** alone for mono. The track's sound goes to these jacks, not to the
+  Sequencer's mix. Use this for your own effects, mixer or recorder.
+- **A sound from outside:** patch **RET L**, and **RET R** for stereo. The track's plug stops, and the sound at these
+  jacks replaces it. Your modules make this sound from the breakout's note outputs.
 
-In the second way, the sound returns at **RET L** and **RET R**. It goes through the track as the plug's sound does:
-its envelope, filter, level, pan and FX sends, and the mixer. The display shows **Breakout** in place of the plug.
+The return goes through the track as the plug's sound does: its envelope, filter, level, pan and FX sends, and the
+mixer. The display shows **Breakout** in place of the plug. Remove the cables from **RET L** and **RET R**, and the
+plug plays again.
 
-Remove the cables, and the plug plays again. If both kinds of jack are patched, the audio outputs win: the plug plays
-out of **L** and **R**.
+The note outputs are **V/OCT** and **GATE** on a Synth Breakout, and **TRIG** and **GATE** on a Drum Breakout. A
+Send FX Breakout has **SEND L** and **SEND R**. These outputs work with or without a return. With no return, the plug
+plays, and your modules can play the same notes with it.
+
+You can use the two ways together. The return then goes out of **L** and **R**, not to the mix.
 
 ## Common to the three breakouts
 
@@ -55,14 +58,16 @@ locks, step components, presets and patterns work on the track as on any other.
 
 ### Each output takes one stage
 
-Each output that you patch does a job that the track then stops doing itself.
+While a return is patched, some outputs do a job that the track then stops doing itself.
 
 - **ENV** patched: the track does not envelope the return.
 - **FILTER** or **RESO** patched: the track does not filter the return.
-- **FX 1** or **FX 2** patched (synth and drum): the track's send goes to the jack, not to the FX track.
 - **LFO** patched: the LFO moves nothing inside the track.
 
-The level and the pan always apply. **RET R** takes the signal of **RET L** while nothing is patched to it.
+With no return, the plug plays as usual. These outputs then only give a copy of the envelope, a dial or the LFO.
+
+The **FX 1** and **FX 2** audio outputs (synth and drum) always take the track's send. It goes to the jack, not to the
+FX track. The level and the pan always apply. **RET R** takes the signal of **RET L** while nothing is patched to it.
 
 ### Inputs
 
@@ -113,8 +118,9 @@ releases with the note.
 
 ### Drums from outside
 
-1. Patch **TRIG** to a drum module's trigger input, or **GATE** to its gate input.
-2. Patch the drum module's output to **RET L**. The track's steps, components and locks now play it.
+1. Patch **TRIG** to a drum module's trigger input, or **GATE** to its gate input. The kit still plays.
+2. Patch the drum module's output to **RET L**. The kit stops, and the track's steps, components and locks play the
+   drum module.
 3. For a sampler that chooses its sample by V/OCT, patch **SOUND** to that input. Each key now plays the next sample.
 4. Patch **VEL** to an accent or velocity input, and **PITCH** to the tuning input.
 
@@ -133,14 +139,14 @@ A Send FX Breakout gives an [FX track](fx-tracks.md) jacks, so that other module
 | **CV 1**, **CV 2**, **FILTER**, **RESO** | The dials, 0 to 10 V. |
 | **L**, **R** | The track's own effect, in place of the mix. |
 
-**RET L** and **RET R** return through the track's filter, unless **FILTER** or **RESO** is patched. They then go
-into the mix at the track's level. With **GATE** patched, the **V/OCT** and **GATE** inputs set the time in place of
-the track's notes.
+**RET L** and **RET R** replace the track's own effect. They return through the track's filter, unless **FILTER** or
+**RESO** is patched. They then go into the mix at the track's level. With **GATE** patched, the **V/OCT** and
+**GATE** inputs set the time in place of the track's notes.
 
 ### An effect from outside
 
-1. Patch **SEND L** and **SEND R** to a delay or reverb.
-2. Patch its outputs to **RET L** and **RET R**.
+1. Patch **SEND L** and **SEND R** to a delay or reverb. The track's own effect still plays.
+2. Patch its outputs to **RET L** and **RET R**. The track's own effect stops.
 3. Raise a track's **FX 1** or **FX 2** send. The effect returns to the mix, as the built-in effects do.
 4. Patch **TIME** to the effect's time input, scaled to suit. The track's keys and steps now set the time in tempo.
 5. Patch **CV 1** and **CV 2** to two of its controls. The Sequencer's dials, a Screen and locks now change them.

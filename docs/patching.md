@@ -32,7 +32,7 @@ another module of this plugin that does.
 The bassline now plays on the VCO. The Sequencer's display shows **Breakout** in place of the plug. The bass
 track's envelope, filter, level and FX sends still shape the sound. Turn the Sequencer's dials to hear this.
 
-When you patch **V/OCT**, the track's plug stops. Remove that cable and the plug plays again.
+The track's plug stops when you patch **RET L**, not before. Remove that cable and the plug plays again.
 
 ## 3. Use your own filter
 
