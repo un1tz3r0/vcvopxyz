@@ -1,9 +1,10 @@
 /*
-Drum Breakout: hands one of the Sequencer's drum tracks to other modules, as Synth Breakout does a synth track. Patched
-at L and R, the track's sound leaves there; patched at TRIG or GATE instead, its sounds are made of other modules,
-played by the breakout's core inside the Sequencer. It sends out what the track would play: each note's trigger, gate, sound (which of the 24 its key picks), velocity and
-envelope, the LFO, PITCH and REVERSE, the filter and the FX sends; and it takes the sound back in at RETURN, through
-whatever it doesn't send out, as Breakout does.
+Drum Breakout: hands one of the Sequencer's drum tracks to other modules, as Synth Breakout does a synth track. It sends
+out what the track plays: each note's trigger, gate, sound (which of the 24 its key picks), velocity and envelope, the
+LFO, PITCH and REVERSE, the filter and the FX sends. While RETURN is unpatched the kit plays, and the breakout's core
+follows its notes for these; patched at RETURN, the track's sounds are made of other modules, played by the core, and
+come back in there, through whatever it doesn't send out, as Breakout's do. Patched at L and R, the track's sound leaves
+there instead of the mix.
 
 Each of the notes a step plays keeps its own channel; mono puts them all on the first. The envelope follows the note
 style: retrig and mono leave it open, at the sustain level, for the sound outside to end itself, while gate and loop

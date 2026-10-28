@@ -122,7 +122,7 @@ Play a synth track with a VCO, a VCF and a VCA in place of its plug. [Your first
 one step at a time.
 
 1. Add a **Synth Breakout** directly to the right of the Sequencer. It takes track 5 (bass).
-2. Patch its **V/OCT** output to a VCO, and the VCO to the breakout's **RET L**.
+2. Patch its **V/OCT** output to a VCO, and the VCO to the breakout's **RET L**. The track's plug stops.
 3. Optional: patch **FILTER** and **RESO** to a VCF, and **ENV** to a VCA. The track then stops doing those jobs
    itself.
 
@@ -137,7 +137,7 @@ Play drum modules, or any other sound, from a drum track's steps.
 
 1. Add a **Drum Breakout** directly to the right of the Sequencer. Right-click it, and choose the track.
 2. Patch its **TRIG** output to the drum module's trigger input, or **GATE** to an envelope's gate input.
-3. Patch the drum module's output to the breakout's **RET L**.
+3. Patch the drum module's output to the breakout's **RET L**. The track's kit stops.
 4. Optional: patch **SOUND** to the module's pitch input. Each key then plays a different pitch.
 5. Optional: patch **VEL** to an accent or level input.
 
@@ -155,8 +155,9 @@ Use a delay, reverb or other effect module as an FX track's effect.
 
 1. Add a **Send FX Breakout** directly to the right of the Sequencer. It takes track 9 (FX 1).
 2. Patch its **SEND L** to the effect's input. For a stereo effect, patch **SEND R** too.
-3. Patch the effect's wet output to the breakout's **RET L**. For a stereo effect, patch its right output to **RET R**.
-4. On a track's mix page, raise **FX 1**.
+3. Patch the effect's wet output to the breakout's **RET L**. The track's own effect stops.
+4. For a stereo effect, patch its right output to **RET R**.
+5. On a track's mix page, raise **FX 1**.
 
 That track's send now goes through your effect, and returns into the mix. In the demo patch, track 7 (arp) sends to
 a Fundamental Delay at a dotted eighth. See [Send FX Breakout](breakout.md#send-fx-breakout) for the **TIME** output
@@ -166,17 +167,17 @@ and the dial outputs.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="assets/recipes/pump-dark.png"><img alt="Track 8's ENV moving a VCA-2 on the Sequencer's mix, with a Scope showing the gate and the envelope" src="assets/recipes/pump-light.png"></picture>
 
-Use a track's steps as a source of envelopes and CVs for other modules. A breakout gives its **ENV**, **LFO** and
-dial outputs only while it has the track's notes, so patch a note output first.
+Use a track's steps as a source of envelopes and CVs for other modules.
 
 1. Add a **Synth Breakout** directly to the right of the Sequencer. Right-click it, and choose **Track 8, chord**.
-2. Patch its **GATE** output to any input, for example a Scope. The track's plug is now silent.
-3. Patch **ENV**, **LFO**, **CV 1** or **CV 2** to the modules that you want to move.
-4. Write notes on track 8. Each note starts the envelope.
+2. Patch **ENV**, **GATE**, **LFO**, **CV 1** or **CV 2** to the modules that you want to move.
+3. Write notes on track 8. Each note starts the envelope.
+4. Optional: on track 8's mix page, set the level to 0. The track's plug is then silent.
 
-The modules now move with track 8's steps. The demo patch makes the whole mix pump on each beat:
+The modules now move with track 8's steps. With no return patched, the track's plug also plays, unless its level is
+0. The demo patch makes the whole mix pump on each beat:
 
-- Track 8 has a note on each beat, four steps long, with a slow attack and a full sustain.
+- Track 8 has a note on each beat, four steps long, with a slow attack and a full sustain. Its level is 0.
 - The Sequencer's **L** and **R** go through a **VCA-2**, and **ENV** sets its level.
 
 **CV 1** and **CV 2** give the sound page's first two dials, so a [parameter lock](steps.md#parameter-locks) on a step

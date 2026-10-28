@@ -44,8 +44,12 @@ and its track: Auto takes the first of its kind that no breakout further left ha
 frame it writes its inputs and which of its outputs are patched into the hub (`JacksIn`), and copies out what the
 track's core wrote to its patched outputs (`JacksOut`). Both are double-buffered by Rack's frame count, so a
 breakout's jacks are a sample behind the track whichever thread runs it. What a breakout has patched decides who
-plays: its note outputs without its audio outputs hand the track to the breakout's core, which sends the notes out
-and takes the sound back at its return; its audio outputs keep the plug playing, out of them instead of the mix.
+plays: its return alone hands the track to the breakout's core, which sends the notes out and takes the sound back
+there. Without it the plug plays, and the breakout's core, flagged `following`, runs beside it while any CV output is
+patched: it takes the same notes and writes the CVs, its lights off and its silent sound overwritten by the plug's.
+It keeps its gates when the return then hands it the track, so held notes don't start again; and it has no tail to
+ring out when the return goes, so it goes straight back to following. The audio outputs take whichever core plays
+out of the mix (2.1.6; before, the note outputs alone handed the track over, and the audio outputs overruled them).
 
 Placement only changes when modules move, so breakouts walk left again only after Rack has given some module of
 this plugin a new neighbour: every module's `onExpanderChange` bumps a plugin-wide count (`busLayout`). The UI thread

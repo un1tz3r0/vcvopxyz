@@ -66,14 +66,15 @@ The track's key on the Sequencer's display shows a small jack while a breakout h
 
 A breakout makes no sound itself. The jacks that you patch on it decide what it does.
 
-1. **Patch its audio outputs, L and R.** The track's plug plays, but its sound goes to these jacks, not to the mix.
-   Use this for your own effects, mixer or recorder.
-2. **Patch its note outputs.** The plug stops. Your modules play the notes, and their sound returns at **RET L** and
-   **RET R**. The track's envelope, filter, level, pan and FX sends then shape that sound.
+1. **Patch its audio outputs, L and R.** The track's sound goes to these jacks, not to the mix. Use this for your own
+   effects, mixer or recorder.
+2. **Patch its return, RET L and RET R.** The plug stops. Your modules play the track's notes from the note outputs,
+   and their sound returns at these jacks. The track's envelope, filter, level, pan and FX sends then shape it.
 
-Each other output that you patch takes one more stage outside the track. For example, with **ENV** patched, the track
-does not envelope the return. If the audio outputs and the note outputs are both patched, the audio outputs win.
-Remove the cables and the plug plays again. [Breakouts](breakout.md) lists every jack.
+The note outputs give the track's notes in both ways. With no return, the plug plays, and your modules can play along.
+While a return is patched, each other output that you patch takes one more stage outside the track. For example, with
+**ENV** patched, the track does not envelope the return. Remove the return's cables and the plug plays again.
+[Breakouts](breakout.md) lists every jack.
 
 ## What saves where
 

@@ -12,10 +12,11 @@ lets go of its notes and rings out until it falls quiet, under the new one.
 The black keys in track mode pick a plug from the track's ten slots. A drum track has one plug, the kit player,
 whose slots are kits instead (KitCore.hpp).
 
-A breakout bound to the track takes it over, by what is patched: with its audio outputs patched, the plug plays and
-its sound leaves there instead of the mix (TrackCore::sendUpstream sees to that); with its note outputs patched and
-its audio outputs not, the breakout's core plays instead, sending the notes out and taking the sound back in at its
-return.
+A breakout bound to the track takes it over, by what is patched. Its return alone replaces the plug: with RET L or
+RET R patched, the breakout's core plays the track, sending the notes out and taking the sound back in there. Without
+it the plug plays, and the breakout's core follows the same notes beside it for whichever of its CVs are patched,
+its own sound going nowhere. With its audio outputs patched, whichever plays leaves there instead of the mix
+(TrackCore::sendUpstream sees to that).
 */
 namespace opz {
 
@@ -213,11 +214,14 @@ struct HostedTrack : TrackIds {
 		plug = plugOf[std::find_if(cores.begin(), cores.end(), [=](const std::unique_ptr<TrackCore>& u) { return u.get() == c; }) - cores.begin()];
 	}
 
-	/** Plays the slot picked straight away, with nothing ringing: for a patch loaded or reset, while the engine waits. */
+	/** Plays the slot picked straight away, with nothing ringing or following: for a patch loaded or reset, while the
+	engine waits. */
 	void settle() {
 		if (ringing)
 			ringing->releaseAll();
 		ringing = nullptr;
+		breakoutCore()->releaseAll();
+		breakoutCore()->following = false;
 		picked = -1;
 		activate(slotCore());
 	}
@@ -227,27 +231,28 @@ struct HostedTrack : TrackIds {
 			c->setSampleRate(rate);
 	}
 
-	/** Hands the track to another core. The one it leaves rings out, unless one is ringing already, which stops. */
+	/** Hands the track to another core. A plug it leaves rings out, unless one is ringing already, which stops. The
+	breakout's core has nothing to ring out once its return is gone: it follows the notes beside the plug instead. */
 	void switchTo(TrackCore* c) {
+		TrackCore* out = breakoutCore();
+		bool leaving = active == out;
 		if (ringing && ringing != c)
 			ringing->releaseAll();
-		ringing = active;
-		ringing->silenced = true;
-		quiet = rung = 0.f;
-		c->takeOver(*active);
+		ringing = leaving ? nullptr : active;
+		if (ringing) {
+			ringing->silenced = true;
+			quiet = rung = 0.f;
+		}
+		c->takeOver(*active, c->following);
+		c->following = false;
+		if (leaving)
+			out->following = true;
 		activate(c);
-		if (ringing == c)
-			ringing = nullptr;
 	}
 
-	/** Whether what a breakout has patched hands it the track: its note outputs, without its audio outputs. */
-	static bool replaces(int kind, uint32_t patched) {
-		auto on = [=](int o) { return bool(patched >> o & 1); };
-		if (on(LEFT_OUTPUT) || on(RIGHT_OUTPUT))
-			return false;
-		if (kind == FX)
-			return on(CV_SEND_L_OUTPUT) || on(CV_SEND_R_OUTPUT);
-		return on(CV_GATE_OUTPUT) || on(kind == DRUM ? CV_TRIGGER_OUTPUT : CV_VOCT_OUTPUT);
+	/** Whether a breakout's return is patched, which hands it the track. */
+	static bool returned(const JacksIn& in) {
+		return in.inputs[RETURN_L_INPUT].channels || in.inputs[RETURN_R_INPUT].channels;
 	}
 
 	/** Takes the breakout's jacks as it sent them: its inputs, and its outputs patched or not, so a core sees them as
@@ -284,17 +289,29 @@ struct HostedTrack : TrackIds {
 		c->process(args);
 	}
 
-	/** One sample: the jacks from the breakout, if one has the track, then the core playing, and the one ringing out
-	under it. Its sound is in `sound` afterwards. */
+	/** One sample: the jacks from the breakout, if one has the track, then the breakout's core following the plug for
+	its CVs, the core playing, and the one ringing out under it. Its sound is in `sound` afterwards. */
 	void play(const Module::ProcessArgs& args, const Downstream* bus, const JacksIn* in) {
 		takeJacks(in);
-		TrackCore* want = in && replaces(kind, in->patched) ? breakoutCore() : slotCore();
+		TrackCore* out = breakoutCore();
+		TrackCore* want = in && returned(*in) ? out : slotCore();
 		if (want != active)
 			switchTo(want);
+		bool follow = in && active != out && in->patched >> AUDIO_OUTPUTS;
+		if (follow != out->following) {
+			if (follow)
+				out->takeOver(*active);
+			else
+				out->releaseAll();
+			out->following = follow;
+		}
 		if (int s = slot; s != picked) {
 			picked = s;
 			slotCore()->pick(s);
 		}
+		// Its sound would be its return's, which is unpatched: the plug's, after it, has the audio outputs and mix.
+		if (out->following)
+			run(out, args, bus);
 		float left = 0.f, right = 0.f, send[FX_TRACKS] = {};
 		if (ringing) {
 			run(ringing, args, bus);

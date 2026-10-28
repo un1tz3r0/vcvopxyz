@@ -1,11 +1,12 @@
 /*
-Synth Breakout: hands one of the Sequencer's synth tracks to other modules (opz/Breakout.hpp). Patched at L and R,
-the track's sound leaves there instead of the mix. Patched at V/OCT or GATE instead, the track's voice is made of other
-modules, played by the breakout's core inside the Sequencer: it sends out what the track would play with,
-each note's pitch, gate and envelope, the LFO, both sound dials, the filter and the FX sends, and takes the sound
-back in at RETURN. Whatever it sends out, it stops doing itself: with ENV patched the return isn't enveloped, with
-FILTER or RESO patched it isn't filtered, with an FX amount patched that FX output carries the full signal for an
-outside VCA, and with LFO patched the LFO moves nothing inside. The level and the pan always apply.
+Synth Breakout: hands one of the Sequencer's synth tracks to other modules (opz/Breakout.hpp). Its core inside the
+Sequencer sends out what the track plays with: each note's pitch, gate and envelope, the LFO, both sound dials, the
+filter and the FX sends. While RETURN is unpatched the track's plug plays, and the core follows its notes for these.
+Patched at RETURN, the track's voice is made of other modules instead, played by the core, which takes the sound back in
+there. Whatever it sends out, it then stops doing itself: with ENV patched the return isn't enveloped, with FILTER or
+RESO patched it isn't filtered, with an FX amount patched that FX output carries the full signal for an outside VCA, and
+with LFO patched the LFO moves nothing inside. The level and the pan always apply. Patched at L and R, the track's
+sound, the plug's or the return's, leaves there instead of the mix.
 
 A polyphonic return is enveloped channel by channel, one voice each; a mono one by the loudest voice.
 */

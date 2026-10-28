@@ -46,8 +46,8 @@ struct BreakoutModule : Module, TrackIds {
 		configInput(CLOCK_INPUT, "Clock, for the track's synced LFO speeds");
 		configInput(RESET_INPUT, "LFO reset");
 		configInput(EXT_INPUT, "LFO external (±5V), for the External shape");
-		configInput(RETURN_L_INPUT, "Return left, or mono");
-		configInput(RETURN_R_INPUT, "Return right");
+		configInput(RETURN_L_INPUT, "Return left, or mono: the track's sound from outside, in place of its plug's");
+		configInput(RETURN_R_INPUT, "Return right, in place of its plug's");
 		configOutput(LEFT_OUTPUT, "Left, or mono while right is unpatched, in place of the mix");
 		configOutput(RIGHT_OUTPUT, "Right");
 		configOutput(FX1_OUTPUT, "FX 1 send, in place of FX 1");

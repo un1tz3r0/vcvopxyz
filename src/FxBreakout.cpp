@@ -1,9 +1,10 @@
 /*
-Send FX Breakout: hands one of the Sequencer's FX tracks to other modules, as Synth Breakout does a synth track.
-Patched at L and R, the effect's sound leaves there; patched at SEND instead, the effect is made of other modules,
-played by the breakout's core inside the Sequencer. It sends out what the tracks send its FX track, at SEND, with the track's notes, the time they set (the
-Delay's keys, in seconds), the LFO, both sound dials and the filter; and it takes the effect back in at RETURN,
-through the filter unless FILTER or RESO is patched, at the track's level, into the mix.
+Send FX Breakout: hands one of the Sequencer's FX tracks to other modules, as Synth Breakout does a synth track. It
+sends out what the tracks send its FX track, at SEND, with the track's notes, the time they set (the Delay's keys, in
+seconds), the LFO, both sound dials and the filter. While RETURN is unpatched the track's own effect plays, and the
+breakout's core follows the sends and notes for these; patched at RETURN, the effect is made of other modules, and the
+core takes it back in there, through the filter unless FILTER or RESO is patched, at the track's level, into the mix.
+Patched at L and R, the effect leaves there instead of the mix.
 */
 #include "opz/FxTrack.hpp"
 #include "opz/Breakout.hpp"
