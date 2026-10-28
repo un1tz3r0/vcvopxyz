@@ -67,6 +67,15 @@ keeps a `Mark` before the last few slots it scheduled, and `Player::redo` takes 
 dropping their queued notes and stopping those started, so they schedule again from the new pattern. Every pattern
 switch does this for the slot queued ahead, which until 2.1.7 still played from the old pattern.
 
+A song is a saved chain with more columns (`Project::Chain`: up to `SONG_ROWS` rows, each with a pattern, a length
+and a mute group, plus fades and a tempo); key-built chains and the .opz file keep to `CHAIN_LENGTH`. In song mode,
+`followChain` moves on at each row's length (`rowLength`) and stops at the end unless "Loop songs" is on, and
+`enterRow` puts the row's mute group in place of the pattern's own (kept in `heldMuteGroup`, so `storeScene` saves
+the pattern's own). A Song Editor writes its turns and clicks into the hub (`SongIn`), which the Sequencer applies
+under the slots' lock and copies back to `chains[songSlot]`; its screen reads the song on the UI thread through
+`Hub::songView`, which only try-locks, keeping the last copy when the lock is busy. Each pattern's scene keeps its
+tempo; the song's tempo, when set, overrides it, and CLOCK overrides both.
+
 ## Tracks
 
 `src/opz/TrackCore.hpp`. `TrackCore` is every track, drum, synth or FX: the tempo, gate edges, the LFO, the

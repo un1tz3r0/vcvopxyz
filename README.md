@@ -38,7 +38,7 @@ The [manual](docs/README.md) has every module, page and key. To build the plugin
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/row-dark.svg"><img alt="A Sequencer with a row of modules to its right: two Synth Breakouts take tracks 5 and 6, a Screen shows the selected track, and a Drum Breakout takes track 1" src="docs/assets/diagrams/row-light.svg"></picture>
 
 The **Sequencer** makes every sound, so a Sequencer and an audio module are all you need. To send a track to other
-modules, put a **breakout** to the Sequencer's right. A **Screen** in the same row shows the selected track's dials. **Remotes** on the Sequencer's left plays its patterns from jacks.
+modules, put a **breakout** to the Sequencer's right. A **Screen** in the same row shows the selected track's dials. **Remotes** on the Sequencer's left plays its patterns from jacks, and a **Song Editor** there edits its songs.
 The modules in the row need no cables between them. [How it works](docs/how-it-works.md) explains the rest.
 [Patch recipes](docs/recipes.md) use it with MIDI, clocks, recorders and other modules, each with a demo patch.
 

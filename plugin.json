@@ -1,7 +1,7 @@
 {
   "slug": "vcvopxyz",
   "name": "vcvopxyz",
-  "version": "2.1.7",
+  "version": "2.1.8",
   "license": "MIT",
   "brand": "un1tz3r0",
   "author": "Victor Condino",
@@ -24,6 +24,17 @@
         "Controller",
         "Expander",
         "Polyphonic"
+      ]
+    },
+    {
+      "slug": "SongEditor",
+      "name": "Song Editor",
+      "description": "Edits the Sequencer's songs on a big screen, beside it on its left: the rows of patterns with their lengths and mute groups, the fades and tempo, and song or pattern mode",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/song-editor.md",
+      "tags": [
+        "Sequencer",
+        "Visual",
+        "Expander"
       ]
     },
     {

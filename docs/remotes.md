@@ -15,11 +15,15 @@ Each input works only while it has a cable. With no cables, the Sequencer works 
 | **BAR** | Trigger | Makes the other inputs wait for the next bar. See [Bar sync](#bar-sync). |
 | **SONG** | CV, 0 to 10 V | Chooses one of the 14 [saved chains](project.md#saved-chains). |
 | **LOAD** | Trigger | Plays the saved chain that **SONG** chooses. With no cable here, the chain plays when **SONG** changes. |
+| **MODE** | Gate | High is song mode, low is pattern mode. See the [Song Editor](song-editor.md). |
 
 If two **SELECT** channels trigger together, the lower channel wins. While you build a chain (**PROJECT** latched,
 **PLAY** blinking), each trigger adds its pattern to the chain, as a step does.
 
 A saved chain that is empty does nothing.
+
+In song mode, **SELECT** channel 1 to 16 plays row 1 to 16 of the [song](song-editor.md), and **NEXT** and **PREV**
+move one row. **SONG** and **LOAD** choose the song to play.
 
 ## Outputs
 

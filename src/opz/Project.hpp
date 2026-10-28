@@ -21,7 +21,9 @@ namespace opz {
 
 constexpr int PROJECTS = 10, MUTE_GROUPS = 10;
 constexpr int PATTERN_COUNT = 16;           // patterns in a project, on the steps in project mode
-constexpr int CHAIN_LENGTH = 32;            // patterns in a chain at most
+constexpr int CHAIN_LENGTH = 32;            // patterns in a chain built on the keys, and in an OP-Z file's
+constexpr int SONG_ROWS = 99;               // rows in a chain at most: a song, edited on a Song Editor
+constexpr int SONG_LOOPS = 99, SONG_SIXTEENTHS = 999, SONG_FADE = 64; // a song row's lengths, and its fades in bars
 constexpr int SAVED_CHAINS = 14;            // saved chains, one on each white key (an OP-Z file has room for 15)
 enum Level { DRUM_LEVEL, SYNTH_LEVEL, PUNCH, MASTER_LEVEL, LEVELS_LEN };
 
@@ -43,6 +45,7 @@ struct Project {
 	struct Scene {
 		Part parts[LANES];              // the eight tracks', the master track's, which has no sound, then the FX tracks'
 		int muteGroup = 0;
+		float tempo = 0.f;              // its BPM, or 0 to keep the one playing
 		bool used = false;              // played or edited, so worth saving
 		/** Whether it has no notes. */
 		bool empty() const {
@@ -53,18 +56,52 @@ struct Project {
 			return true;
 		}
 	};
-	/** Patterns that play one after another, round and round. A chain of one is a pattern looping by itself. */
+	/** Patterns that play one after another, round and round. A chain of one is a pattern looping by itself. A
+	saved chain is also a song: in song mode, each row plays its pattern for its length and with its mute group, the
+	song has fades and a tempo, and it stops at its end. */
 	struct Chain {
 		int length = 0;
-		uint8_t patterns[CHAIN_LENGTH] = {};
+		uint8_t patterns[SONG_ROWS] = {};
+		int16_t lengths[SONG_ROWS] = {}; // 0 plays the pattern once (its longest track), 2 or more that many times, and
+		                                 // a negative one for that many sixteenths
+		int8_t mutes[SONG_ROWS] = {};    // a mute group 1 to 10, or 0 for the pattern's own
+		float fadeIn = 0.f, fadeOut = 0.f; // in bars
+		float tempo = 0.f;               // BPM, or 0 to play each pattern at its own
+
 		static Chain of(int pattern) {
 			Chain c;
 			c.length = 1;
 			c.patterns[0] = (uint8_t) pattern;
 			return c;
 		}
+		/** Puts a row in at `i` with no length or mute group of its own, if there's room. */
+		void insert(int i, int pattern) {
+			if (length == SONG_ROWS)
+				return;
+			i = std::clamp(i, 0, length);
+			std::copy_backward(patterns + i, patterns + length, patterns + length + 1);
+			std::copy_backward(lengths + i, lengths + length, lengths + length + 1);
+			std::copy_backward(mutes + i, mutes + length, mutes + length + 1);
+			patterns[i] = (uint8_t) pattern;
+			lengths[i] = 0;
+			mutes[i] = 0;
+			length++;
+		}
+		void remove(int i) {
+			if (i < 0 || i >= length)
+				return;
+			std::copy(patterns + i + 1, patterns + length, patterns + i);
+			std::copy(lengths + i + 1, lengths + length, lengths + i);
+			std::copy(mutes + i + 1, mutes + length, mutes + i);
+			length--;
+			patterns[length] = 0;
+			lengths[length] = 0;
+			mutes[length] = 0;
+		}
 		bool operator==(const Chain& o) const {
-			return length == o.length && std::equal(patterns, patterns + length, o.patterns);
+			return length == o.length && std::equal(patterns, patterns + length, o.patterns)
+				&& std::equal(lengths, lengths + length, o.lengths) && std::equal(mutes, mutes + length, o.mutes)
+				&& fadeIn == o.fadeIn && fadeOut == o.fadeOut && tempo == o.tempo;
 		}
 	};
 	Scene scenes[PATTERN_COUNT];
