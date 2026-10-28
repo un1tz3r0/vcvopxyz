@@ -38,6 +38,7 @@ first step as the last ends.
 #include "Presets.hpp"
 #include <map>
 #include <mutex>
+#include <numeric>
 #include <set>
 #include <osdialog.h>
 #include <patch.hpp>
@@ -511,6 +512,26 @@ struct Sequencer : Module, Hub {
 	int chainKey = -1;
 	bool chainKeySave = false, rewound = false, clearAll = false;
 	uint16_t pastes = 0;
+	// A Remotes module's jacks (Hub.hpp): their triggers, the move they ask for, and the events its outputs pulse for.
+	struct RemoteMove {
+		enum Kind { NONE, PATTERN, STEP, CHAIN } kind = NONE;
+		int value = 0;               // the pattern, the patterns to step on (back if negative), or the saved chain
+		bool restart = false;        // on a bar: every track from step 1 at `at`; otherwise from where they are
+		double at = 0.0;             // song time: the bar, or how far back a late trigger reaches
+	};
+	static constexpr float REMOTE_LOCKOUT = 1e-3f; // seconds after an edge that another on the same jack is ignored
+	dsp::SchmittTrigger selectIn[PORT_MAX_CHANNELS], remoteTriggers[RemoteIn::JACKS];
+	float selectSince[PORT_MAX_CHANNELS] = {}, remoteSince[RemoteIn::JACKS] = {};
+	RemoteMove waiting, ready;       // a move waiting for BAR, and one to make once the slots' lock is free
+	double barAt = 0.0;              // the song time the last BAR stands for
+	float sinceBar = INFINITY;       // seconds since it came
+	int remoteSong = -1;             // the saved chain SONG last chose, -1 while unpatched
+	bool started = false, ended = false, songEnded = false; // events in this frame, for START, END and SONG END
+	RemoteOut remote;
+	// The pattern's cycle: every timed track with something on it, run to where they all meet again (the LCM of their
+	// lengths), counted from the song time they last started together. END pulses as each one ends.
+	double cycleStart = 0.0, cycleLength = STEPS;
+	long cycles = 0;
 	// The slots, and the projects and recall below, belong to the audio and UI threads both, under this lock. The UI
 	// thread can hold it a while, writing files, so the audio thread only tries it, and project work waits till it's free.
 	std::mutex projectsMutex;
@@ -963,7 +984,9 @@ struct Sequencer : Module, Hub {
 		for (Lane& l : lanes)
 			l.player.start();
 		// From the top: a chain starts over from its first pattern.
-		patternStart = 0.0;
+		patternStart = cycleStart = 0.0;
+		cycles = 0;
+		started = true;
 		if (chain.length > 1) {
 			chainAt = 0;
 			if (projectsMutex.try_lock()) {
@@ -1156,13 +1179,181 @@ struct Sequencer : Module, Hub {
 
 	/** Plays another of the live project's patterns, the tracks carrying on from where they are. With the slots
 	locked. */
-	void switchPattern(int q) {
+	void switchPattern(int q, double from = NAN) {
 		if (q == pattern)
 			return;
 		storeScene(scenes[pattern]);
 		pattern = q;
 		recallScene(scenes[q]);
 		recall = std::max(recall, PATTERNED);
+		// The steps queued ahead, and those a late trigger comes after, play from the new pattern.
+		if (lanes[0].player.running) {
+			started = true;
+			double at = std::isnan(from) ? lanes[0].player.song() : from;
+			for (Lane& l : lanes)
+				if (l.player.timed && l.settings.stepLength > 0)
+					l.player.redo(at);
+		}
+	}
+
+	/** Starts every track from step 1 at song time `at`, now or a moment ago, as a chain's next pattern does. */
+	void restartPatternAt(double at) {
+		for (Lane& l : lanes) {
+			l.player.redo(at);
+			l.player.restartPattern(at);
+		}
+		patternStart = cycleStart = at;
+		cycles = 0;
+		started = true;
+	}
+
+	/** The next pattern with notes `d` (1 or -1) along from `q`, round from 16 to 1, or `q` if there's none. */
+	int stepPattern(int q, int d) const {
+		for (int i = mod(q + d, PATTERN_COUNT); i != q; i = mod(i + d, PATTERN_COUNT))
+			if (!scenes[i].empty())
+				return i;
+		return q;
+	}
+
+	/** Makes what a Remotes module asked for. With the slots locked. */
+	void makeMove(const RemoteMove& m) {
+		int q = pattern;
+		switch (m.kind) {
+			case RemoteMove::PATTERN:
+				q = m.value;
+				chain = Project::Chain::of(q);
+				chainAt = 0;
+				break;
+			case RemoteMove::STEP:
+				if (chain.length > 1) {
+					chainAt = mod(chainAt + m.value, chain.length);
+					q = chain.patterns[chainAt];
+					break;
+				}
+				for (int n = std::abs(m.value); n > 0; n--)
+					q = stepPattern(q, m.value > 0 ? 1 : -1);
+				chain = Project::Chain::of(q);
+				chainAt = 0;
+				break;
+			case RemoteMove::CHAIN:
+				if (!chains[m.value].length)
+					return;
+				chain = chains[m.value];
+				chainAt = 0;
+				q = chain.patterns[0];
+				break;
+			default:
+				return;
+		}
+		bool running = lanes[0].player.running;
+		switchPattern(q, running ? m.at : NAN);
+		if (running && m.restart)
+			restartPatternAt(m.at);
+	}
+
+	/** Reads a Remotes module's jacks. A move made while stopped, or with BAR unpatched, is made at once, the tracks
+	carrying on from where they are; with BAR patched, it waits for the next BAR and starts every track from step 1
+	on it. A trigger up to the Remotes' window late counts as on time: the step it is late for plays again from the new
+	pattern, and one just after a BAR counts for that bar. */
+	void handleRemotes(int64_t frame, float dt) {
+		const RemoteIn* r = lastRemoteIn(frame);
+		if (!r) {
+			waiting.kind = RemoteMove::NONE;
+			remoteSong = -1;
+			return;
+		}
+		const Player& time = lanes[0].player;
+		float window = clamp(r->window, 0.f, 0.05f);
+		double late = window * bpm() / 15.0, song = time.song();
+		auto patched = [&](int j) { return r->patched >> j & 1; };
+		auto edge = [&](dsp::SchmittTrigger& t, float& since, float v) {
+			since += dt;
+			if (!t.process(v, 0.1f, 1.f) || since < REMOTE_LOCKOUT)
+				return false;
+			since = 0.f;
+			return true;
+		};
+		auto jack = [&](int j) { return edge(remoteTriggers[j], remoteSince[j], r->volts[j]); };
+
+		RemoteMove move;
+		for (int d : {1, -1})
+			if (jack(d > 0 ? RemoteIn::NEXT : RemoteIn::PREV)) {
+				move.value = move.kind == RemoteMove::STEP ? move.value + d : d;
+				move.kind = RemoteMove::STEP;
+			}
+		// SELECT's lowest channel triggered wins; while a chain is being built, each one adds its pattern, as a step does.
+		for (int c = std::min(r->selectChannels, PATTERN_COUNT) - 1; c >= 0; c--)
+			if (edge(selectIn[c], selectSince[c], r->select[c])) {
+				if (!chaining)
+					move = {RemoteMove::PATTERN, c};
+				else if (picked < CHAIN_LENGTH)
+					picks[picked++] = c;
+			}
+		// SONG picks a saved chain, 0 to 10 V over the 14, played on LOAD, or with LOAD unpatched, as SONG moves.
+		if (patched(RemoteIn::SONG)) {
+			int k = clamp(int(r->volts[RemoteIn::SONG] / 10.f * SAVED_CHAINS), 0, SAVED_CHAINS - 1);
+			if (patched(RemoteIn::LOAD) ? jack(RemoteIn::LOAD) : remoteSong >= 0 && k != remoteSong)
+				move = {RemoteMove::CHAIN, k};
+			remoteSong = k;
+		}
+		else
+			remoteSong = -1;
+
+		bool synced = patched(RemoteIn::BAR) && time.running;
+		sinceBar += dt;
+		if (synced && jack(RemoteIn::BAR)) {
+			double whole = std::floor(song);
+			barAt = song - whole <= late ? whole : std::ceil(song);
+			sinceBar = 0.f;
+			if (waiting.kind) {
+				ready = waiting;
+				ready.restart = true;
+				ready.at = barAt;
+				waiting.kind = RemoteMove::NONE;
+			}
+		}
+		if (!synced && waiting.kind) {
+			ready = waiting;
+			ready.at = song - late;
+			waiting.kind = RemoteMove::NONE;
+		}
+		if (!move.kind)
+			return;
+		if (!synced) {
+			move.at = song - late;
+			ready = move;
+		}
+		else if (sinceBar <= window) {
+			move.restart = true;
+			move.at = barAt;
+			ready = move;
+		}
+		else if (move.kind == RemoteMove::STEP && waiting.kind == RemoteMove::STEP)
+			waiting.value += move.value;
+		else
+			waiting = move;
+	}
+
+	/** The song time in sixteenths that the pattern's cycle takes: see cycleStart. */
+	double findCycleLength() const {
+		long long cycle = 0;
+		for (const Lane& l : lanes) {
+			int n = clamp(l.settings.stepCount, 1, STEPS), length = l.settings.stepLength;
+			if (length <= 0 || std::none_of(l.pattern.steps, l.pattern.steps + n, [](const Step& s) { return s.count || s.components || s.locks; }))
+				continue;
+			long long t = (long long) n * length;
+			cycle = cycle ? std::min(cycle / std::gcd(cycle, t) * t, 1LL << 40) : t;
+		}
+		return cycle ? (double) cycle : patternLength();
+	}
+
+	/** Counts the pattern's cycles up to song time `song`, flagging END and START as each one ends. A chain moves on
+	before its patterns' cycles end, so it has none. */
+	void countCycles(double song) {
+		long k = (long) std::floor((song - cycleStart) / cycleLength + 1e-9);
+		if (k > cycles && chain.length == 1)
+			started = ended = true;
+		cycles = k;
 	}
 
 	/** A pattern picked on the steps in project mode: a chain of its own, played now, or while chaining, the next in
@@ -1244,10 +1435,12 @@ struct Sequencer : Module, Hub {
 		std::lock_guard<std::mutex> lock(projectsMutex, std::adopt_lock);
 		double from = lanes[0].player.song(), at = from < end + 1.0 ? end : std::ceil(from);
 		chainAt = (chainAt + 1) % chain.length;
+		songEnded = songEnded || chainAt == 0;
 		switchPattern(chain.patterns[chainAt]);
 		for (Lane& l : lanes)
 			l.player.restartPattern(at);
-		patternStart = at;
+		patternStart = cycleStart = at;
+		cycles = 0;
 	}
 
 	/** Loads a slot as one step of the undo history. An empty slot is a new project. With the slots locked. */
@@ -1494,6 +1687,10 @@ struct Sequencer : Module, Hub {
 			lanes[MASTER].settings.quantize = 1.f;
 		if (sinceTap >= 0.f)
 			sinceTap += dt;
+		if (double c = findCycleLength(); c != cycleLength) {
+			cycleLength = c;
+			cycles = (long) std::floor((lanes[0].player.song() - cycleStart) / c + 1e-9);
+		}
 		if ((reload >= 0 || restoring >= 0 || keyed >= 0 || patternRequested()) && projectsMutex.try_lock()) {
 			std::lock_guard<std::mutex> lock(projectsMutex, std::adopt_lock);
 			if (int r = reload.exchange(-1); r >= 0)
@@ -1871,8 +2068,10 @@ struct Sequencer : Module, Hub {
 				d = std::max(d, 0.0);
 			}
 		}
-		if (time.running)
+		if (time.running) {
 			followChain(time.song() + d);
+			countCycles(time.song() + d);
+		}
 		bool gateStep = false;
 		auto run = [&](Lane& l) {
 			l.player.advance(d, l.pattern, l.settings);
@@ -1988,8 +2187,20 @@ struct Sequencer : Module, Hub {
 			scale = findScale();
 		handleInputs();
 		handleTransport();
+		handleRemotes(args.frame, args.sampleTime);
+		if (ready.kind && projectsMutex.try_lock()) {
+			std::lock_guard<std::mutex> lock(projectsMutex, std::adopt_lock);
+			makeMove(ready);
+			ready.kind = RemoteMove::NONE;
+		}
 		runClock(args.sampleTime);
 		writeOutputs(args);
+		remote.starts += started;
+		remote.ends += ended;
+		remote.songEnds += songEnded;
+		remote.pattern = pattern;
+		started = ended = songEnded = false;
+		remoteOutFor(args.frame) = remote;
 		if (lightDivider.process())
 			updateLights(args.sampleTime * lightDivider.getDivision());
 	}

@@ -24,6 +24,7 @@ Find yourself in the left column, and read the pages in order.
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/DrumBreakout-label-dark.png"><img alt="drum breakout" src="assets/modules/DrumBreakout-label-light.png" height="56"></picture> | [Drum Breakout](breakout.md#drum-breakout) | Tracks 1 to 4 | Takes a drum track's sound out, or sends its triggers and CVs out and takes your drums in. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/FxBreakout-label-dark.png"><img alt="send fx breakout" src="assets/modules/FxBreakout-label-light.png" height="56"></picture> | [Send FX Breakout](breakout.md#send-fx-breakout) | FX 1 or 2 | Takes an FX track's effect out, or sends its send and CVs out and takes your effect in. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Screen-label-dark.png"><img alt="screen" src="assets/modules/Screen-label-light.png" height="56"></picture> | [Screen](screen.md) | Nothing | Shows the selected track's pages and dials, like the OP-Z's phone app, and edits a drum track's kit. |
+| | [Remotes](remotes.md) | Patterns | Plays patterns and saved chains from jacks, and sends a trigger as each pattern starts and ends. |
 
 ## Plugs
 
@@ -62,7 +63,7 @@ click a black key to choose one. The Sequencer's context menu, **Plug slots**, f
 - For OP-Z owners: [the combinations and the differences](op-z-owners.md).
 - The plugs: [synth tracks](synth-tracks.md), [drum tracks](drum-tracks.md), [kits](kits.md),
   [FX tracks](fx-tracks.md).
-- The other modules: [breakouts](breakout.md), [Screen](screen.md).
+- The other modules: [breakouts](breakout.md), [Screen](screen.md), [Remotes](remotes.md).
 - Installing: [Linux](../INSTALL.linux.md), [macOS](../INSTALL.macos.md) (Intel and Apple silicon),
   [Windows](../INSTALL.windows.md).
 - Contributing: [Development](development.md), [how the manual is written](STYLE.md),

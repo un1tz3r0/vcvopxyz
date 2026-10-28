@@ -45,6 +45,8 @@ The rest of the chain lights green on the steps. A pattern's end is the end of i
 times its step length. Tracks that wait for **ADV** triggers do not count. Outside project mode, **PLAY** starts the
 chain from its first pattern. To return to one pattern, click its step.
 
+To play patterns and chains from other modules, use [Remotes](remotes.md).
+
 ### Saved chains
 
 The 14 white keys keep a chain each. A white key lights dim when it holds a chain, and bright for the chain that
