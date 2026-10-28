@@ -58,6 +58,15 @@ playing every track (four drums, four synths, two effects) takes 2.8 µs a sampl
 did as eleven modules in 2.0.27. The master's dials carry no state of their own: each frame, a `MasterDial` widget
 re-points itself at the param it turns now, so a turn is that param's own, with its tooltip, undo and MIDI mapping.
 
+A Remotes module sits to the Sequencer's left and walks right for the hub. It writes its inputs into the hub
+(`RemoteIn`, double-buffered like `JacksIn`), and the Sequencer turns them into moves (`handleRemotes`): made at once,
+or held for BAR and then started from step 1 (`restartPatternAt`). The Sequencer sends back counts of the events its
+outputs pulse for (`RemoteOut`), so an event is never lost or doubled across the two frames' buffers. A trigger
+arrives a few samples late even from END straight into NEXT, so a move reaches back by the Remotes' window: each player
+keeps a `Mark` before the last few slots it scheduled, and `Player::redo` takes back the slots from a song time on,
+dropping their queued notes and stopping those started, so they schedule again from the new pattern. Every pattern
+switch does this for the slot queued ahead, which until 2.1.7 still played from the old pattern.
+
 ## Tracks
 
 `src/opz/TrackCore.hpp`. `TrackCore` is every track, drum, synth or FX: the tempo, gate edges, the LFO, the

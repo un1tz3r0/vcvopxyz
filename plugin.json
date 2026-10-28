@@ -1,7 +1,7 @@
 {
   "slug": "vcvopxyz",
   "name": "vcvopxyz",
-  "version": "2.1.6",
+  "version": "2.1.7",
   "license": "MIT",
   "brand": "un1tz3r0",
   "author": "Victor Condino",
@@ -14,6 +14,18 @@
   "changelogUrl": "https://github.com/un1tz3r0/vcvopxyz/releases",
   "minRackVersion": "2.4.0",
   "modules": [
+    {
+      "slug": "Remotes",
+      "name": "Remotes",
+      "description": "Plays the Sequencer's patterns and saved chains from jacks, beside it on its left: pattern select, next and previous, bar sync, and pulses as patterns start and end",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/remotes.md",
+      "tags": [
+        "Sequencer",
+        "Controller",
+        "Expander",
+        "Polyphonic"
+      ]
+    },
     {
       "slug": "Sequencer",
       "name": "Sequencer",

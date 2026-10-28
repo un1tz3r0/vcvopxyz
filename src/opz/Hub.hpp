@@ -2,8 +2,9 @@
 #include "TrackCore.hpp"
 
 /*
-The bus along a row of OP-Z modules: the Sequencer at its left end, which plays every track, then the breakouts that
-hand tracks to other modules and the Screens that show the selected one. A module from another plugin ends it.
+The bus along a row of OP-Z modules: the Sequencer, which plays every track, then the breakouts that hand tracks to
+other modules and the Screens that show the selected one. A module from another plugin ends it. To the Sequencer's
+left, a Remotes module plays its patterns from jacks, finding the hub by walking right.
 
 The Sequencer holds the hub. For each track it carries the jacks of the breakout bound to it both ways: the track's
 outputs out to the breakout, and the breakout's inputs, and which of its outputs are patched, back in. Both are
@@ -30,9 +31,28 @@ struct JacksIn {
 	Port inputs[TrackIds::INPUTS_LEN];
 };
 
+/** What a Remotes module to the Sequencer's left sends it: its inputs, as they are. */
+struct RemoteIn {
+	enum Jack { SELECT, NEXT, PREV, BAR, SONG, LOAD, JACKS };
+	int64_t frame = -1;          // when it was written: an older one's Remotes has gone
+	uint32_t patched = 0;        // a bit per jack
+	int selectChannels = 0;
+	float select[PORT_MAX_CHANNELS] = {};
+	float volts[JACKS] = {};     // the other jacks' voltages
+	float window = 0.005f;       // how late a trigger may come and still count as on time, in seconds
+};
+
+/** What the Sequencer sends a Remotes module: counts of the events its outputs pulse for, and the pattern playing. */
+struct RemoteOut {
+	uint32_t starts = 0, ends = 0, songEnds = 0;
+	int pattern = 0;
+};
+
 struct Hub {
 	JacksOut out[2][LANES];
 	JacksIn in[2][LANES];
+	RemoteIn remoteIn[2];
+	RemoteOut remoteOut[2];
 
 	virtual ~Hub() = default;
 
@@ -48,6 +68,15 @@ struct Hub {
 		const JacksIn& j = in[(frame + 1) & 1][track];
 		return j.frame == frame - 1 ? &j : nullptr;
 	}
+
+	/** A Remotes module's side of the hub, double-buffered by frame like the breakouts'. */
+	RemoteIn& remoteInFor(int64_t frame) { return remoteIn[frame & 1]; }
+	const RemoteIn* lastRemoteIn(int64_t frame) const {
+		const RemoteIn& r = remoteIn[(frame + 1) & 1];
+		return r.frame == frame - 1 ? &r : nullptr;
+	}
+	RemoteOut& remoteOutFor(int64_t frame) { return remoteOut[frame & 1]; }
+	const RemoteOut& lastRemoteOut(int64_t frame) const { return remoteOut[(frame + 1) & 1]; }
 
 	// For the UI thread: the core playing a track (null for the master track), its plug's name, and the track
 	// selected.

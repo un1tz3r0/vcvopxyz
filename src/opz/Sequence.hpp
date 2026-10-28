@@ -391,6 +391,7 @@ struct Player {
 		double off = 0.0;          // when the gate falls, in sixteenths
 		uint32_t id = 0;           // which note it is playing; ids count up, so lower is older
 		int midi = -1, tonality = -1; // a sequenced note's Event pitch and tonality, for the arp to move as it plays
+		long slot = 0;             // the slot a sequenced note came from, counted as slotsPlayed does; 0 for live ones
 	};
 
 	struct Event {
@@ -399,6 +400,7 @@ struct Player {
 		float velocity, glide;
 		double length;
 		int tonality;              // the step's tonality component, or -1
+		long slot = 0;             // the slot it came from
 	};
 
 	struct Slot {
@@ -414,7 +416,20 @@ struct Player {
 		double start = 0.0, length = 16.0;
 	};
 
-	static constexpr int QUEUE = 128;
+	/** Where the scheduler stood just before it scheduled a slot: what redo() goes back to. */
+	struct Mark {
+		double start = 0.0;    // the slot's start, in song time
+		double scheduled, next;
+		Slot slots[2];
+		int position, slotsLeft, holdSlots, jump;
+		bool componentsOn, notesOn, locksOn;
+		long slotsPlayed, passOrigin;
+		int ramps[3][10];
+		Sweep sweeps[2];
+		uint32_t seed;
+	};
+
+	static constexpr int QUEUE = 128, MARKS = 4;
 	Event queue[QUEUE];
 	int queued = 0;
 	Channel channels[CHANNELS];
@@ -428,6 +443,8 @@ struct Player {
 	double scheduled = -1.0;   // start of the last slot scheduled, in song time, -1 before the first
 	double next = 0.0;         // start of the slot to schedule after it
 	double hold = INFINITY;    // song time no slot may start at or after yet: where a chain's next pattern comes in
+	Mark marks[MARKS];         // before each of the last slots scheduled, oldest first
+	int marked = 0;
 	Slot slots[2];             // the slot playing and the one after it
 	int position = -1;         // the step the playhead is on
 	long slotsPlayed = 0;
@@ -477,6 +494,7 @@ struct Player {
 		scheduled = -1.0;
 		next = 0.0;
 		hold = INFINITY;
+		marked = 0;
 		slots[0] = slots[1] = Slot();
 		position = -1;
 		slotsPlayed = 0;
@@ -555,7 +573,7 @@ struct Player {
 			Event e = queue[0];
 			std::copy(queue + 1, queue + queued, queue);
 			queued--;
-			noteOn(volts(e.pitch, e.tonality), e.velocity, e.time + e.length, false, s, e.glide, e.pitch, e.tonality);
+			noteOn(volts(e.pitch, e.tonality), e.velocity, e.time + e.length, false, s, e.glide, e.pitch, e.tonality, e.slot);
 		}
 		play(channels, used, sixteenths);
 		if (arp.speed > 0)
@@ -775,6 +793,7 @@ struct Player {
 
 	/** Works out one slot of the playhead and queues its notes. `start` is in song time. */
 	void schedule(const Pattern& pattern, const Settings& s, double start, double length) {
+		mark(start);
 		bool first = slotsLeft <= 0;
 		if (first)
 			enterStep(pattern, s, start);
@@ -820,9 +839,69 @@ struct Player {
 					noteLength = std::min(noteLength, length / multiply);
 				int pitch = std::clamp(tonality.scale.shift(note.pitch, shift), 0, 127);
 				double time = offset + (s.stepLength > 0 ? swung(at, s.swing) : at) + micro;
-				queueNote({std::max(time, now), pitch, velocity(step, note.velocity), glide, noteLength, on(TONALITY) ? step.key(TONALITY) : -1});
+				queueNote({std::max(time, now), pitch, velocity(step, note.velocity), glide, noteLength, on(TONALITY) ? step.key(TONALITY) : -1, slotsPlayed});
 			}
 		}
+	}
+
+	/** Notes where the scheduler stands before it schedules the slot at `start`. */
+	void mark(double start) {
+		if (marked == MARKS)
+			std::copy(marks + 1, marks + MARKS, marks);
+		else
+			marked++;
+		Mark& m = marks[marked - 1];
+		m.start = start;
+		m.scheduled = scheduled;
+		m.next = next;
+		std::copy(slots, slots + 2, m.slots);
+		m.position = position;
+		m.slotsLeft = slotsLeft;
+		m.holdSlots = holdSlots;
+		m.jump = jump;
+		m.componentsOn = componentsOn;
+		m.notesOn = notesOn;
+		m.locksOn = locksOn;
+		m.slotsPlayed = slotsPlayed;
+		m.passOrigin = passOrigin;
+		std::copy(&ramps[0][0], &ramps[0][0] + 30, &m.ramps[0][0]);
+		std::copy(sweeps, sweeps + 2, m.sweeps);
+		m.seed = seed;
+	}
+
+	/** Takes back the slots scheduled to start at or after song time `at`, so the next advance schedules them again,
+	from the pattern as it is then: their queued notes go, and those already started stop. A switch of pattern does
+	this, so the step it is late for, or the one queued ahead, plays from the new one. False if no slot starts that
+	late. */
+	bool redo(double at) {
+		int i = 0;
+		while (i < marked && marks[i].start < at - 1e-9)
+			i++;
+		if (i == marked)
+			return false;
+		const Mark& m = marks[i];
+		long cut = m.slotsPlayed;
+		queued = int(std::remove_if(queue, queue + queued, [=](const Event& e) { return e.slot > cut; }) - queue);
+		for (Channel& c : channels)
+			if (!c.live && c.slot > cut)
+				c.gate = false;
+		scheduled = m.scheduled;
+		next = m.next;
+		std::copy(m.slots, m.slots + 2, slots);
+		position = m.position;
+		slotsLeft = m.slotsLeft;
+		holdSlots = m.holdSlots;
+		jump = m.jump;
+		componentsOn = m.componentsOn;
+		notesOn = m.notesOn;
+		locksOn = m.locksOn;
+		slotsPlayed = m.slotsPlayed;
+		passOrigin = m.passOrigin;
+		std::copy(&m.ramps[0][0], &m.ramps[0][0] + 30, &ramps[0][0]);
+		std::copy(m.sweeps, m.sweeps + 2, sweeps);
+		seed = m.seed;
+		marked = i;
+		return true;
 	}
 
 	/** A note's velocity after the step's velocity component: -4 to +3 in sixteenths of the range, mute, or any. */
@@ -883,7 +962,7 @@ struct Player {
 	/** Starts a note now, to end at `off` by now's clock, and returns its id. A sequenced note ends its length after its
 	time, not after the sample it started in, so one a step long is over as the next step's notes start. Live notes
 	pass INFINITY and end with release(). */
-	uint32_t noteOn(float pitch, float velocity, double off, bool live, const Settings& s, float glide = 0.f, int midi = -1, int tonality = -1) {
+	uint32_t noteOn(float pitch, float velocity, double off, bool live, const Settings& s, float glide = 0.f, int midi = -1, int tonality = -1, long slot = 0) {
 		int i = channelFor(glide > 0.f, s);
 		used = std::max(used, i + 1);
 		Channel& c = channels[i];
@@ -899,6 +978,7 @@ struct Player {
 		c.id = ++notes;
 		c.midi = midi;
 		c.tonality = tonality;
+		c.slot = slot;
 		return c.id;
 	}
 

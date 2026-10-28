@@ -10,6 +10,7 @@ void init(Plugin* p) {
 	p->addModel(modelBreakout);
 	p->addModel(modelDrumBreakout);
 	p->addModel(modelFxBreakout);
+	p->addModel(modelRemotes);
 	p->addModel(modelScreen);
 	p->addModel(modelSequencer);
 }
