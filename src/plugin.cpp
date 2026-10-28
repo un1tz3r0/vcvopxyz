@@ -11,6 +11,7 @@ void init(Plugin* p) {
 	p->addModel(modelDrumBreakout);
 	p->addModel(modelFxBreakout);
 	p->addModel(modelRemotes);
+	p->addModel(modelSongEditor);
 	p->addModel(modelScreen);
 	p->addModel(modelSequencer);
 }

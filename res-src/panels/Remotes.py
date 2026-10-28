@@ -1,5 +1,6 @@
-"""Remotes: jacks that play the Sequencer's patterns, on its left. LINK lights once it finds one to its right; the inputs pick patterns and saved chains, BAR holds them for the next bar, and the
-outputs pulse as patterns start and end."""
+"""Remotes: jacks that play the Sequencer's patterns, on its left. LINK lights once it finds one to its right; the
+inputs pick patterns and saved chains, BAR holds them for the next bar, MODE switches to songs, and the outputs pulse
+as patterns start and end."""
 from panelkit import HP, Panel
 from synth_track import box, jacks
 
@@ -14,10 +15,10 @@ def panel():
     p.place('LINK_LIGHT', WIDTH / 2 - 4.0, 16.0)
     p.text('LINK', WIDTH / 2 + 1.6, 16.0 + 0.8, size=2.2, anchor='middle')
     columns = [WIDTH / 2 - 6.6, WIDTH / 2 + 6.6]
-    rows = [32.0, 47.0, 62.0, 92.0, 107.0]
-    box(p, columns, 0, 1, rows[3], rows[4])
+    rows = [28.0, 42.0, 56.0, 70.0, 94.0, 108.5]
+    box(p, columns, 0, 1, rows[4], rows[5])
     ins = lambda *names: [(n, 'INPUT') for n in names]
     outs = lambda *names: [(n, 'OUTPUT') for n in names]
     jacks(p, [(rows[0], ins('SELECT', 'BAR')), (rows[1], ins('PREV', 'NEXT')), (rows[2], ins('SONG', 'LOAD')),
-              (rows[3], outs('START', 'END')), (rows[4], outs('SONG_END', 'PATTERN'))], columns, labels=LABELS)
+              (rows[3], ins('MODE') + [None]), (rows[4], outs('START', 'END')), (rows[5], outs('SONG_END', 'PATTERN'))], columns, labels=LABELS)
     return p

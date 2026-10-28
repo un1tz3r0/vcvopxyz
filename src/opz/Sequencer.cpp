@@ -514,8 +514,8 @@ struct Sequencer : Module, Hub {
 	uint16_t pastes = 0;
 	// A Remotes module's jacks (Hub.hpp): their triggers, the move they ask for, and the events its outputs pulse for.
 	struct RemoteMove {
-		enum Kind { NONE, PATTERN, STEP, CHAIN } kind = NONE;
-		int value = 0;               // the pattern, the patterns to step on (back if negative), or the saved chain
+		enum Kind { NONE, PATTERN, STEP, CHAIN, ROW } kind = NONE;
+		int value = 0;               // the pattern, the patterns to step on (back if negative), the saved chain, or a row
 		bool restart = false;        // on a bar: every track from step 1 at `at`; otherwise from where they are
 		double at = 0.0;             // song time: the bar, or how far back a late trigger reaches
 	};
@@ -532,6 +532,16 @@ struct Sequencer : Module, Hub {
 	// lengths), counted from the song time they last started together. END pulses as each one ends.
 	double cycleStart = 0.0, cycleLength = STEPS;
 	long cycles = 0;
+	// Song mode (Project::Chain): the live chain is saved chain songSlot, and edits go to both. Each row plays for its
+	// length and with its mute group, under the song's fades and tempo, and the song stops at its end unless songs loop.
+	bool songMode = false, loopSongs = false;
+	int songSlot = 0;
+	int heldMuteGroup = -1;          // the pattern's own mute group, while a song row plays another
+	double rowAt = 0.0;              // sixteenths of the song before the row playing
+	double songLength = 0.0;         // the whole song's, kept up to date at the control rate
+	SongIn songEdits;                // a Song Editor's edits, waiting for the slots' lock
+	int wantMode = -1;               // song mode (1) or pattern mode (0), as Remotes' MODE asks
+	int modeGate = -1;               // MODE's level last seen, or -1 while it's unpatched
 	// The slots, and the projects and recall below, belong to the audio and UI threads both, under this lock. The UI
 	// thread can hold it a while, writing files, so the audio thread only tries it, and project work waits till it's free.
 	std::mutex projectsMutex;
@@ -871,7 +881,12 @@ struct Sequencer : Module, Hub {
 	}
 
 	float bpm() {
-		return external && pulsePeriod > 0.f ? 60.f / (pulsePeriod * ppqn) : params[TEMPO_PARAM].getValue();
+		return external && pulsePeriod > 0.f ? 60.f / (pulsePeriod * ppqn) : tempo();
+	}
+
+	/** The tempo without a clock: a song's own in song mode, if it has one, else the pattern's. */
+	float tempo() {
+		return songMode && chain.tempo > 0.f ? chain.tempo : params[TEMPO_PARAM].getValue();
 	}
 
 	/** The core playing a track, for either thread; none plays the master track. Every core of a track plays by the
@@ -996,6 +1011,7 @@ struct Sequencer : Module, Hub {
 			else
 				rewound = true;
 		}
+		enterRow();
 		lastTick = lastBeat = -1;
 		pulses = 0;
 		resetOut.trigger(1e-3f);
@@ -1101,7 +1117,8 @@ struct Sequencer : Module, Hub {
 			for (int i = 0; part.hasSound && i < SOUND_PARAMS; i++)
 				part.sound[i] = paramQuantities[trackParam(t, i)]->getScaledValue();
 		}
-		scene.muteGroup = muteGroup;
+		scene.muteGroup = heldMuteGroup >= 0 ? heldMuteGroup : muteGroup;
+		scene.tempo = params[TEMPO_PARAM].getValue();
 		scene.used = true;
 	}
 
@@ -1125,6 +1142,9 @@ struct Sequencer : Module, Hub {
 				setShare(t, i, part.sound[i]);
 		}
 		muteGroup = scene.muteGroup;
+		heldMuteGroup = -1;
+		if (scene.tempo > 0.f)
+			params[TEMPO_PARAM].setValue(scene.tempo);
 		readSettings();
 		rewatch = true;
 		held = -1;
@@ -1160,7 +1180,7 @@ struct Sequencer : Module, Hub {
 		std::copy(std::begin(p.chains), std::end(p.chains), chains);
 		const uint8_t* at = std::find(chain.patterns, chain.patterns + chain.length, pattern);
 		chainAt = at < chain.patterns + chain.length ? int(at - chain.patterns) : 0;
-		chaining = copying = false;
+		chaining = copying = songMode = false;
 		recallScene(scenes[pattern]);
 		for (Lane& l : lanes)
 			l.player.silence();
@@ -1225,7 +1245,7 @@ struct Sequencer : Module, Hub {
 				chainAt = 0;
 				break;
 			case RemoteMove::STEP:
-				if (chain.length > 1) {
+				if (chain.length > 1 || songMode) {
 					chainAt = mod(chainAt + m.value, chain.length);
 					q = chain.patterns[chainAt];
 					break;
@@ -1236,11 +1256,21 @@ struct Sequencer : Module, Hub {
 				chainAt = 0;
 				break;
 			case RemoteMove::CHAIN:
-				if (!chains[m.value].length)
+				if (songMode)
+					loadSong(m.value);
+				else if (chains[m.value].length) {
+					chain = chains[m.value];
+					chainAt = 0;
+				}
+				else
 					return;
-				chain = chains[m.value];
-				chainAt = 0;
 				q = chain.patterns[0];
+				break;
+			case RemoteMove::ROW:
+				if (m.value >= chain.length)
+					return;
+				chainAt = m.value;
+				q = chain.patterns[chainAt];
 				break;
 			default:
 				return;
@@ -1249,6 +1279,186 @@ struct Sequencer : Module, Hub {
 		switchPattern(q, running ? m.at : NAN);
 		if (running && m.restart)
 			restartPatternAt(m.at);
+		enterRow();
+	}
+
+	/** How long pattern `q` plays once, in sixteenths: its longest timed track, or a bar. */
+	double sceneLength(int q) {
+		if (q == pattern)
+			return patternLength();
+		int longest = 0;
+		for (const Project::Part& part : scenes[q].parts)
+			longest = std::max(longest, part.stepCount * stepLengthOfKey(part.stepLength));
+		return longest > 0 ? longest : STEPS;
+	}
+
+	/** How long row `i` of the chain plays as a song's, in sixteenths. */
+	double rowLength(int i) {
+		int n = chain.lengths[i];
+		double once = sceneLength(chain.patterns[i]);
+		return n < 0 ? -n : n >= 2 ? n * once : once;
+	}
+
+	/** Row `i`'s tempo: the song's, or its pattern's own. */
+	float rowTempo(int i) {
+		int q = chain.patterns[i];
+		return chain.tempo > 0.f ? chain.tempo : q != pattern && scenes[q].tempo > 0.f ? scenes[q].tempo : params[TEMPO_PARAM].getValue();
+	}
+
+	/** The row playing starts: in song mode, its mute group in place of its pattern's, and where it falls in the song. */
+	void enterRow() {
+		int own = heldMuteGroup >= 0 ? heldMuteGroup : muteGroup;
+		int group = songMode && chainAt < chain.length ? chain.mutes[chainAt] : 0;
+		muteGroup = group > 0 ? group - 1 : own;
+		heldMuteGroup = group > 0 ? own : -1;
+		rowAt = 0.0;
+		for (int i = 0; songMode && i < chainAt; i++)
+			rowAt += rowLength(i);
+	}
+
+	/** Saved chain `k` as the live chain, a song from its first row; an empty one starts as a copy of the chain
+	playing, which is how a song is made. With the slots locked. */
+	void loadSong(int k) {
+		songSlot = clamp(k, 0, SAVED_CHAINS - 1);
+		if (!chains[songSlot].length)
+			chains[songSlot] = chain;
+		songMode = true;
+		chaining = false;
+		chain = chains[songSlot];
+		chainAt = 0;
+	}
+
+	void enterSong(int k) {
+		loadSong(k);
+		switchPattern(chain.patterns[0]);
+		enterRow();
+	}
+
+	/** Back to pattern mode: the chain plays on as a chain, its rows' lengths and mute groups set aside. */
+	void leaveSong() {
+		songMode = false;
+		enterRow();
+	}
+
+	bool songEdited() const {
+		const SongIn& e = songEdits;
+		return e.modes || e.songs || e.patterns || e.lengths || e.mutes || e.inserts || e.removes || e.jump >= 0 || wantMode >= 0;
+	}
+
+	/** A Song Editor's edits and Remotes' MODE: to the live chain, and in song mode, the song saved with it. The
+	settings above the rows, and each row's length and mute group, are a song's alone. With the slots locked. */
+	void handleSongEdits() {
+		SongIn& e = songEdits;
+		if (e.modes & 1)
+			songMode ? leaveSong() : enterSong(songSlot);
+		if (wantMode >= 0 && wantMode != (int) songMode)
+			wantMode ? enterSong(songSlot) : leaveSong();
+		if (e.songs && songMode)
+			enterSong(mod(songSlot + e.songs, SAVED_CHAINS));
+		Project::Chain& c = chain;
+		int r = e.row;
+		if (r == SongIn::SETTINGS && songMode) {
+			c.fadeIn = clamp(c.fadeIn + e.patterns, 0.f, (float) SONG_FADE);
+			c.fadeOut = clamp(c.fadeOut + e.lengths, 0.f, (float) SONG_FADE);
+			if (int d = e.mutes) {
+				// Below 40 BPM is PAT: each pattern at its own tempo. Up from PAT starts at the tempo playing.
+				float t = c.tempo > 0.f ? c.tempo + d : d > 0 ? std::round(params[TEMPO_PARAM].getValue()) + d - 1 : 0.f;
+				c.tempo = t < 40.f ? 0.f : std::min(t, 200.f);
+			}
+		}
+		else if (r >= 0 && r < c.length) {
+			if (e.patterns) {
+				c.patterns[r] = (uint8_t) mod(c.patterns[r] + e.patterns, PATTERN_COUNT);
+				if (r == chainAt)
+					switchPattern(c.patterns[r]);
+			}
+			if (e.lengths && songMode) {
+				// The lengths in turn: sixteenths ... 2, 1, then "-" (once), then x2, x3 ... loops.
+				int v = c.lengths[r], i = clamp((v >= 2 ? v - 1 : v) + e.lengths, -SONG_SIXTEENTHS, SONG_LOOPS - 1);
+				c.lengths[r] = (int16_t) (i >= 1 ? i + 1 : i);
+			}
+			if (e.mutes && songMode)
+				c.mutes[r] = (int8_t) clamp(c.mutes[r] + e.mutes, 0, MUTE_GROUPS);
+			for (; e.inserts > 0 && c.length < SONG_ROWS; e.inserts--) {
+				c.insert(r + 1, c.patterns[r]);
+				c.lengths[r + 1] = c.lengths[r];
+				c.mutes[r + 1] = c.mutes[r];
+				chainAt += r + 1 <= chainAt;
+			}
+			for (; e.removes > 0 && c.length > 1 && r < c.length; e.removes--) {
+				c.remove(r);
+				chainAt -= r < chainAt;
+				chainAt = std::min(chainAt, c.length - 1);
+			}
+		}
+		if (e.jump >= 0)
+			makeMove({RemoteMove::ROW, e.jump, false, lanes[0].player.song()});
+		if (songMode) {
+			chains[songSlot] = chain;
+			enterRow();
+		}
+		int row = e.row;
+		e = SongIn();
+		e.row = row;
+		wantMode = -1;
+	}
+
+	/** Takes a Song Editor's frame: its edits wait in songEdits for the slots' lock. */
+	void readSongEditor(int64_t frame) {
+		const SongIn* s = lastSongIn(frame);
+		if (!s)
+			return;
+		SongIn& e = songEdits;
+		e.row = s->row;
+		e.modes += s->modes;
+		e.songs += s->songs;
+		e.patterns += s->patterns;
+		e.lengths += s->lengths;
+		e.mutes += s->mutes;
+		e.inserts += s->inserts;
+		e.removes += s->removes;
+		if (s->jump >= 0)
+			e.jump = s->jump;
+	}
+
+	bool songView(SongView& v) override {
+		std::unique_lock<std::mutex> lock(projectsMutex, std::try_to_lock);
+		if (!lock.owns_lock())
+			return false;
+		const Player& time = lanes[0].player;
+		v.songMode = songMode;
+		v.playing = playing;
+		v.external = external;
+		v.loop = loopSongs;
+		v.song = songSlot;
+		v.rowPlaying = chainAt;
+		v.bpm = bpm();
+		v.chain = chain;
+		double now = time.running ? time.song() : time.paused, into = std::max(now - patternStart, 0.0);
+		if (songMode) {
+			v.length = v.seconds = v.at = v.secondsAt = 0.0;
+			for (int i = 0; i < chain.length; i++) {
+				double n = v.rowLengths[i] = rowLength(i), s = n * 15.0 / (external ? v.bpm : rowTempo(i));
+				if (i < chainAt) {
+					v.at += n;
+					v.secondsAt += s;
+				}
+				v.length += n;
+				v.seconds += s;
+			}
+			double row = chainAt < chain.length ? rowLength(chainAt) : 1.0;
+			into = std::min(into, row);
+			v.progress = float(into / row);
+			v.at += into;
+			v.secondsAt += into * 15.0 / v.bpm;
+		}
+		else {
+			v.length = v.seconds = 0.0;
+			v.at = now;
+			v.secondsAt = now * 15.0 / v.bpm;
+			v.progress = float(std::fmod(into, patternLength()) / patternLength());
+		}
+		return true;
 	}
 
 	/** Reads a Remotes module's jacks. A move made while stopped, or with BAR unpatched, is made at once, the tracks
@@ -1284,7 +1494,9 @@ struct Sequencer : Module, Hub {
 		// SELECT's lowest channel triggered wins; while a chain is being built, each one adds its pattern, as a step does.
 		for (int c = std::min(r->selectChannels, PATTERN_COUNT) - 1; c >= 0; c--)
 			if (edge(selectIn[c], selectSince[c], r->select[c])) {
-				if (!chaining)
+				if (songMode)
+					move = {RemoteMove::ROW, c};
+				else if (!chaining)
 					move = {RemoteMove::PATTERN, c};
 				else if (picked < CHAIN_LENGTH)
 					picks[picked++] = c;
@@ -1298,6 +1510,17 @@ struct Sequencer : Module, Hub {
 		}
 		else
 			remoteSong = -1;
+
+		// MODE's level is song mode: a change of it asks for the mode, which the buttons can change in between.
+		if (patched(RemoteIn::MODE)) {
+			remoteTriggers[RemoteIn::MODE].process(r->volts[RemoteIn::MODE], 0.1f, 1.f);
+			int high = remoteTriggers[RemoteIn::MODE].isHigh();
+			if (high != modeGate)
+				wantMode = high;
+			modeGate = high;
+		}
+		else
+			modeGate = -1;
 
 		bool synced = patched(RemoteIn::BAR) && time.running;
 		sinceBar += dt;
@@ -1359,6 +1582,8 @@ struct Sequencer : Module, Hub {
 	/** A pattern picked on the steps in project mode: a chain of its own, played now, or while chaining, the next in
 	a new chain, its first played now. With the slots locked. */
 	void pickPattern(int q) {
+		if (songMode)
+			leaveSong();
 		if (chaining && chained++ > 0) {
 			if (chain.length < CHAIN_LENGTH)
 				chain.patterns[chain.length++] = (uint8_t) q;
@@ -1376,6 +1601,8 @@ struct Sequencer : Module, Hub {
 		picked = 0;
 		if (chainKey >= 0 && chainKeySave)
 			chains[chainKey] = chain;
+		else if (chainKey >= 0 && songMode)
+			enterSong(chainKey);
 		else if (chainKey >= 0 && chains[chainKey].length) {
 			chain = chains[chainKey];
 			chainAt = 0;
@@ -1391,6 +1618,8 @@ struct Sequencer : Module, Hub {
 				i == pattern ? recallScene(clipboard) : (void) (scenes[i] = clipboard);
 		pastes = 0;
 		if (clearAll) {
+			if (songMode)
+				leaveSong();
 			for (int i = 0; i < PATTERN_COUNT; i++)
 				if (i != pattern)
 					scenes[i] = blankScene();
@@ -1420,8 +1649,8 @@ struct Sequencer : Module, Hub {
 	waiting; if the end has passed by more than a sixteenth, as when a track is shortened, it comes in on the next
 	sixteenth. A pattern chained to nothing else just loops, each track running on at its own length. */
 	void followChain(double song) {
-		double length = patternLength(), end = patternStart + length;
-		bool moving = chain.length > 1;
+		double length = songMode ? rowLength(chainAt) : patternLength(), end = patternStart + length;
+		bool moving = songMode || chain.length > 1;
 		for (Lane& l : lanes)
 			l.player.hold = moving ? end : INFINITY;
 		if (song < end)
@@ -1436,11 +1665,16 @@ struct Sequencer : Module, Hub {
 		double from = lanes[0].player.song(), at = from < end + 1.0 ? end : std::ceil(from);
 		chainAt = (chainAt + 1) % chain.length;
 		songEnded = songEnded || chainAt == 0;
+		if (songMode && chainAt == 0 && !loopSongs) {
+			halt();
+			return;
+		}
 		switchPattern(chain.patterns[chainAt]);
 		for (Lane& l : lanes)
 			l.player.restartPattern(at);
 		patternStart = cycleStart = at;
 		cycles = 0;
+		enterRow();
 	}
 
 	/** Loads a slot as one step of the undo history. An empty slot is a new project. With the slots locked. */
@@ -1642,8 +1876,10 @@ struct Sequencer : Module, Hub {
 		else if (tempoMode)
 			tempoKey(key);
 		else if (mixerMode) {
-			if (keyValue(key) >= 0)
+			if (keyValue(key) >= 0) {
 				muteGroup = keyValue(key);
+				heldMuteGroup = -1;
+			}
 		}
 		else if (!trackMode)
 			noteDown(key, keyPitch(key), (keyPitch(key) - 60) / 12.f, 100);
@@ -1687,6 +1923,12 @@ struct Sequencer : Module, Hub {
 			lanes[MASTER].settings.quantize = 1.f;
 		if (sinceTap >= 0.f)
 			sinceTap += dt;
+		if (songMode) {
+			double length = 0.0;
+			for (int i = 0; i < chain.length; i++)
+				length += rowLength(i);
+			songLength = length;
+		}
 		if (double c = findCycleLength(); c != cycleLength) {
 			cycleLength = c;
 			cycles = (long) std::floor((lanes[0].player.song() - cycleStart) / c + 1e-9);
@@ -2047,7 +2289,7 @@ struct Sequencer : Module, Hub {
 		}
 		const Player& time = lanes[0].player;
 		double perPulse = 4.0 / ppqn;
-		double rate = external && pulsePeriod > 0.f ? perPulse / pulsePeriod : params[TEMPO_PARAM].getValue() / 15.0;
+		double rate = external && pulsePeriod > 0.f ? perPulse / pulsePeriod : tempo() / 15.0;
 		double d = rate * dt;
 		if (external) {
 			sincePulse += dt;
@@ -2171,13 +2413,27 @@ struct Sequencer : Module, Hub {
 		// The mix: punch, the metronome while playing, then the master level.
 		punch.process(left, right, params[LEVEL_PARAM + PUNCH].getValue(), dt);
 		float level = params[METRONOME_LEVEL_PARAM].getValue(), click = metronome.process(dt) * 5.f * level * level;
-		float master = params[LEVEL_PARAM + MASTER_LEVEL].getValue();
+		float master = params[LEVEL_PARAM + MASTER_LEVEL].getValue() * songFade();
 		outputs[LEFT_OUTPUT].setVoltage(softLimit((left + click) * master * master));
 		outputs[RIGHT_OUTPUT].setVoltage(softLimit((right + click) * master * master));
 		outputs[CLOCK_OUTPUT].setVoltage(clockOut.process(dt) ? 10.f : 0.f);
 		outputs[RUN_OUTPUT].setVoltage(playing && !armed ? 10.f : 0.f);
 		outputs[RESET_OUTPUT].setVoltage(resetOut.process(dt) ? 10.f : 0.f);
 		outputs[CONT_OUTPUT].setVoltage(contOut.process(dt) ? 10.f : 0.f);
+	}
+
+	/** A song's fades, in and out, while it plays once through. */
+	float songFade() {
+		const Player& time = lanes[0].player;
+		if (!songMode || loopSongs || !time.running)
+			return 1.f;
+		double at = rowAt + time.song() - patternStart;
+		float fade = 1.f;
+		if (chain.fadeIn > 0.f)
+			fade *= clamp(float(at / (16.0 * chain.fadeIn)), 0.f, 1.f);
+		if (chain.fadeOut > 0.f)
+			fade *= clamp(float((songLength - at) / (16.0 * chain.fadeOut)), 0.f, 1.f);
+		return fade;
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -2188,9 +2444,13 @@ struct Sequencer : Module, Hub {
 		handleInputs();
 		handleTransport();
 		handleRemotes(args.frame, args.sampleTime);
-		if (ready.kind && projectsMutex.try_lock()) {
+		readSongEditor(args.frame);
+		if ((ready.kind || songEdited()) && projectsMutex.try_lock()) {
 			std::lock_guard<std::mutex> lock(projectsMutex, std::adopt_lock);
-			makeMove(ready);
+			if (songEdited())
+				handleSongEdits();
+			if (ready.kind)
+				makeMove(ready);
 			ready.kind = RemoteMove::NONE;
 		}
 		runClock(args.sampleTime);
@@ -2201,6 +2461,7 @@ struct Sequencer : Module, Hub {
 		remote.pattern = pattern;
 		started = ended = songEnded = false;
 		remoteOutFor(args.frame) = remote;
+		songOutFor(args.frame).songMode = songMode;
 		if (lightDivider.process())
 			updateLights(args.sampleTime * lightDivider.getDivision());
 	}
@@ -2542,7 +2803,9 @@ struct Sequencer : Module, Hub {
 			chain = Project::Chain::of(0);
 			std::fill(std::begin(chains), std::end(chains), Project::Chain());
 			patternStart = 0.0;
-			chaining = copying = rewound = clearAll = false;
+			chaining = copying = rewound = clearAll = songMode = loopSongs = false;
+			songSlot = 0;
+			heldMuteGroup = -1;
 			picked = pastes = 0;
 			chainKey = -1;
 		}
@@ -2699,6 +2962,8 @@ struct Sequencer : Module, Hub {
 		}
 		json_object_set_new(root, "tracks", parts);
 		json_object_set_new(root, "muteGroup", json_integer(scene.muteGroup));
+		if (scene.tempo > 0.f)
+			json_object_set_new(root, "bpm", json_real(scene.tempo));
 		return root;
 	}
 
@@ -2736,27 +3001,51 @@ struct Sequencer : Module, Hub {
 			}
 		}
 		scene.muteGroup = clamp((int) json_integer_value(json_object_get(root, "muteGroup")), 0, MUTE_GROUPS - 1);
+		float tempo = json_number_value(json_object_get(root, "bpm"));
+		scene.tempo = tempo >= 40.f && tempo <= 200.f ? tempo : 0.f;
 		scene.used = true;
 		return scene;
 	}
 
+	/** A chain as its patterns; a song, with a length, mute group, fades or tempo of its own, as an object of them. */
 	static json_t* chainToJson(const Project::Chain& c) {
 		json_t* a = json_array();
 		for (int i = 0; i < c.length; i++)
 			json_array_append_new(a, json_integer(c.patterns[i]));
-		return a;
+		Project::Chain plain;
+		plain.length = c.length;
+		std::copy(c.patterns, c.patterns + c.length, plain.patterns);
+		if (plain == c)
+			return a;
+		json_t* lengths = json_array();
+		json_t* mutes = json_array();
+		for (int i = 0; i < c.length; i++) {
+			json_array_append_new(lengths, json_integer(c.lengths[i]));
+			json_array_append_new(mutes, json_integer(c.mutes[i]));
+		}
+		return json_pack("{s:o, s:o, s:o, s:f, s:f, s:f}", "patterns", a, "lengths", lengths, "mutes", mutes,
+			"fadeIn", c.fadeIn, "fadeOut", c.fadeOut, "tempo", c.tempo);
 	}
 
 	/** A chain from JSON, up to its first id that's no pattern's. */
 	static Project::Chain chainFromJson(json_t* a) {
 		Project::Chain c;
+		json_t* song = json_is_object(a) ? a : nullptr;
 		size_t i;
 		json_t* j;
-		json_array_foreach(a, i, j) {
+		json_array_foreach(song ? json_object_get(song, "patterns") : a, i, j) {
 			json_int_t q = json_integer_value(j);
-			if (!json_is_integer(j) || q < 0 || q >= PATTERN_COUNT || c.length == CHAIN_LENGTH)
+			if (!json_is_integer(j) || q < 0 || q >= PATTERN_COUNT || c.length == SONG_ROWS)
 				break;
+			c.lengths[c.length] = (int16_t) clamp((int) json_integer_value(json_array_get(json_object_get(song, "lengths"), i)), -SONG_SIXTEENTHS, SONG_LOOPS);
+			c.mutes[c.length] = (int8_t) clamp((int) json_integer_value(json_array_get(json_object_get(song, "mutes"), i)), 0, MUTE_GROUPS);
 			c.patterns[c.length++] = (uint8_t) q;
+		}
+		if (song) {
+			c.fadeIn = clamp((float) json_number_value(json_object_get(song, "fadeIn")), 0.f, (float) SONG_FADE);
+			c.fadeOut = clamp((float) json_number_value(json_object_get(song, "fadeOut")), 0.f, (float) SONG_FADE);
+			float tempo = json_number_value(json_object_get(song, "tempo"));
+			c.tempo = tempo >= 40.f && tempo <= 200.f ? tempo : 0.f;
 		}
 		return c;
 	}
@@ -3051,8 +3340,11 @@ struct Sequencer : Module, Hub {
 		json_object_set_new(root, "autoSave", json_boolean(autoSave));
 		json_object_set_new(root, "mutes", masksToJson(mutes));
 		json_object_set_new(root, "audioMutes", masksToJson(audioMutes));
-		json_object_set_new(root, "muteGroup", json_integer(muteGroup));
+		json_object_set_new(root, "muteGroup", json_integer(heldMuteGroup >= 0 ? heldMuteGroup : muteGroup));
 		json_object_set_new(root, "plugs", plugsToJson());
+		json_object_set_new(root, "songMode", json_boolean(songMode));
+		json_object_set_new(root, "song", json_integer(songSlot));
+		json_object_set_new(root, "loopSongs", json_boolean(loopSongs));
 		{
 			std::lock_guard<std::mutex> lock(projectsMutex);
 			scenesToJson(root, scenes, pattern, chain, chains);
@@ -3141,6 +3433,11 @@ struct Sequencer : Module, Hub {
 		picked = pastes = 0;
 		chainKey = -1;
 		rewound = clearAll = false;
+		songSlot = clamp((int) json_integer_value(json_object_get(root, "song")), 0, SAVED_CHAINS - 1);
+		songMode = json_boolean_value(json_object_get(root, "songMode")) && chain == chains[songSlot];
+		loopSongs = json_boolean_value(json_object_get(root, "loopSongs"));
+		heldMuteGroup = -1;
+		enterRow();
 	}
 
 	static std::string opzName(int slot) {
@@ -3986,6 +4283,7 @@ struct SequencerWidget : ModuleWidget {
 				if (t != MASTER)
 					menu->addChild(createSubmenuItem(trackName(t), "", [=](Menu* menu) { appendSlotsMenu(menu, module, t); }));
 		}));
+		menu->addChild(createBoolPtrMenuItem("Loop songs", "", &module->loopSongs));
 		menu->addChild(createBoolPtrMenuItem("Long-press toggles hold", "", &module->longPressHolds));
 		menu->addChild(createBoolPtrMenuItem(RACK_MOD_CTRL_NAME "-click toggles hold", "", &module->ctrlClickHolds));
 		menu->addChild(createSubmenuItem("Projects", "", [=](Menu* menu) {

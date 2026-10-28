@@ -25,7 +25,8 @@ The tempo goes from 40 to 200 beats a minute. It starts at 120.
 | Yellow | **Metronome sound**: click, wood, beep, cowbell, hat or blip. The first beat of each bar plays higher. |
 | Red | **Metronome level**. Fully left is off. The metronome plays into **L** and **R** while the Sequencer plays. |
 
-The project slot saves the tempo, the swing and the metronome with the song.
+The project slot saves the tempo, the swing and the metronome with the song. Each pattern also keeps its own tempo:
+see [Each pattern's tempo](song-editor.md#each-patterns-tempo).
 
 ## An outside clock
 

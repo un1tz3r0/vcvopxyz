@@ -20,7 +20,7 @@ A **pattern** holds every track. For each track, it holds:
 - the step count, step length, note length, quantize and polyphony,
 - the plug slot that the track plays, and its dials.
 
-A pattern also holds the mixer's mute group.
+A pattern also holds the mixer's mute group and its [tempo](song-editor.md#each-patterns-tempo).
 
 In project mode, the steps show the patterns. The pattern that plays lights white, and patterns with notes light
 dimly.
@@ -45,7 +45,8 @@ The rest of the chain lights green on the steps. A pattern's end is the end of i
 times its step length. Tracks that wait for **ADV** triggers do not count. Outside project mode, **PLAY** starts the
 chain from its first pattern. To return to one pattern, click its step.
 
-To play patterns and chains from other modules, use [Remotes](remotes.md).
+To play patterns and chains from other modules, use [Remotes](remotes.md). To give each row of a saved chain a
+length, a mute group, and the song fades and tempo, use the [Song Editor](song-editor.md).
 
 ### Saved chains
 
@@ -54,6 +55,8 @@ plays.
 
 - To save the chain that plays, long-press a white key, or Ctrl+click it.
 - To play a saved chain, click its white key.
+
+With a [Song Editor](song-editor.md), each saved chain is a song, with up to 99 rows.
 
 ## Copy a pattern
 

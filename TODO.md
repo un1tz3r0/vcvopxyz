@@ -2,11 +2,11 @@
 
 ## Next
 
-- [ ] **Songs and Song Editor** (the second PR of Vic's "Pattern control expander: design" doc, 2026-10-28): the 14
-      saved chains become songs, with a length (loops or sixteenths) and a mute group for each row; song properties
-      (fades, tempo PAT or fixed, length, playhead); a big-screen Song Editor module on the Sequencer's left; and
-      Remotes' MODE (pattern or song) input. Then a pattern grid editor.
-- [ ] **Shoot Remotes' pictures** for docs/README.md's module table and docs/remotes.md (`render_modules.py`).
+- [ ] **Pattern grid editor:** a big-screen module to see and edit the pattern playing on a grid (Vic, 2026-10-28).
+- [ ] **Shoot Remotes' and the Song Editor's pictures** for docs/README.md's module table, docs/remotes.md and
+      docs/song-editor.md (`render_modules.py`), with a song on the Song Editor's screen.
+- [ ] **Tune the songs by ear** (Vic): the wheels' drag speed, the fade curve (linear now), and whether fades should
+      also apply with "Loop songs" on.
 
 The engine move, planned in Vic's "Plan: engines into the Sequencer" doc (2026-10-24), is done: OP-Z kits (2.0.25),
 the engine core split (2.0.26), the row record's dials (2.0.27), engines in the Sequencer (2.1.0), presets (2.1.1),

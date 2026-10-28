@@ -3,8 +3,9 @@ Remotes: plays the Sequencer's patterns from jacks. It sits on the Sequencer's l
 across this plugin's modules, and hands it its inputs each frame (Hub.hpp's RemoteIn); the Sequencer makes the moves
 (Sequencer::handleRemotes) and sends back counts of the events the outputs pulse for.
 
-SELECT's channel n plays pattern n, as PROJECT and step n do; NEXT and PREV step along the chain, or with one pattern
-playing, to the next or last pattern with notes; SONG picks a saved chain, played on LOAD. With BAR patched, moves wait
+SELECT's channel n plays pattern n, as PROJECT and step n do, or in song mode row n; NEXT and PREV step along the chain,
+or with one pattern playing, to the next or last pattern with notes; SONG picks a saved chain, played on LOAD; MODE
+high is song mode. With BAR patched, moves wait
 for the next BAR and start every track from step 1 on it. START pulses as a pattern starts, switches or loops, END as
 its cycle ends and it loops, and SONG END as a chain comes round to its first pattern. PATTERN is high on the channel
 of the pattern playing, for another Sequencer's SELECT to follow.
@@ -15,7 +16,7 @@ of the pattern playing, for another Sequencer's SELECT to follow.
 
 struct Remotes : Module {
 	enum ParamId { PARAMS_LEN };
-	enum InputId { SELECT_INPUT, NEXT_INPUT, PREV_INPUT, BAR_INPUT, SONG_INPUT, LOAD_INPUT, INPUTS_LEN };
+	enum InputId { SELECT_INPUT, NEXT_INPUT, PREV_INPUT, BAR_INPUT, SONG_INPUT, LOAD_INPUT, MODE_INPUT, INPUTS_LEN };
 	enum OutputId { START_OUTPUT, END_OUTPUT, SONG_END_OUTPUT, PATTERN_OUTPUT, OUTPUTS_LEN };
 	enum LightId { LINK_LIGHT, ENUMS(INPUT_LIGHT, INPUTS_LEN), ENUMS(OUTPUT_LIGHT, OUTPUTS_LEN), LIGHTS_LEN };
 	static_assert((int) INPUTS_LEN == (int) opz::RemoteIn::JACKS, "the inputs are RemoteIn's jacks, in order");
@@ -40,6 +41,7 @@ struct Remotes : Module {
 		configInput(BAR_INPUT, "Bar: patched, moves wait for it and start every track from step 1");
 		configInput(SONG_INPUT, "Song: 0-10 V picks saved chain 1 to 14");
 		configInput(LOAD_INPUT, "Load the song SONG picks; unpatched, it loads as SONG moves");
+		configInput(MODE_INPUT, "Mode: high plays songs, low patterns");
 		configOutput(START_OUTPUT, "Pattern start: playing from the top, a switch, or a loop");
 		configOutput(END_OUTPUT, "Pattern end: its cycle ends and it loops");
 		configOutput(SONG_END_OUTPUT, "Song end: the chain comes round to its first pattern");
@@ -135,7 +137,7 @@ struct RemotesWidget : ModuleWidget {
 
 		PanelLayout layout(panel);
 		addChild(createLightCentered<SmallLight<GreenLight>>(layout.center("LINK_LIGHT"), module, Remotes::LINK_LIGHT));
-		static const char* const inputs[] = {"SELECT", "NEXT", "PREV", "BAR", "SONG", "LOAD"};
+		static const char* const inputs[] = {"SELECT", "NEXT", "PREV", "BAR", "SONG", "LOAD", "MODE"};
 		static const char* const outputs[] = {"START", "END", "SONG_END", "PATTERN"};
 		for (int i = 0; i < Remotes::INPUTS_LEN; i++) {
 			std::string name = inputs[i];

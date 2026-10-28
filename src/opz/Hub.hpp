@@ -1,10 +1,12 @@
 #pragma once
 #include "TrackCore.hpp"
+#include "Project.hpp"
 
 /*
 The bus along a row of OP-Z modules: the Sequencer, which plays every track, then the breakouts that hand tracks to
 other modules and the Screens that show the selected one. A module from another plugin ends it. To the Sequencer's
-left, a Remotes module plays its patterns from jacks, finding the hub by walking right.
+left, a Remotes module plays its patterns from jacks and a Song Editor edits its songs, each finding the hub by walking
+right.
 
 The Sequencer holds the hub. For each track it carries the jacks of the breakout bound to it both ways: the track's
 outputs out to the breakout, and the breakout's inputs, and which of its outputs are patched, back in. Both are
@@ -33,7 +35,7 @@ struct JacksIn {
 
 /** What a Remotes module to the Sequencer's left sends it: its inputs, as they are. */
 struct RemoteIn {
-	enum Jack { SELECT, NEXT, PREV, BAR, SONG, LOAD, JACKS };
+	enum Jack { SELECT, NEXT, PREV, BAR, SONG, LOAD, MODE, JACKS };
 	int64_t frame = -1;          // when it was written: an older one's Remotes has gone
 	uint32_t patched = 0;        // a bit per jack
 	int selectChannels = 0;
@@ -48,11 +50,42 @@ struct RemoteOut {
 	int pattern = 0;
 };
 
+/** What a Song Editor sends the Sequencer each frame: the row it has selected, and what its controls did since its last
+frame. Row -1 is the song's settings above the rows, whose fade in, fade out and tempo the column wheels turn. */
+struct SongIn {
+	static constexpr int SETTINGS = -1;
+	int64_t frame = -1;
+	int row = 0;
+	int modes = 0;               // presses of MODE
+	int songs = 0;               // steps of the SONG wheel
+	int patterns = 0, lengths = 0, mutes = 0; // steps of the column wheels
+	int inserts = 0, removes = 0;
+	int jump = -1;               // a row double-clicked, to play from
+};
+
+/** What the Sequencer sends a Song Editor's lights. */
+struct SongOut {
+	bool songMode = false;
+};
+
+/** A Song Editor's screen, as the UI thread copies it out of the Sequencer: times in sixteenths and seconds. */
+struct SongView {
+	bool songMode = false, playing = false, external = false, loop = false;
+	int song = 0, rowPlaying = 0;
+	float bpm = 120.f, progress = 0.f; // the tempo now; how far the row playing is through its length
+	double length = 0.0, at = 0.0;     // the song's whole length and the playhead, in sixteenths
+	double seconds = 0.0, secondsAt = 0.0;
+	double rowLengths[SONG_ROWS] = {}; // sixteenths
+	Project::Chain chain;
+};
+
 struct Hub {
 	JacksOut out[2][LANES];
 	JacksIn in[2][LANES];
 	RemoteIn remoteIn[2];
 	RemoteOut remoteOut[2];
+	SongIn songIn[2];
+	SongOut songOut[2];
 
 	virtual ~Hub() = default;
 
@@ -77,6 +110,17 @@ struct Hub {
 	}
 	RemoteOut& remoteOutFor(int64_t frame) { return remoteOut[frame & 1]; }
 	const RemoteOut& lastRemoteOut(int64_t frame) const { return remoteOut[(frame + 1) & 1]; }
+
+	SongIn& songInFor(int64_t frame) { return songIn[frame & 1]; }
+	const SongIn* lastSongIn(int64_t frame) const {
+		const SongIn& s = songIn[(frame + 1) & 1];
+		return s.frame == frame - 1 ? &s : nullptr;
+	}
+	SongOut& songOutFor(int64_t frame) { return songOut[frame & 1]; }
+	const SongOut& lastSongOut(int64_t frame) const { return songOut[(frame + 1) & 1]; }
+
+	/** For the UI thread: a Song Editor's screen. False if the Sequencer is busy with its patterns just now. */
+	virtual bool songView(SongView& view) = 0;
 
 	// For the UI thread: the core playing a track (null for the master track), its plug's name, and the track
 	// selected.
