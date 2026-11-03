@@ -102,6 +102,8 @@ struct DrumBreakout : BreakoutModule {
 	static constexpr const char* SLUG = "DrumBreakout";
 
 	DrumBreakout() : BreakoutModule(DRUM) {
+		unranged(Port::OUTPUT, CV_P1_OUTPUT);
+		unranged(Port::OUTPUT, CV_P2_OUTPUT);
 		configOutput(CV_P1_OUTPUT, "Pitch (1V/octave)");
 		configOutput(CV_P2_OUTPUT, "Reverse (10V on)");
 	}

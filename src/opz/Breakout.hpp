@@ -10,8 +10,47 @@ module plays its own; what the breakout has patched decides what the track does 
 Its selector picks the track: Auto takes the first track of its kind that no breakout to its left has, as engines
 once took theirs by their order along the row; a fixed track is its own, unless a breakout to its left has it already,
 and then it has none and shows a dash.
+
+Its menus, and its jacks' own, set each CV jack's voltage range, which it maps to and from the core's, and whether
+GATE sends gates or the core's triggers. The core never sees either.
 */
 namespace opz {
+
+/** A CV jack's span in volts, lo to hi. A breakout's core sends and reads each CV in one span; the menu maps it onto
+another, to suit the module at the cable's far end. */
+struct CvRange {
+	float lo = 0.f, hi = 0.f;
+
+	explicit operator bool() const {
+		return lo != hi;
+	}
+	bool operator==(const CvRange& r) const {
+		return lo == r.lo && hi == r.hi;
+	}
+	bool operator!=(const CvRange& r) const {
+		return !(*this == r);
+	}
+	/** `v`, in the span `from`, at the same place in this one. */
+	float map(float v, const CvRange& from) const {
+		return lo + (v - from.lo) * (hi - lo) / (from.hi - from.lo);
+	}
+	float peak() const {
+		return std::fmax(std::fabs(lo), std::fabs(hi));
+	}
+	std::string label() const {
+		return lo == -hi && hi > 0.f ? string::f("±%g V", hi) : string::f("%g to %g V", lo, hi);
+	}
+};
+
+inline const CvRange UNIPOLAR{0.f, 10.f}, BIPOLAR{-5.f, 5.f};
+inline const CvRange CV_RANGES[] = {UNIPOLAR, {0.f, 5.f}, BIPOLAR, {-10.f, 10.f}};
+
+/** A jack whose range the menu sets: its name without the range, the core's range, and the jack's. A jack with no
+`native` range has none to set. */
+struct RangedJack {
+	std::string name;
+	CvRange native, range;
+};
 
 struct BreakoutModule : Module, TrackIds {
 	enum { TRACK_PARAM, BREAKOUT_PARAMS };
@@ -23,6 +62,21 @@ struct BreakoutModule : Module, TrackIds {
 	float selected = -1.f;              // the selector as last seen, to find a track again when it moves
 	Meter inputMeters[INPUTS_LEN], outputMeters[OUTPUTS_LEN];
 	dsp::ClockDivider lightDivider;
+	RangedJack jacks[2][OUTPUTS_LEN];   // by Port::Type, then id
+	bool triggers = false;              // GATE sends the core's 1 ms triggers in place of its gates
+
+	// The jacks' panel ids, without _INPUT or _OUTPUT, as the panels and patches name them.
+	static constexpr const char* INPUT_IDS[INPUTS_LEN] = {"VOCT", "GATE", "VELOCITY", "CLOCK", "RESET", "EXT", "RETURN_L", "RETURN_R"};
+	static constexpr const char* OUTPUT_IDS[OUTPUTS_LEN] = {"LEFT", "RIGHT", "FX1", "FX2",
+		"CV_VOCT", "CV_GATE", "CV_ENV", "CV_LFO", "CV_P1", "CV_P2", "CV_FILTER", "CV_RESONANCE", "CV_FX1", "CV_FX2",
+		"CV_TRIGGER", "CV_SOUND", "CV_VELOCITY", "CV_SEND_L", "CV_SEND_R", "CV_TIME"};
+
+	static std::string jackId(int type, int id) {
+		return type == Port::INPUT ? INPUT_IDS[id] + std::string("_INPUT") : OUTPUT_IDS[id] + std::string("_OUTPUT");
+	}
+	static int jackCount(int type) {
+		return type == Port::INPUT ? (int) INPUTS_LEN : (int) OUTPUTS_LEN;
+	}
 
 	static int firstTrack(int kind) {
 		return kind == FX ? FX1 : kind == DRUM ? 0 : DRUM_TRACKS;
@@ -42,23 +96,63 @@ struct BreakoutModule : Module, TrackIds {
 		configLight(ACTIVE_LIGHT, "Notes playing");
 		configInput(VOCT_INPUT, "1V/octave pitch, in place of the track's notes while GATE is patched");
 		configInput(GATE_INPUT, "Gate, in place of the track's notes");
-		configInput(VELOCITY_INPUT, "Velocity (0-10V)");
+		configInput(VELOCITY_INPUT, "Velocity");
 		configInput(CLOCK_INPUT, "Clock, for the track's synced LFO speeds");
 		configInput(RESET_INPUT, "LFO reset");
-		configInput(EXT_INPUT, "LFO external (±5V), for the External shape");
+		configInput(EXT_INPUT, "LFO external, for the External shape");
 		configInput(RETURN_L_INPUT, "Return left, or mono: the track's sound from outside, in place of its plug's");
 		configInput(RETURN_R_INPUT, "Return right, in place of its plug's");
 		configOutput(LEFT_OUTPUT, "Left, or mono while right is unpatched, in place of the mix");
 		configOutput(RIGHT_OUTPUT, "Right");
 		configOutput(FX1_OUTPUT, "FX 1 send, in place of FX 1");
 		configOutput(FX2_OUTPUT, "FX 2 send, in place of FX 2");
-		const char* const cvs[] = {"1V/octave pitch", "Gate", "Envelope (0-10V)", "LFO (±5V)", "CV 1 (0-10V)", "CV 2 (0-10V)",
-			"Filter (0-10V)", "Resonance (0-10V)", "FX 1 send (0-10V)", "FX 2 send (0-10V)",
-			"Trigger", "Sound (1/12V a sound, 0V for the first)", "Velocity (0-10V)",
+		const char* const cvs[] = {"1V/octave pitch", "Gate", "Envelope", "LFO", "CV 1", "CV 2",
+			"Filter", "Resonance", "FX 1 send", "FX 2 send",
+			"Trigger", "Sound (1/12V a sound, 0V for the first)", "Velocity",
 			"Send left (±5V)", "Send right (±5V)", "Time (1V a second)"};
 		for (int i = CV_VOCT_OUTPUT; i < OUTPUTS_LEN; i++)
 			configOutput(i, cvs[i - CV_VOCT_OUTPUT]);
+		for (int o : {CV_ENV_OUTPUT, CV_P1_OUTPUT, CV_P2_OUTPUT, CV_FILTER_OUTPUT, CV_RESONANCE_OUTPUT, CV_FX1_OUTPUT, CV_FX2_OUTPUT, CV_VELOCITY_OUTPUT})
+			ranged(Port::OUTPUT, o, UNIPOLAR);
+		ranged(Port::OUTPUT, CV_LFO_OUTPUT, BIPOLAR);
+		ranged(Port::INPUT, VELOCITY_INPUT, UNIPOLAR);
+		ranged(Port::INPUT, EXT_INPUT, BIPOLAR);
 		lightDivider.setDivision(64);
+	}
+
+	/** Gives a jack a range to set, from the core's own, and names it with its range. */
+	void ranged(int type, int id, CvRange native) {
+		PortInfo* info = type == Port::INPUT ? inputInfos[id] : outputInfos[id];
+		jacks[type][id] = {info->name, native, native};
+		setRange(type, id, native);
+	}
+
+	/** Takes the range away from a jack that a breakout uses for something else. */
+	void unranged(int type, int id) {
+		jacks[type][id] = RangedJack();
+	}
+
+	void setRange(int type, int id, CvRange r) {
+		RangedJack& j = jacks[type][id];
+		j.range = r;
+		(type == Port::INPUT ? inputInfos[id] : outputInfos[id])->name = j.name + " (" + r.label() + ")";
+	}
+
+	void resetRanges() {
+		for (int type : {Port::INPUT, Port::OUTPUT})
+			for (int id = 0; id < jackCount(type); id++)
+				if (jacks[type][id].native)
+					setRange(type, id, jacks[type][id].native);
+	}
+
+	/** Whether GATE may send triggers: a Drum Breakout has TRIG for them. */
+	bool gateChoice() const {
+		return kind != DRUM;
+	}
+
+	void setTriggers(bool on) {
+		triggers = on && gateChoice();
+		outputInfos[CV_GATE_OUTPUT]->name = triggers ? "Trigger, 1 ms as each note starts" : "Gate";
 	}
 
 	/** The track it would take, given those breakouts to its left have taken: Auto the first free one of its kind, a
@@ -110,20 +204,32 @@ struct BreakoutModule : Module, TrackIds {
 			to.patched = 0;
 			for (int o = 0; o < OUTPUTS_LEN; o++)
 				to.patched |= uint32_t(outputs[o].isConnected()) << o;
+			// GATE sending triggers takes them from the core's TRIG, which the panel may not have.
+			if (triggers && outputs[CV_GATE_OUTPUT].isConnected())
+				to.patched |= 1u << CV_TRIGGER_OUTPUT;
 			for (int i = 0; i < INPUTS_LEN; i++) {
 				int n = to.inputs[i].channels = inputs[i].getChannels();
-				if (n)
-					std::copy(std::begin(inputs[i].voltages), std::end(inputs[i].voltages), to.inputs[i].voltages);
+				if (!n)
+					continue;
+				std::copy(std::begin(inputs[i].voltages), std::end(inputs[i].voltages), to.inputs[i].voltages);
+				if (const RangedJack& j = jacks[Port::INPUT][i]; j.range != j.native)
+					for (int c = 0; c < n; c++)
+						to.inputs[i].voltages[c] = j.native.map(to.inputs[i].voltages[c], j.range);
 			}
 			from = &hub->lastJacksOut(t, args.frame);
 		}
 		for (int o = 0; o < OUTPUTS_LEN; o++) {
 			if (!outputs[o].isConnected())
 				continue;
-			int n = from ? (int) from->outputs[o].channels : 0;
+			const Port* source = from ? &from->outputs[triggers && o == CV_GATE_OUTPUT ? CV_TRIGGER_OUTPUT : o] : nullptr;
+			int n = source ? (int) source->channels : 0;
+			const RangedJack& j = jacks[Port::OUTPUT][o];
+			bool mapped = n && j.range != j.native;
 			outputs[o].setChannels(std::max(n, 1));
-			for (int c = 0; c < std::max(n, 1); c++)
-				outputs[o].setVoltage(n ? from->outputs[o].voltages[c] : 0.f, c);
+			for (int c = 0; c < std::max(n, 1); c++) {
+				float v = n ? source->voltages[c] : 0.f;
+				outputs[o].setVoltage(mapped ? j.range.map(v, j.native) : v, c);
+			}
 		}
 		if (lightDivider.process())
 			updateLights(args.sampleTime * lightDivider.getDivision(), from);
@@ -133,14 +239,15 @@ struct BreakoutModule : Module, TrackIds {
 		lights[SELECTED_LIGHT].setBrightness(from && from->selected);
 		lights[ACTIVE_LIGHT].setBrightness(from ? from->activity : 0.f);
 		for (int i = 0; i < INPUTS_LEN; i++) {
-			float level = TrackCore::peak(inputs[i]);
-			inputMeters[i].process(level / 10.f, level > 10.f, dt);
+			float level = TrackCore::peak(inputs[i]), full = jacks[Port::INPUT][i].native ? jacks[Port::INPUT][i].range.peak() : 10.f;
+			inputMeters[i].process(level / full, level > 10.f, dt);
 			lights[INPUT_LIGHT + 2 * i].setBrightness(inputMeters[i].peak);
 			lights[INPUT_LIGHT + 2 * i + 1].setBrightness(inputMeters[i].clip > 0.f);
 		}
 		for (int o = 0; o < OUTPUTS_LEN; o++) {
-			// The audio outputs run about ±5V, into the track's soft limit; the CVs 10V.
-			float level = TrackCore::peak(outputs[o]), full = o < AUDIO_OUTPUTS ? 5.f : 10.f;
+			// The audio outputs run about ±5V, into the track's soft limit; the CVs to their range, or 10V.
+			const RangedJack& j = jacks[Port::OUTPUT][o];
+			float level = TrackCore::peak(outputs[o]), full = o < AUDIO_OUTPUTS ? 5.f : j.native ? j.range.peak() : 10.f;
 			outputMeters[o].process(level / full, o < AUDIO_OUTPUTS && level > 5.f, dt);
 			lights[OUTPUT_LIGHT + 2 * o].setBrightness(outputMeters[o].peak);
 			lights[OUTPUT_LIGHT + 2 * o + 1].setBrightness(outputMeters[o].clip > 0.f);
@@ -157,6 +264,42 @@ struct BreakoutModule : Module, TrackIds {
 		const char* version = json_string_value(json_object_get(root, "version"));
 		if (!version || string::Version(version) < string::Version("2.1.0"))
 			params[TRACK_PARAM].setValue(0.f);
+	}
+
+	void onReset(const ResetEvent& e) override {
+		Module::onReset(e);
+		resetRanges();
+		setTriggers(false);
+	}
+
+	/** The ranges by jack id, as [lo, hi]. A patch from before 2.1.12 has none, and keeps the core's. */
+	json_t* dataToJson() override {
+		json_t* root = json_object();
+		json_t* ranges = json_object();
+		for (int type : {Port::INPUT, Port::OUTPUT})
+			for (int id = 0; id < jackCount(type); id++)
+				if (const RangedJack& j = jacks[type][id]; j.native)
+					json_object_set_new(ranges, jackId(type, id).c_str(), json_pack("[ff]", j.range.lo, j.range.hi));
+		json_object_set_new(root, "ranges", ranges);
+		if (gateChoice())
+			json_object_set_new(root, "gateTriggers", json_boolean(triggers));
+		return root;
+	}
+
+	void dataFromJson(json_t* root) override {
+		resetRanges();
+		json_t* ranges = json_object_get(root, "ranges");
+		for (int type : {Port::INPUT, Port::OUTPUT})
+			for (int id = 0; id < jackCount(type); id++) {
+				json_t* r = json_object_get(ranges, jackId(type, id).c_str());
+				if (!jacks[type][id].native || json_array_size(r) != 2)
+					continue;
+				float lo = json_number_value(json_array_get(r, 0)), hi = json_number_value(json_array_get(r, 1));
+				CvRange range{clamp(lo, -12.f, 12.f), clamp(hi, -12.f, 12.f)};
+				if (std::isfinite(lo) && std::isfinite(hi) && range)
+					setRange(type, id, range);
+			}
+		setTriggers(json_is_true(json_object_get(root, "gateTriggers")));
 	}
 };
 
@@ -263,6 +406,38 @@ struct TrackStatus : widget::Widget {
 };
 
 
+/** A jack's range choices, as check items. */
+inline void appendRangeItems(Menu* menu, BreakoutModule* m, int type, int id) {
+	for (const CvRange& r : CV_RANGES)
+		menu->addChild(createCheckMenuItem(r.label(), r == m->jacks[type][id].native ? "default" : "",
+			[=]() { return m->jacks[type][id].range == r; },
+			[=]() { m->setRange(type, id, r); }));
+}
+
+inline void appendGateItems(Menu* menu, BreakoutModule* m) {
+	menu->addChild(createCheckMenuItem("Gate, high while the note plays", "default", [=]() { return !m->triggers; }, [=]() { m->setTriggers(false); }));
+	menu->addChild(createCheckMenuItem("Trigger, 1 ms as the note starts", "", [=]() { return m->triggers; }, [=]() { m->setTriggers(true); }));
+}
+
+/** A breakout's jack, with its range, or GATE's gates or triggers, on its own context menu too. */
+struct BreakoutPort : ThemedPJ301MPort {
+	void appendContextMenu(Menu* menu) override {
+		BreakoutModule* m = dynamic_cast<BreakoutModule*>(module);
+		if (!m)
+			return;
+		if (type == engine::Port::OUTPUT && portId == TrackIds::CV_GATE_OUTPUT && m->gateChoice()) {
+			menu->addChild(new MenuSeparator);
+			appendGateItems(menu, m);
+		}
+		if (m->jacks[type][portId].native) {
+			menu->addChild(new MenuSeparator);
+			menu->addChild(createMenuLabel("Voltage range"));
+			appendRangeItems(menu, m, type, portId);
+		}
+	}
+};
+
+
 /** A breakout's panel: the status screen, SEL and NOTE, and the jacks. The track's dials are the Sequencer's. */
 struct BreakoutWidget : ModuleWidget {
 	BreakoutWidget(BreakoutModule* module, const std::string& slug) {
@@ -280,24 +455,29 @@ struct BreakoutWidget : ModuleWidget {
 		addChild(createLightCentered<SmallLight<NoteLight>>(layout.center("ACTIVE_LIGHT"), module, TrackIds::ACTIVE_LIGHT));
 
 		// Only the jacks the panel has.
-		static const char* const inputs[] = {"VOCT", "GATE", "VELOCITY", "CLOCK", "RESET", "EXT", "RETURN_L", "RETURN_R"};
-		static const char* const outputs[] = {"LEFT", "RIGHT", "FX1", "FX2",
-			"CV_VOCT", "CV_GATE", "CV_ENV", "CV_LFO", "CV_P1", "CV_P2", "CV_FILTER", "CV_RESONANCE", "CV_FX1", "CV_FX2",
-			"CV_TRIGGER", "CV_SOUND", "CV_VELOCITY", "CV_SEND_L", "CV_SEND_R", "CV_TIME"};
 		for (int i = 0; i < TrackIds::INPUTS_LEN; i++) {
-			std::string name = inputs[i];
+			std::string name = BreakoutModule::INPUT_IDS[i];
 			if (!layout.has(name + "_INPUT"))
 				continue;
-			addInput(createInputCentered<ThemedPJ301MPort>(layout.center(name + "_INPUT"), module, i));
+			addInput(createInputCentered<BreakoutPort>(layout.center(name + "_INPUT"), module, i));
 			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(name + "_LIGHT"), module, TrackIds::INPUT_LIGHT + 2 * i));
 		}
 		for (int i = 0; i < TrackIds::OUTPUTS_LEN; i++) {
-			std::string name = outputs[i];
+			std::string name = BreakoutModule::OUTPUT_IDS[i];
 			if (!layout.has(name + "_OUTPUT"))
 				continue;
-			addOutput(createOutputCentered<ThemedPJ301MPort>(layout.center(name + "_OUTPUT"), module, i));
+			addOutput(createOutputCentered<BreakoutPort>(layout.center(name + "_OUTPUT"), module, i));
 			addChild(createLightCentered<DotLight<GreenRedLight>>(layout.center(name + "_LIGHT"), module, TrackIds::OUTPUT_LIGHT + 2 * i));
 		}
+	}
+
+	/** The panel's jacks that have a range to set, of one type. */
+	std::vector<int> rangedJacks(BreakoutModule* m, int type) {
+		std::vector<int> ids;
+		for (int id = 0; id < BreakoutModule::jackCount(type); id++)
+			if (m->jacks[type][id].native && (type == engine::Port::INPUT ? getInput(id) : getOutput(id)))
+				ids.push_back(id);
+		return ids;
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -307,6 +487,26 @@ struct BreakoutWidget : ModuleWidget {
 		menu->addChild(createIndexSubmenuItem("Track", q->labels,
 			[=]() { return (size_t) std::round(q->getValue()); },
 			[=](size_t i) { q->setValue(i); }));
+		if (m->gateChoice())
+			menu->addChild(createSubmenuItem("GATE output", m->triggers ? "triggers" : "gates", [=](Menu* menu) { appendGateItems(menu, m); }));
+		std::vector<int> outs = rangedJacks(m, engine::Port::OUTPUT), ins = rangedJacks(m, engine::Port::INPUT);
+		menu->addChild(createSubmenuItem("Voltage ranges", "", [=](Menu* menu) {
+			for (int type : {engine::Port::OUTPUT, engine::Port::INPUT}) {
+				menu->addChild(createMenuLabel(type == engine::Port::OUTPUT ? "Outputs" : "Inputs"));
+				for (int id : type == engine::Port::OUTPUT ? outs : ins)
+					menu->addChild(createSubmenuItem(m->jacks[type][id].name, m->jacks[type][id].range.label(),
+						[=](Menu* menu) { appendRangeItems(menu, m, type, id); }));
+			}
+			menu->addChild(new MenuSeparator);
+			menu->addChild(createSubmenuItem("Set every output to", "", [=](Menu* menu) {
+				for (const CvRange& r : CV_RANGES)
+					menu->addChild(createMenuItem(r.label(), "", [=]() {
+						for (int id : outs)
+							m->setRange(engine::Port::OUTPUT, id, r);
+					}));
+			}));
+			menu->addChild(createMenuItem("Reset every range", "", [=]() { m->resetRanges(); }));
+		}));
 	}
 };
 

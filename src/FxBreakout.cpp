@@ -29,6 +29,13 @@ struct FxBreakoutSound : opz::TempoTime {
 
 
 struct FxBreakoutCore : opz::FxCore<FxBreakoutSound> {
+	dsp::PulseGenerator triggers[PORT_MAX_CHANNELS];
+
+	void noteOn(int channel) override {
+		FxCore::noteOn(channel);
+		triggers[channel].trigger(1e-3f);
+	}
+
 	void process(const ProcessArgs& args) override {
 		lfoInside = !outputs[CV_LFO_OUTPUT].isConnected();
 		prepare(args);
@@ -47,8 +54,10 @@ struct FxBreakoutCore : opz::FxCore<FxBreakoutSound> {
 			outputs[CV_VOCT_OUTPUT].setVoltage(c < channels ? notePitch(c) : 0.f, c);
 			outputs[CV_GATE_OUTPUT].setVoltage(c < channels && gates[c].isHigh() ? 10.f : 0.f, c);
 		}
-		outputs[CV_VOCT_OUTPUT].setChannels(notes);
-		outputs[CV_GATE_OUTPUT].setChannels(notes);
+		for (int c = 0; c < PORT_MAX_CHANNELS; c++)
+			outputs[CV_TRIGGER_OUTPUT].setVoltage(triggers[c].process(args.sampleTime) ? 10.f : 0.f, c);
+		for (int o : {CV_VOCT_OUTPUT, CV_GATE_OUTPUT, CV_TRIGGER_OUTPUT})
+			outputs[o].setChannels(notes);
 		outputs[CV_P1_OUTPUT].setVoltage(10.f * controls.p1);
 		outputs[CV_P2_OUTPUT].setVoltage(10.f * controls.p2);
 		emitDialCVs();

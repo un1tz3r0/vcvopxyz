@@ -51,6 +51,12 @@ It keeps its gates when the return then hands it the track, so held notes don't 
 ring out when the return goes, so it goes straight back to following. The audio outputs take whichever core plays
 out of the mix (2.1.6; before, the note outputs alone handed the track over, and the audio outputs overruled them).
 
+A core always works in its CVs' own ranges (0 to 10 V, the LFO ±5 V). The breakout module maps each CV jack's
+voltage between that and the range its menu sets (`RangedJack`, 2.1.12), outputs on the way out and VEL and EXT on the
+way in, so the cores and the hub never see the choice. GATE sending triggers works the same way: the breakout marks
+TRIG patched in `JacksIn` and copies TRIG's channels to its GATE jack. Every breakout core writes TRIG: Drum's for its
+own jack, Synth's as each voice's envelope starts (so legato slurs send none), Send FX's as each gate rises.
+
 Placement only changes when modules move, so breakouts walk left again only after Rack has given some module of
 this plugin a new neighbour: every module's `onExpanderChange` bumps a plugin-wide count (`busLayout`). The UI thread
 never keeps a hub: a Screen or a breakout's status screen walks left each frame (`findHub`). A row of a Sequencer

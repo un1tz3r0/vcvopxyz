@@ -50,6 +50,8 @@ Whatever turns up off the plan's path, each for a PR of its own afterwards.
 - [ ] A preset keeps a loaded kit's slices but not its sounds, which live in the patch's storage folder.
 - [ ] Jack LEDs on unpatched outputs stay dark, since an unpatched output has no channels to meter.
 - [ ] The RUN, RESET and CONT inputs aren't tested in a running Rack yet.
+- [ ] The breakouts' voltage ranges and GATE triggers (2.1.12) are tested in a harness, not yet in a running Rack:
+      the jacks' own context menus, the module's **Voltage ranges** submenu, and a patch saved and loaded.
 - [ ] **OP-Z project files** are untested on a real OP-Z. Check an export loads, and work out the track settings'
       bytes (step count, step length, note length, quantize) and swing, which are guesses.
 - [ ] Write the mixer's mutes into exported project files.
