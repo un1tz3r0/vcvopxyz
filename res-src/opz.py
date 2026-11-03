@@ -99,6 +99,8 @@ ICONS = {
     'minus': [line('M-0.65 0H0.65')],
     'play': [line('M-0.45 -0.65L0.65 0L-0.45 0.65Z')],
     'plus': [line('M-0.65 0H0.65M0 -0.65V0.65')],
+    'up': [line('M-0.65 0.35L0 -0.35L0.65 0.35')],
+    'down': [line('M-0.65 -0.35L0 0.35L0.65 -0.35')],
     'stop': [line('M-0.55 -0.55H0.55V0.55H-0.55Z')],
     'shift': [line('M0 0.7V-0.7M-0.5 -0.2L0 -0.7L0.5 -0.2')],
     'dot': [dot(0, 0, 0.4)],
@@ -132,13 +134,13 @@ RING = 0.3      # its ring's line weight (mm)
 NUMERAL = 2.7   # the black keys' numbers (mm)
 # The symbols that are also LEDs, and how big each is drawn (mm). The keys draw them, off and lit, so that their look
 # can follow the Sequencer's Appearance menu; the step and white keys' dots are circles drawn in code.
-SYMBOLS = dict(rec=2.4, track=2.2, minus=2.2, plus=2.2, play=2.0, stop=1.9, shift=2.2, metronome=2.3,
+SYMBOLS = dict(rec=2.4, track=2.2, minus=2.2, plus=2.2, up=2.2, down=2.2, play=2.0, stop=1.9, shift=2.2, metronome=2.3,
                project=2.2, mixer=2.2, screen=2.3,
                kick=2.3, snare=2.3, perc=2.3, sample=2.3, bass=2.3, lead=2.3, arp=2.3, chord=2.3, master=2.3, fx1=2.3,
                fx2=2.3, **{f'plug_{name}': 3.6 for name in PLUGS})
 # The round keys' symbols, which also get an edge: the symbol grown by EDGE (mm, on the panel), for the dark keyline
 # some LED styles draw behind a lit one.
-KEY_SYMBOLS = ['track', 'rec', 'minus', 'play', 'plus', 'stop', 'shift', 'project', 'mixer', 'metronome', 'screen',
+KEY_SYMBOLS = ['track', 'rec', 'minus', 'play', 'plus', 'up', 'down', 'stop', 'shift', 'project', 'mixer', 'metronome', 'screen',
                *'0123456789']
 EDGE = 0.3
 

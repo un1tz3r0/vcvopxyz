@@ -38,22 +38,25 @@ In song mode, a click on a white key of project mode plays that song. A click on
 
 ## The screen
 
-From the top, the screen shows:
+Each item on the screen has a box with a label. From the top, the screen shows:
 
-- the mode, and **PLAYING** or **STOPPED**,
-- the length of the song, in bars:beats:sixteenths and in hours:minutes:seconds,
-- the song's number, and the tempo with its source (**PAT**, **SONG** or **EXT**),
-- the time of the playhead, in the same two formats,
-- the song's settings,
-- the rows, with the length of each row in bars.
+- **MODE**, **TRANSPORT** (**PLAYING** or **STOPPED**) and **TEMPO**. The tempo's source (**PAT**, **SONG** or
+  **EXT**) shows at the right of its label.
+- **SONG**, the song's number. **LENGTH** and **TIME** show the length of the song and the time of the playhead, in
+  bars:beats:sixteenths and in hours:minutes:seconds.
+- The settings row: **FADE IN**, **FADE OUT** and **TEMPO**.
+- The rows, below the headings **ROW**, **PAT**, **LEN**, **MUTE** and **BARS**. **BARS** is the length of each row.
 
-The row that plays has a green background and a bar that shows its progress. A frame shows the row that you edit.
+Each column has the color of the wheel that changes it: green for **PAT**, blue for **LEN** and yellow for **MUTE**.
+The settings above the columns have the same colors. The row that you edit shows in reverse: dark text on the color
+of each column. The row that plays has a green background and a bar that shows its progress.
 
 In pattern mode, the song's number shows **-P**, and the song's data shows **-**.
 
 ## Controls
 
-The lines on the panel connect each control to the item that it changes.
+The lines on the panel connect each control to the item that it changes. The four round keys above and below the
+**ROW** wheel change the row that you edit.
 
 | Control | What it does |
 | --- | --- |
@@ -63,8 +66,10 @@ The lines on the panel connect each control to the item that it changes.
 | **PAT** wheel | Changes the row's pattern, or on the settings row, the fade in. |
 | **LEN** wheel | Changes the row's length, or on the settings row, the fade out. |
 | **MUTE** wheel | Changes the row's mute group, or on the settings row, the tempo. |
-| **INSERT** | Adds a copy of the row below it. |
-| **DELETE** | Removes the row. A song keeps at least one row. |
+| **+** key | Adds a copy of the row below it. |
+| **Up arrow** key | Moves the row up one place. The cursor moves with the row. |
+| **Down arrow** key | Moves the row down one place. The cursor moves with the row. |
+| **-** key | Removes the row. A song keeps at least one row. |
 
 To turn a wheel, drag it up or down, or scroll on it. Hold Ctrl to move four values for each step.
 

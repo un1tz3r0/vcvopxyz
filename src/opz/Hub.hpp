@@ -60,6 +60,7 @@ struct SongIn {
 	int songs = 0;               // steps of the SONG wheel
 	int patterns = 0, lengths = 0, mutes = 0; // steps of the column wheels
 	int inserts = 0, removes = 0;
+	int moves = 0, moveRow = -1; // steps up (-) or down (+) for the row that was at moveRow
 	int jump = -1;               // a row double-clicked, to play from
 };
 
