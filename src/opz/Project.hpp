@@ -87,6 +87,20 @@ struct Project {
 			mutes[i] = 0;
 			length++;
 		}
+		/** Moves row `from` to `to`, the rows between closing up behind it. */
+		void move(int from, int to) {
+			if (from < 0 || from >= length || to < 0 || to >= length || from == to)
+				return;
+			auto shift = [&](auto* a) {
+				if (from < to)
+					std::rotate(a + from, a + from + 1, a + to + 1);
+				else
+					std::rotate(a + to, a + from, a + from + 1);
+			};
+			shift(patterns);
+			shift(lengths);
+			shift(mutes);
+		}
 		void remove(int i) {
 			if (i < 0 || i >= length)
 				return;
