@@ -411,8 +411,10 @@ struct SongEditorWidget : ModuleWidget {
 		static const char* const wheels[SongEditor::WHEELS] = {"SONG", "ROW", "PATTERN", "LENGTH", "MUTES"};
 		for (int w = 0; w < SongEditor::WHEELS; w++) {
 			SongWheel* wheel = createWidget<SongWheel>(math::Vec());
-			wheel->box.size = mm2px(math::Vec(9.f, 9.f));
-			wheel->box.pos = layout.center(std::string(wheels[w]) + "_WHEEL_WIDGET").minus(wheel->box.size.div(2.f));
+			// A wheel the panel gives a size takes it (ROW); the rest are 9 mm.
+			math::Rect place = layout.box(std::string(wheels[w]) + "_WHEEL_WIDGET");
+			wheel->box.size = place.size.x > 0.f ? place.size : mm2px(math::Vec(9.f, 9.f));
+			wheel->box.pos = place.getCenter().minus(wheel->box.size.div(2.f));
 			wheel->module = module;
 			wheel->wheel = w;
 			if (w >= SongEditor::PATTERN)
