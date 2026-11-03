@@ -77,6 +77,39 @@ FX track. The level and the pan always apply. **RET R** takes the signal of **RE
 - **RESET:** starts the LFO again.
 - **EXT:** the External LFO shape follows it, ±5 V. On a track with no breakout, that shape does not move.
 
+### Voltage ranges
+
+Modules expect different voltages at their CV inputs. Some expect 0 to 10 V, and others expect ±5 V. Each CV jack of
+a breakout can use the range that the module at the other end expects. Thus you need no converter module between them.
+
+1. Right-click the jack.
+2. Under **Voltage range**, click **0 to 10 V**, **0 to 5 V**, **±5 V** or **±10 V**.
+
+The jack's lowest voltage moves to the bottom of the new range, and its highest to the top. The tables on this page
+give the default ranges.
+
+| Jack | Default range |
+| --- | --- |
+| **ENV**, **CV 1**, **CV 2**, **FILTER**, **RESO**, **FX 1**, **FX 2** | 0 to 10 V |
+| **VEL** output (Drum Breakout) | 0 to 10 V |
+| **LFO** | ±5 V |
+| **VEL** input | 0 to 10 V |
+| **EXT** input | ±5 V |
+
+The other jacks keep their voltages, because their voltages have a unit: V/OCT, **PITCH** and **TIME**, for example.
+
+Right-click the breakout, and open **Voltage ranges**. It shows the range of each jack. **Set every output to** sets
+all the outputs at once. **Reset every range** sets the defaults again. The patch keeps the ranges.
+
+### Gates or triggers
+
+On a Synth Breakout or a Send FX Breakout, **GATE** can send triggers in place of gates. Right-click **GATE**, and
+click **Trigger, 1 ms as the note starts**. The breakout's context menu has the same choice, under **GATE output**.
+
+A trigger is 10 V for 1 ms on the note's channel. A Synth Breakout sends one each time a voice's envelope starts. Thus
+in poly and mono each note sends one. In legato only the first note of a phrase sends one, because legato does not
+start the envelope again. A Drum Breakout has **TRIG** for its triggers.
+
 ## Synth Breakout
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Breakout-large-dark.png"><img alt="Synth Breakout" src="assets/modules/Breakout-large-light.png"></picture>

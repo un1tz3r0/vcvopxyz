@@ -8,7 +8,8 @@ RESO patched it isn't filtered, with an FX amount patched that FX output carries
 with LFO patched the LFO moves nothing inside. The level and the pan always apply. Patched at L and R, the track's
 sound, the plug's or the return's, leaves there instead of the mix.
 
-A polyphonic return is enveloped channel by channel, one voice each; a mono one by the loudest voice.
+A polyphonic return is enveloped channel by channel, one voice each; a mono one by the loudest voice. Its core also
+writes a trigger as each voice's envelope starts, for a GATE jack set to send triggers.
 */
 #include "opz/SynthTrack.hpp"
 #include "opz/Breakout.hpp"
@@ -30,6 +31,9 @@ struct BreakoutSound {
 
 
 struct BreakoutCore : opz::SynthCore<BreakoutSound> {
+	uint32_t started[PORT_MAX_CHANNELS] = {}; // each voice's start as last seen
+	dsp::PulseGenerator triggers[PORT_MAX_CHANNELS];
+
 	void process(const ProcessArgs& args) override {
 		lfoInside = !outputs[CV_LFO_OUTPUT].isConnected();
 		prepare(args);
@@ -42,6 +46,12 @@ struct BreakoutCore : opz::SynthCore<BreakoutSound> {
 				v.pitch = notePitch(i);
 			levels[i] = v.envelope.active() ? advance(v) : 0.f;
 			loudest = std::fmax(loudest, levels[i]);
+			// A trigger each time the voice's envelope starts: each note in poly and mono, a phrase's first in legato.
+			if (v.started != started[i]) {
+				started[i] = v.started;
+				triggers[i].trigger(1e-3f);
+			}
+			outputs[CV_TRIGGER_OUTPUT].setVoltage(triggers[i].process(args.sampleTime) ? 10.f : 0.f, i);
 		}
 		for (int i = 0; i < notes; i++) {
 			bool gate = style == opz::POLY ? gates[i].isHigh() : !held.empty();
@@ -49,7 +59,7 @@ struct BreakoutCore : opz::SynthCore<BreakoutSound> {
 			outputs[CV_GATE_OUTPUT].setVoltage(gate ? 10.f : 0.f, i);
 			outputs[CV_ENV_OUTPUT].setVoltage(10.f * levels[i], i);
 		}
-		for (int o : {CV_VOCT_OUTPUT, CV_GATE_OUTPUT, CV_ENV_OUTPUT})
+		for (int o : {CV_VOCT_OUTPUT, CV_GATE_OUTPUT, CV_ENV_OUTPUT, CV_TRIGGER_OUTPUT})
 			outputs[o].setChannels(notes);
 		outputs[CV_P1_OUTPUT].setVoltage(10.f * controls.p1);
 		outputs[CV_P2_OUTPUT].setVoltage(10.f * controls.p2);
