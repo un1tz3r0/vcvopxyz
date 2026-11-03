@@ -38,16 +38,18 @@ In song mode, a click on a white key of project mode plays that song. A click on
 
 ## The screen
 
-From the top, the screen shows:
+Each item on the screen has a box with a label. From the top, the screen shows:
 
-- the mode, and **PLAYING** or **STOPPED**,
-- the length of the song, in bars:beats:sixteenths and in hours:minutes:seconds,
-- the song's number, and the tempo with its source (**PAT**, **SONG** or **EXT**),
-- the time of the playhead, in the same two formats,
-- the song's settings,
-- the rows, with the length of each row in bars.
+- **MODE**, **TRANSPORT** (**PLAYING** or **STOPPED**) and **TEMPO**. The tempo's source (**PAT**, **SONG** or
+  **EXT**) shows at the right of its label.
+- **SONG**, the song's number. **LENGTH** and **TIME** show the length of the song and the time of the playhead, in
+  bars:beats:sixteenths and in hours:minutes:seconds.
+- The settings row: **FADE IN**, **FADE OUT** and **TEMPO**.
+- The rows, below the headings **ROW**, **PAT**, **LEN**, **MUTE** and **BARS**. **BARS** is the length of each row.
 
-The row that plays has a green background and a bar that shows its progress. A frame shows the row that you edit.
+Each column has the color of the wheel that changes it: green for **PAT**, blue for **LEN** and yellow for **MUTE**.
+The settings above the columns have the same colors. The row that you edit shows in reverse: dark text on the color
+of each column. The row that plays has a green background and a bar that shows its progress.
 
 In pattern mode, the song's number shows **-P**, and the song's data shows **-**.
 

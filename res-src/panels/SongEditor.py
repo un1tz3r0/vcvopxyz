@@ -8,7 +8,7 @@ SCREEN = (3.0, 11.0, 95.0, 93.0)        # x, y, width, height of the bezel
 SIDE = 110.0                            # the right-hand controls' column
 COLUMNS = dict(PATTERN=31.0, LENGTH=53.0, MUTES=75.0)
 LABELS = dict(PATTERN='PAT', LENGTH='LEN', MUTES='MUTE')
-SIDE_ROWS = dict(MODE=19.0, SONG=36.0, ROW=76.0)
+SIDE_ROWS = dict(MODE=17.0, SONG=29.5, ROW=76.0)
 WHEEL_ROW = 115.5
 
 
@@ -26,7 +26,7 @@ def panel():
         p.place(f'{name}_{"PARAM" if name == "MODE" else "WHEEL_WIDGET"}', SIDE, cy)
     for name, cx in COLUMNS.items():
         p.line(cx, y + h, cx, WHEEL_ROW - 5.6)
-        p.text(LABELS[name], cx - 8.0, WHEEL_ROW + 0.8, size=2.4)
+        p.text(LABELS[name], cx - 9.5, WHEEL_ROW + 0.8, size=2.4)
         p.place(f'{name}_WHEEL_WIDGET', cx, WHEEL_ROW)
     for name, cx in [('INSERT', 103.0), ('DELETE', 115.0)]:
         p.text(name, cx, WHEEL_ROW - 4.6, size=2.0)

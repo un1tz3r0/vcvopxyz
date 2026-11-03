@@ -169,20 +169,28 @@ struct SongWheel : widget::OpaqueWidget {
 };
 
 
-/** The song on the glass: the mode and transport by MODE, the song and tempo by SONG, its length and the playhead, the
-settings row over the columns, then the rows. */
+/** The song on the glass, in boxes: the mode, transport and tempo beside MODE; the song, its length and the playhead
+beside SONG; the song's settings over the columns whose wheels turn them; then the rows, each column in its wheel's
+colour, the row edited shown inverted. Every measure is in mm from the glass's top left. */
 struct SongScreen : widget::OpaqueWidget {
 	SongEditor* module = nullptr;
-	float columns[3] = {};         // the PAT, LEN and MUTE wheels' x, in this widget's px
-	float modeY = 0.f, songY = 0.f; // MODE's and SONG's lines' y
 	opz::SongView view;
 	bool linked = false;
 	int top = 0;                   // the first row shown
 
-	static constexpr float LINE = 5.f;  // mm between rows
+	struct Column { float x, w; };
+	static constexpr Column ROW_CELL = {1.5f, 13.f}, BARS_CELL = {83.f, 8.5f};
+	static constexpr Column CELLS[3] = {{17.f, 20.f}, {39.f, 20.f}, {61.f, 20.f}}; // under the PAT, LEN and MUTE wheels
+	static constexpr float STATUS_Y = 1.f, STATUS_H = 8.f;     // MODE, TRANSPORT, TEMPO
+	static constexpr float SONG_Y = 10.f, SONG_H = 15.f;       // SONG, with LENGTH and TIME
+	static constexpr float SETTINGS_Y = 26.5f, SETTINGS_H = 10.5f;
+	static constexpr float HEAD_Y = 38.5f, HEAD_H = 5.5f;
+	static constexpr float ROWS_Y = 45.f, ROW_H = 6.5f;
+	static constexpr float LABEL = 2.6f, VALUE = 3.8f, ROW_TEXT = 4.2f; // text heights
 
-	float rowsTop() const { return mm2px(51.f); }
-	int visibleRows() const { return std::max(1, int((box.size.y - rowsTop() - mm2px(1.f)) / mm2px(LINE))); }
+	int visibleRows() const { return std::max(1, int((px2mm(box.size.y) - ROWS_Y) / ROW_H)); }
+
+	static float px2mm(float px) { return px * MM_PER_IN / SVG_DPI; }
 
 	void step() override {
 		opz::Hub* hub = nullptr;
@@ -200,11 +208,11 @@ struct SongScreen : widget::OpaqueWidget {
 
 	/** The row under a point, -1 for the settings row, or -2 for none. */
 	int rowAt(math::Vec p) const {
-		if (p.y >= rowsTop() - mm2px(LINE) / 2 && p.y < rowsTop() + visibleRows() * mm2px(LINE) - mm2px(LINE) / 2) {
-			int r = top + int((p.y - rowsTop() + mm2px(LINE) / 2) / mm2px(LINE));
-			return r < view.chain.length ? r : -2;
-		}
-		return std::abs(p.y - mm2px(39.f)) < mm2px(LINE) / 2 ? -1 : -2;
+		float y = px2mm(p.y);
+		if (y >= SETTINGS_Y && y < SETTINGS_Y + SETTINGS_H)
+			return -1;
+		int i = int(std::floor((y - ROWS_Y) / ROW_H));
+		return y >= ROWS_Y && i < visibleRows() && top + i < view.chain.length ? top + i : -2;
 	}
 
 	void onButton(const ButtonEvent& e) override {
@@ -239,97 +247,138 @@ struct SongScreen : widget::OpaqueWidget {
 		std::shared_ptr<window::Font> font = APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
 		if (!font)
 			return;
-		const NVGcolor ink = nvgRGB(0xdc, 0xdb, 0xd8), dim = nvgRGBA(0xdc, 0xdb, 0xd8, 0x60), lit = PAGE_COLORS[0];
-		float w = box.size.x, pad = mm2px(3.f);
+		const NVGcolor ink = nvgRGB(0xdc, 0xdb, 0xd8), dim = nvgRGBA(0xdc, 0xdb, 0xd8, 0x70), rule = nvgRGBA(0xdc, 0xdb, 0xd8, 0x38);
+		const NVGcolor glass = nvgRGB(0x0e, 0x0e, 0x10), lit = PAGE_COLORS[0];
+		const float W = px2mm(box.size.x);
 		nvgFontFaceId(vg, font->handle);
-		auto text = [&](float x, float y, const std::string& s, NVGcolor c, int align = NVG_ALIGN_LEFT, float size = 3.2f) {
+		auto text = [&](float x, float y, const std::string& s, NVGcolor c, float size, int align = NVG_ALIGN_LEFT) {
 			nvgFontSize(vg, mm2px(size));
 			nvgTextAlign(vg, align | NVG_ALIGN_MIDDLE);
 			nvgFillColor(vg, c);
-			nvgText(vg, x, y, s.c_str(), NULL);
+			nvgText(vg, mm2px(x), mm2px(y), s.c_str(), NULL);
 		};
+		auto rect = [&](float x, float y, float w, float h, NVGcolor fill, NVGcolor stroke, float radius = 0.8f) {
+			nvgBeginPath(vg);
+			nvgRoundedRect(vg, mm2px(x), mm2px(y), mm2px(w), mm2px(h), mm2px(radius));
+			if (fill.a > 0.f) {
+				nvgFillColor(vg, fill);
+				nvgFill(vg);
+			}
+			if (stroke.a > 0.f) {
+				nvgStrokeColor(vg, stroke);
+				nvgStrokeWidth(vg, 1.f);
+				nvgStroke(vg);
+			}
+		};
+		auto line = [&](float x0, float y0, float x1, float y1, NVGcolor c) {
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, mm2px(x0), mm2px(y0));
+			nvgLineTo(vg, mm2px(x1), mm2px(y1));
+			nvgStrokeColor(vg, c);
+			nvgStrokeWidth(vg, 1.f);
+			nvgStroke(vg);
+		};
+		// A labelled box: its label at the top left, an optional note at the top right, its value in the middle.
+		auto field = [&](float x, float y, float w, float h, const char* label, const std::string& value, NVGcolor c,
+				float size = VALUE, const std::string& note = "") {
+			rect(x, y, w, h, nvgRGBA(0xff, 0xff, 0xff, 0x08), rule);
+			text(x + 1.2f, y + 1.9f, label, dim, LABEL);
+			if (!note.empty())
+				text(x + w - 1.2f, y + 1.9f, note, ink, LABEL, NVG_ALIGN_RIGHT);
+			text(x + w / 2, y + h / 2 + 1.f, value, c, size, NVG_ALIGN_CENTER);
+		};
+		const NVGcolor none = nvgRGBA(0, 0, 0, 0);
+
 		if (!linked) {
-			text(w / 2, box.size.y / 2, "PUT ME LEFT OF A SEQUENCER", dim, NVG_ALIGN_CENTER);
+			text(W / 2, px2mm(box.size.y) / 2, "PUT ME LEFT OF A SEQUENCER", dim, VALUE, NVG_ALIGN_CENTER);
 			return;
 		}
 		const opz::SongView& v = view;
 		const opz::Project::Chain& c = v.chain;
 		bool song = v.songMode;
 		int selected = module ? module->row.load() : 0;
+		const float right = W - 1.5f, third = (right - 1.5f - 4.f) / 3.f;
 
-		text(pad, modeY, song ? "SONG MODE" : "PATTERN MODE", ink);
-		text(w - pad, modeY, v.playing ? "PLAYING" : "STOPPED", v.playing ? lit : dim, NVG_ALIGN_RIGHT);
-		text(pad, mm2px(13.f), song ? "LENGTH  " + bars(v.length) + "  " + clock(v.seconds) : "LENGTH  -", song ? ink : dim);
-		text(pad, songY, song ? string::f("SONG %02d", v.song + 1) : "SONG -P", ink, NVG_ALIGN_LEFT, 5.f);
-		std::string tempo = string::f("%.0f BPM", v.bpm);
-		std::string source = v.external ? "EXT" : song && c.tempo > 0.f ? "SONG" : "PAT";
-		text(w - pad, songY, source + "  " + tempo, ink, NVG_ALIGN_RIGHT);
-		text(pad, mm2px(31.f), "TIME    " + bars(v.at) + "  " + clock(v.secondsAt), ink);
+		// Status, beside MODE.
+		const char* source = v.external ? "EXT" : song && c.tempo > 0.f ? "SONG" : "PAT";
+		field(1.5f, STATUS_Y, third, STATUS_H, "MODE", song ? "SONG" : "PATTERN", ink);
+		field(3.5f + third, STATUS_Y, third, STATUS_H, "TRANSPORT", v.playing ? "PLAYING" : "STOPPED", v.playing ? lit : dim);
+		field(5.5f + 2 * third, STATUS_Y, third, STATUS_H, "TEMPO", string::f("%.0f BPM", v.bpm), ink, VALUE, source);
 
-		// The settings row, over the columns whose wheels turn it.
-		float settingsY = mm2px(39.f);
-		if (selected == -1) {
-			nvgBeginPath(vg);
-			nvgRoundedRect(vg, pad / 2, settingsY - mm2px(LINE) / 2, w - pad, mm2px(LINE), mm2px(0.8f));
-			nvgStrokeColor(vg, ink);
-			nvgStrokeWidth(vg, 1.f);
-			nvgStroke(vg);
+		// The song, beside SONG, with its length and the playhead.
+		float songW = ROW_CELL.w + CELLS[0].w + 2.5f, wide = right - 1.5f - songW - 2.f, half = (SONG_H - 1.f) / 2;
+		field(1.5f, SONG_Y, songW, SONG_H, "SONG", song ? string::f("%02d", v.song + 1) : "-P", ink, 7.f);
+		float x = 3.5f + songW;
+		field(x, SONG_Y, wide, half, "LENGTH", song ? bars(v.length) + "  " + clock(v.seconds) : "-", song ? ink : dim);
+		field(x, SONG_Y + half + 1.f, wide, half, "TIME", bars(v.at) + "  " + clock(v.secondsAt), ink);
+
+		// The settings, over the columns whose wheels turn them.
+		bool setting = selected == -1;
+		rect(ROW_CELL.x, SETTINGS_Y, ROW_CELL.w, SETTINGS_H, setting ? ink : nvgRGBA(0xff, 0xff, 0xff, 0x08), rule);
+		text(ROW_CELL.x + ROW_CELL.w / 2, SETTINGS_Y + SETTINGS_H / 2, "SONG", setting ? glass : dim, LABEL + 0.4f, NVG_ALIGN_CENTER);
+		const char* settingLabels[3] = {"FADE IN", "FADE OUT", "TEMPO"};
+		auto fade = [](float bars) { return bars > 0.f ? string::f("%g BAR", bars) : std::string("OFF"); };
+		std::string settings[3] = {fade(c.fadeIn), fade(c.fadeOut), c.tempo > 0.f ? string::f("%.0f", c.tempo) : "PAT"};
+		for (int k = 0; k < 3; k++) {
+			const Column& col = CELLS[k];
+			NVGcolor tint = DIAL_COLORS[k];
+			rect(col.x, SETTINGS_Y, col.w, SETTINGS_H, setting ? tint : nvgRGBA(0xff, 0xff, 0xff, 0x08), setting ? none : nvgTransRGBA(tint, 0x80));
+			text(col.x + col.w / 2, SETTINGS_Y + 2.2f, settingLabels[k], setting ? glass : nvgTransRGBA(tint, 0xb0), LABEL, NVG_ALIGN_CENTER);
+			text(col.x + col.w / 2, SETTINGS_Y + 6.6f, song ? settings[k] : "-", setting ? glass : song ? tint : dim, VALUE, NVG_ALIGN_CENTER);
 		}
-		NVGcolor setting = song ? ink : dim;
-		text(pad, settingsY, "SONG", dim);
-		text(columns[0], settingsY, song ? string::f("IN %g", c.fadeIn) : "IN -", setting, NVG_ALIGN_CENTER);
-		text(columns[1], settingsY, song ? string::f("OUT %g", c.fadeOut) : "OUT -", setting, NVG_ALIGN_CENTER);
-		text(columns[2], settingsY, song && c.tempo > 0.f ? string::f("%.0f", c.tempo) : song ? "PAT" : "-", setting, NVG_ALIGN_CENTER);
 
-		float headY = mm2px(45.5f), barsX = w - pad;
-		text(pad, headY, "ROW", dim, NVG_ALIGN_LEFT, 2.6f);
+		// The table: headings, then the rows, ruled between.
+		int n = visibleRows(), shown = std::min(n, c.length - top);
+		float bottom = ROWS_Y + n * ROW_H;
+		auto heading = [&](const Column& col, const char* name, NVGcolor tint) {
+			rect(col.x, HEAD_Y, col.w, HEAD_H, nvgTransRGBA(tint, 0x30), nvgTransRGBA(tint, 0x90));
+			text(col.x + col.w / 2, HEAD_Y + HEAD_H / 2, name, tint, LABEL + 0.4f, NVG_ALIGN_CENTER);
+		};
+		heading(ROW_CELL, "ROW", ink);
 		const char* heads[3] = {"PAT", "LEN", "MUTE"};
 		for (int k = 0; k < 3; k++)
-			text(columns[k], headY, heads[k], DIAL_COLORS[k], NVG_ALIGN_CENTER, 2.6f);
-		text(barsX, headY, "BARS", dim, NVG_ALIGN_RIGHT, 2.6f);
+			heading(CELLS[k], heads[k], DIAL_COLORS[k]);
+		heading(BARS_CELL, "BARS", ink);
+		rect(ROW_CELL.x, ROWS_Y - 0.5f, right - ROW_CELL.x, bottom - ROWS_Y + 0.5f, none, rule);
+		for (float dx : {CELLS[0].x - 1.f, CELLS[1].x - 1.f, CELLS[2].x - 1.f, BARS_CELL.x - 1.f})
+			line(dx, ROWS_Y - 0.5f, dx, bottom, rule);
+		for (int i = 1; i < n; i++)
+			line(ROW_CELL.x, ROWS_Y + i * ROW_H, right, ROWS_Y + i * ROW_H, nvgRGBA(0xdc, 0xdb, 0xd8, 0x1c));
 
-		int n = visibleRows();
-		for (int i = 0; i < n && top + i < c.length; i++) {
+		for (int i = 0; i < shown; i++) {
 			int r = top + i;
-			float y = rowsTop() + i * mm2px(LINE), h = mm2px(LINE);
-			if (r == v.rowPlaying) {
-				nvgBeginPath(vg);
-				nvgRect(vg, pad / 2, y - h / 2, w - pad, h);
-				nvgFillColor(vg, nvgRGBA(0x3b, 0xe0, 0x7a, 0x30));
-				nvgFill(vg);
-				nvgBeginPath(vg);
-				nvgRect(vg, pad / 2, y + h / 2 - mm2px(0.5f), (w - pad) * clamp(v.progress, 0.f, 1.f), mm2px(0.5f));
-				nvgFillColor(vg, lit);
-				nvgFill(vg);
-			}
-			if (r == selected) {
-				nvgBeginPath(vg);
-				nvgRoundedRect(vg, pad / 2, y - h / 2, w - pad, h, mm2px(0.8f));
-				nvgStrokeColor(vg, ink);
-				nvgStrokeWidth(vg, 1.f);
-				nvgStroke(vg);
-			}
+			float y = ROWS_Y + i * ROW_H, mid = y + ROW_H / 2;
+			bool cursor = r == selected, playing = r == v.rowPlaying;
+			if (playing)
+				rect(ROW_CELL.x, y, right - ROW_CELL.x, ROW_H, nvgTransRGBA(lit, 0x28), none, 0.f);
 			int length = c.lengths[r];
-			std::string len = !song || !length ? "-" : length > 0 ? string::f("x%d", length) : string::f("%d/16", -length);
-			std::string mute = song && c.mutes[r] ? string::f("G%d", c.mutes[r]) : "-";
-			text(pad, y, string::f("%02d", r + 1), r == v.rowPlaying ? lit : dim);
-			text(columns[0], y, string::f("P%02d", c.patterns[r] + 1), ink, NVG_ALIGN_CENTER);
-			text(columns[1], y, len, song && length ? ink : dim, NVG_ALIGN_CENTER);
-			text(columns[2], y, mute, song && c.mutes[r] ? ink : dim, NVG_ALIGN_CENTER);
-			if (song)
-				text(barsX, y, string::f("%g", std::round(v.rowLengths[r] / 16.0 * 100.0) / 100.0), dim, NVG_ALIGN_RIGHT);
+			std::string cells[3] = {
+				string::f("P%02d", c.patterns[r] + 1),
+				!song || !length ? "-" : length > 0 ? string::f("x%d", length) : string::f("%d/16", -length),
+				song && c.mutes[r] ? string::f("G%d", c.mutes[r]) : "-",
+			};
+			bool set[3] = {true, song && length, song && c.mutes[r]};
+			auto cell = [&](const Column& col, const std::string& s, NVGcolor tint, NVGcolor plain, float size, int align) {
+				if (cursor)
+					rect(col.x, y + 0.4f, col.w, ROW_H - 0.8f, tint, none, 0.6f);
+				float tx = align == NVG_ALIGN_CENTER ? col.x + col.w / 2 : col.x + col.w - 0.8f;
+				text(tx, mid, s, cursor ? glass : plain, size, align);
+			};
+			cell(ROW_CELL, string::f("%02d", r + 1), ink, playing ? lit : dim, ROW_TEXT, NVG_ALIGN_CENTER);
+			for (int k = 0; k < 3; k++)
+				cell(CELLS[k], cells[k], DIAL_COLORS[k], set[k] ? DIAL_COLORS[k] : dim, ROW_TEXT, NVG_ALIGN_CENTER);
+			double b = v.rowLengths[r] / 16.0;
+			cell(BARS_CELL, song ? (b == std::floor(b) ? string::f("%.0f", b) : string::f("%.1f", b)) : "", ink, dim, 3.4f, NVG_ALIGN_RIGHT);
+			if (playing)
+				rect(ROW_CELL.x, y + ROW_H - 0.7f, (right - ROW_CELL.x) * clamp(v.progress, 0.f, 1.f), 0.7f, lit, none, 0.f);
 		}
 		if (c.length > n) {
 			// Where the rows shown sit in the song.
-			float track = n * mm2px(LINE), x = w - mm2px(1.2f), y0 = rowsTop() - mm2px(LINE) / 2;
-			nvgBeginPath(vg);
-			nvgRect(vg, x, y0 + track * top / c.length, mm2px(0.6f), track * n / c.length);
-			nvgFillColor(vg, dim);
-			nvgFill(vg);
+			float track = bottom - ROWS_Y;
+			rect(right + 0.4f, ROWS_Y + track * top / c.length, 0.6f, track * n / c.length, dim, none, 0.3f);
 		}
 	}
 };
-
 
 struct SongEditorWidget : ModuleWidget {
 	SongEditorWidget(SongEditor* module) {
@@ -342,11 +391,6 @@ struct SongEditorWidget : ModuleWidget {
 		SongScreen* screen = createWidget<SongScreen>(math::Vec());
 		screen->box = layout.box("SCREEN_WIDGET");
 		screen->module = module;
-		static const char* const columns[3] = {"PATTERN", "LENGTH", "MUTES"};
-		for (int k = 0; k < 3; k++)
-			screen->columns[k] = layout.center(std::string(columns[k]) + "_WHEEL_WIDGET").x - screen->box.pos.x;
-		screen->modeY = layout.center("MODE_PARAM").y - screen->box.pos.y;
-		screen->songY = layout.center("SONG_WHEEL_WIDGET").y - screen->box.pos.y;
 		addChild(screen);
 
 		static const char* const wheels[SongEditor::WHEELS] = {"SONG", "ROW", "PATTERN", "LENGTH", "MUTES"};
