@@ -55,7 +55,8 @@ In pattern mode, the song's number shows **-P**, and the song's data shows **-**
 
 ## Controls
 
-The lines on the panel connect each control to the item that it changes.
+The lines on the panel connect each control to the item that it changes. The four round keys above and below the
+**ROW** wheel change the row that you edit.
 
 | Control | What it does |
 | --- | --- |
@@ -65,8 +66,10 @@ The lines on the panel connect each control to the item that it changes.
 | **PAT** wheel | Changes the row's pattern, or on the settings row, the fade in. |
 | **LEN** wheel | Changes the row's length, or on the settings row, the fade out. |
 | **MUTE** wheel | Changes the row's mute group, or on the settings row, the tempo. |
-| **INSERT** | Adds a copy of the row below it. |
-| **DELETE** | Removes the row. A song keeps at least one row. |
+| **+** key | Adds a copy of the row below it. |
+| **Up arrow** key | Moves the row up one place. The cursor moves with the row. |
+| **Down arrow** key | Moves the row down one place. The cursor moves with the row. |
+| **-** key | Removes the row. A song keeps at least one row. |
 
 To turn a wheel, drag it up or down, or scroll on it. Hold Ctrl to move four values for each step.
 

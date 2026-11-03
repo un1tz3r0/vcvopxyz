@@ -5,18 +5,19 @@ song back out on the UI thread (SongView).
 
 MODE switches song and pattern mode; SONG picks the song, in song mode; ROW picks the row the column wheels edit, or
 above the first, the song's settings, whose fade in, fade out and tempo sit over the PAT, LEN and MUTE columns. In
-pattern mode the rows are the chain playing, and only their patterns are there to edit. INSERT puts a copy of the row in
-after it, and DELETE takes it out. A click picks a row, and a double click plays it.
+pattern mode the rows are the chain playing, and only their patterns are there to edit. Round the ROW wheel, + puts a
+copy of the row in after it, - takes it out, and the arrows move it up or down, the cursor going with it. A click picks
+a row, and a double click plays it.
 */
 #include "plugin.hpp"
 #include "ui.hpp"
 #include "opz/Hub.hpp"
 
 struct SongEditor : Module {
-	enum ParamId { MODE_PARAM, INSERT_PARAM, DELETE_PARAM, PARAMS_LEN };
+	enum ParamId { MODE_PARAM, INSERT_PARAM, DELETE_PARAM, UP_PARAM, DOWN_PARAM, PARAMS_LEN };
 	enum InputId { INPUTS_LEN };
 	enum OutputId { OUTPUTS_LEN };
-	enum LightId { MODE_LIGHT, LIGHTS_LEN };
+	enum LightId { MODE_LIGHT, ENUMS(KEY_LIGHT, 4 * 3), LIGHTS_LEN }; // the INSERT, DELETE, UP and DOWN keys' RGB
 	enum Wheel { SONG, ROW, PATTERN, LENGTH, MUTES, WHEELS };
 
 	// The UI thread's turns and clicks, for the next frame to hand on.
@@ -27,7 +28,7 @@ struct SongEditor : Module {
 
 	opz::Hub* hub = nullptr;
 	uint32_t layoutSeen = ~0u;
-	dsp::BooleanTrigger modePress, insertPress, deletePress;
+	dsp::BooleanTrigger modePress, insertPress, deletePress, upPress, downPress;
 	dsp::ClockDivider lightDivider;
 
 	SongEditor() {
@@ -35,6 +36,8 @@ struct SongEditor : Module {
 		configButton(MODE_PARAM, "Mode: songs (lit) or patterns");
 		configButton(INSERT_PARAM, "Insert a copy of the row after it");
 		configButton(DELETE_PARAM, "Delete the row");
+		configButton(UP_PARAM, "Move the row up");
+		configButton(DOWN_PARAM, "Move the row down");
 		lightDivider.setDivision(64);
 	}
 
@@ -61,6 +64,7 @@ struct SongEditor : Module {
 		bool mode = modePress.process(params[MODE_PARAM].getValue() > 0.f);
 		bool insert = insertPress.process(params[INSERT_PARAM].getValue() > 0.f);
 		bool remove = deletePress.process(params[DELETE_PARAM].getValue() > 0.f);
+		int move = int(downPress.process(params[DOWN_PARAM].getValue() > 0.f)) - int(upPress.process(params[UP_PARAM].getValue() > 0.f));
 		int taken[WHEELS];
 		for (int w = 0; w < WHEELS; w++)
 			taken[w] = turns[w].exchange(0);
@@ -78,9 +82,20 @@ struct SongEditor : Module {
 			in.inserts = insert;
 			in.removes = remove;
 			in.jump = jumped;
+			int r = row;
+			if (move && r >= 0 && r + move >= 0 && r + move < rows) {
+				in.moves = move;
+				in.moveRow = r;
+				row = r + move;
+			}
 		}
-		if (lightDivider.process())
+		if (lightDivider.process()) {
 			lights[MODE_LIGHT].setBrightness(hub && hub->lastSongOut(args.frame).songMode ? 1.f : 0.f);
+			// The keys light white while held.
+			for (int k = 0; k < 4; k++)
+				for (int c = 0; c < 3; c++)
+					lights[KEY_LIGHT + 3 * k + c].setBrightness(params[INSERT_PARAM + k].getValue() > 0.f ? 1.f : 0.f);
+		}
 	}
 
 	json_t* dataToJson() override {
@@ -405,8 +420,12 @@ struct SongEditorWidget : ModuleWidget {
 			addChild(wheel);
 		}
 		addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(layout.center("MODE_PARAM"), module, SongEditor::MODE_PARAM, SongEditor::MODE_LIGHT));
-		addParam(createParamCentered<VCVButton>(layout.center("INSERT_PARAM"), module, SongEditor::INSERT_PARAM));
-		addParam(createParamCentered<VCVButton>(layout.center("DELETE_PARAM"), module, SongEditor::DELETE_PARAM));
+		static const char* const keys[4][2] = {{"INSERT", "plus"}, {"DELETE", "minus"}, {"UP", "up"}, {"DOWN", "down"}};
+		for (int k = 0; k < 4; k++) {
+			RoundKey* key = createLightParam<RoundKey>(math::Vec(), module, SongEditor::INSERT_PARAM + k, SongEditor::KEY_LIGHT + 3 * k);
+			key->setRing(layout.box(std::string(keys[k][0]) + "_PARAM"), keys[k][1]);
+			addParam(key);
+		}
 	}
 };
 

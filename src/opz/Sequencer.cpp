@@ -1342,7 +1342,7 @@ struct Sequencer : Module, Hub {
 
 	bool songEdited() const {
 		const SongIn& e = songEdits;
-		return e.modes || e.songs || e.patterns || e.lengths || e.mutes || e.inserts || e.removes || e.jump >= 0 || wantMode >= 0;
+		return e.modes || e.songs || e.patterns || e.lengths || e.mutes || e.inserts || e.removes || e.moves || e.jump >= 0 || wantMode >= 0;
 	}
 
 	/** A Song Editor's edits and Remotes' MODE: to the live chain, and in song mode, the song saved with it. The
@@ -1391,6 +1391,11 @@ struct Sequencer : Module, Hub {
 				chainAt = std::min(chainAt, c.length - 1);
 			}
 		}
+		if (e.moves && e.moveRow >= 0 && e.moveRow < c.length) {
+			int from = e.moveRow, to = clamp(from + e.moves, 0, c.length - 1);
+			c.move(from, to);
+			chainAt = chainAt == from ? to : from < chainAt && chainAt <= to ? chainAt - 1 : to <= chainAt && chainAt < from ? chainAt + 1 : chainAt;
+		}
 		if (e.jump >= 0)
 			makeMove({RemoteMove::ROW, e.jump, false, lanes[0].player.song()});
 		if (songMode) {
@@ -1417,6 +1422,12 @@ struct Sequencer : Module, Hub {
 		e.mutes += s->mutes;
 		e.inserts += s->inserts;
 		e.removes += s->removes;
+		if (s->moves) {
+			// Moves add up from the row the first one took, whichever row the cursor followed it to.
+			if (!e.moves)
+				e.moveRow = s->moveRow;
+			e.moves += s->moves;
+		}
 		if (s->jump >= 0)
 			e.jump = s->jump;
 	}
