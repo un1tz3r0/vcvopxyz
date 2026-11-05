@@ -1,7 +1,7 @@
 {
   "slug": "vcvopxyz",
   "name": "vcvopxyz",
-  "version": "2.1.12",
+  "version": "2.1.13",
   "license": "MIT",
   "brand": "un1tz3r0",
   "author": "Victor Condino",
@@ -31,6 +31,17 @@
       "name": "Song Editor",
       "description": "Edits the Sequencer's songs on a big screen, beside it on its left: the rows of patterns with their lengths and mute groups, the fades and tempo, and song or pattern mode",
       "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/song-editor.md",
+      "tags": [
+        "Sequencer",
+        "Visual",
+        "Expander"
+      ]
+    },
+    {
+      "slug": "PatternEditor",
+      "name": "Pattern Editor",
+      "description": "Edits the Sequencer's patterns on a big, resizable screen, beside it on its left: every track's steps at once, or one track's notes on a roll with a lane for velocity or a dial's locks",
+      "manualUrl": "https://github.com/un1tz3r0/vcvopxyz/blob/main/docs/pattern-editor.md",
       "tags": [
         "Sequencer",
         "Visual",

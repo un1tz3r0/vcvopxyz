@@ -26,6 +26,7 @@ Find yourself in the left column, and read the pages in order.
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/modules/Screen-label-dark.png"><img alt="screen" src="assets/modules/Screen-label-light.png" height="56"></picture> | [Screen](screen.md) | Nothing | Shows the selected track's pages and dials, like the OP-Z's phone app, and edits a drum track's kit. |
 | | [Remotes](remotes.md) | Patterns | Plays patterns and saved chains from jacks, and sends a trigger as each pattern starts and ends. |
 | | [Song Editor](song-editor.md) | Songs | Shows and edits the songs on a large screen: each row's pattern, length and mute group, and the song's fades and tempo. |
+| | [Pattern Editor](pattern-editor.md) | Patterns | Shows and edits a pattern on a large screen: the notes of one track on a roll, or the steps of every track. |
 
 ## Plugs
 
@@ -64,7 +65,8 @@ click a black key to choose one. The Sequencer's context menu, **Plug slots**, f
 - For OP-Z owners: [the combinations and the differences](op-z-owners.md).
 - The plugs: [synth tracks](synth-tracks.md), [drum tracks](drum-tracks.md), [kits](kits.md),
   [FX tracks](fx-tracks.md).
-- The other modules: [breakouts](breakout.md), [Screen](screen.md), [Remotes](remotes.md), [Song Editor](song-editor.md).
+- The other modules: [breakouts](breakout.md), [Screen](screen.md), [Remotes](remotes.md), [Song Editor](song-editor.md),
+  [Pattern Editor](pattern-editor.md).
 - Installing: [Linux](../INSTALL.linux.md), [macOS](../INSTALL.macos.md) (Intel and Apple silicon),
   [Windows](../INSTALL.windows.md).
 - Contributing: [Development](development.md), [how the manual is written](STYLE.md),

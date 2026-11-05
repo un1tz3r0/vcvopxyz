@@ -116,10 +116,6 @@ inline std::string componentValue(int c, int value) {
 	}
 }
 
-inline std::string noteName(int pitch) {
-	static const char* const names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-	return string::f("%s%d", names[pitch % 12], pitch / 12 - 1);
-}
 
 /** The keys' LED colours, besides the notes' orange. */
 namespace led {
@@ -127,7 +123,6 @@ const NVGcolor WHITE = nvgRGBf(1.f, 1.f, 1.f), RED = nvgRGBf(1.f, 0.1f, 0.06f), 
 	CYAN = nvgRGBf(0.1f, 0.85f, 1.f);
 }
 
-static const char* const TRACK_NAMES[LANES] = {"Kick", "Snare", "Perc", "Sample", "Bass", "Lead", "Arp", "Chord", "Master", "FX 1", "FX 2"};
 /** Each track's polyphony to begin with, as the OP-Z's: two notes a step for the drums, one for the bass and arp,
 three for the lead, four for the chords and the master track, and one for the FX tracks. */
 static const int TRACK_CHANNELS[LANES] = {2, 2, 2, 2, 1, 3, 1, 4, 4, 1, 1};
@@ -479,6 +474,10 @@ struct Sequencer : Module, Hub {
 	float sinceTap = -1.f, tapPeriod = 0.f; // tap tempo, in seconds
 	bool longPressHolds = true, ctrlClickHolds = true;
 	bool turningLock = false;    // a dial is being dragged on a lock, so the undo history waits to take the whole turn
+	std::atomic<int> trackRequest{-1}; // a track a Pattern Editor selected, for the next frame
+	// A Pattern Editor's gesture under way, the UI thread's: the pattern it edits, and its lanes before it.
+	int editing = -1;
+	Pattern editedFrom[LANES];
 	std::atomic<float> shownTempo{120.f}; // -1 while an external clock is still being measured
 
 	Scale scale;                 // the key and mode of the synth tracks' notes
@@ -1432,6 +1431,69 @@ struct Sequencer : Module, Hub {
 			e.jump = s->jump;
 	}
 
+	bool patternView(PatternView& v, int p) override {
+		std::unique_lock<std::mutex> lock(projectsMutex, std::try_to_lock);
+		if (!lock.owns_lock())
+			return false;
+		if (p < 0 || p >= PATTERN_COUNT)
+			p = pattern;
+		v.pattern = p;
+		v.playingPattern = pattern;
+		v.selected = track;
+		v.playing = playing;
+		for (int t = 0; t < LANES; t++) {
+			if (p == pattern) {
+				v.lanes[t] = lanes[t].pattern;
+				v.settings[t] = lanes[t].settings;
+				v.positions[t] = playing ? lanes[t].player.position : -1;
+				continue;
+			}
+			const Project::Part& part = scenes[p].parts[t];
+			v.lanes[t] = part.pattern;
+			v.settings[t] = Settings();
+			v.settings[t].stepCount = part.stepCount;
+			v.settings[t].stepLength = stepLengthOfKey(part.stepLength);
+			v.settings[t].noteLength = NOTE_LENGTHS[part.noteLength];
+			v.settings[t].quantize = part.quantize;
+			v.positions[t] = -1;
+		}
+		return true;
+	}
+
+	/** A lane of a pattern, wherever it lives: in the lanes while it plays, in its scene otherwise. Under the slots'
+	lock. */
+	Pattern& patternOf(int p, int t) {
+		return p == pattern ? lanes[t].pattern : scenes[p].parts[t].pattern;
+	}
+
+	void beginEdit(int p) override {
+		std::lock_guard<std::mutex> lock(projectsMutex);
+		editing = clamp(p, 0, PATTERN_COUNT - 1);
+		for (int t = 0; t < LANES; t++)
+			editedFrom[t] = patternOf(editing, t);
+	}
+
+	void editStep(int t, int i, const Step& step) override {
+		std::lock_guard<std::mutex> lock(projectsMutex);
+		if (editing < 0 || t < 0 || t >= LANES || i < 0 || i >= STEPS)
+			return;
+		patternOf(editing, t).steps[i] = step;
+		if (editing != pattern)
+			scenes[editing].used = true;
+	}
+
+	void endEdit() override;
+
+	std::string lockName(int t, int p) override {
+		if (t < 0 || t >= LANES || t == MASTER || p < 0 || p >= SOUND_PARAMS)
+			return "";
+		return paramQuantities[trackParam(t, p)]->getLabel();
+	}
+
+	void requestTrack(int t) override {
+		trackRequest = clamp(t, 0, LANES - 1);
+	}
+
 	bool songView(SongView& v) override {
 		std::unique_lock<std::mutex> lock(projectsMutex, std::try_to_lock);
 		if (!lock.owns_lock())
@@ -1922,6 +1984,8 @@ struct Sequencer : Module, Hub {
 
 	void handleControls(float dt) {
 		readSettings();
+		if (int t = trackRequest.exchange(-1); t >= 0)
+			select(t);
 		// The arp track's arp dials, as turned.
 		Arp& arp = lanes[ARP_TRACK].settings.arp;
 		auto arpDial = [&](int i) { return params[trackParam(ARP_TRACK, TrackIds::ARP_SPEED_PARAM + i)].getValue(); };
@@ -3542,6 +3606,30 @@ struct PatternChange : history::ModuleAction {
 };
 
 
+/** Each lane a Pattern Editor's gesture changed, as one step of the undo history each. */
+void Sequencer::endEdit() {
+	std::lock_guard<std::mutex> lock(projectsMutex);
+	if (editing < 0)
+		return;
+	for (int t = 0; t < LANES; t++) {
+		const Pattern& now = patternOf(editing, t);
+		if (now == editedFrom[t])
+			continue;
+		PatternChange* h = new PatternChange;
+		h->name = string::f("edit track %d of pattern %d", trackNumber(t), editing + 1);
+		h->moduleId = id;
+		h->lane = t;
+		h->pattern = editing;
+		h->before = editedFrom[t];
+		h->after = now;
+		APP->history->push(h);
+		if (editing == pattern)
+			lanes[t].recorded = now;
+	}
+	editing = -1;
+}
+
+
 /** A track's plug picked, preset loaded or stored, or sound randomized from the keys, in the audio thread: the widget
 saves each here for undo. A slot emptied since stays as it is. */
 struct SoundChange : history::ModuleAction {
@@ -4192,7 +4280,7 @@ struct SequencerWidget : ModuleWidget {
 			m->recall = Sequencer::SETTLED;
 		}
 		// A turn of a dial, on a held step's lock or recorded live, is one edit when it's done.
-		bool turning = m->turningLock || m->sinceTurned < Sequencer::TURN_SETTLE;
+		bool turning = m->turningLock || m->sinceTurned < Sequencer::TURN_SETTLE || m->editing >= 0;
 		for (int t = 0; !turning && t < LANES; t++) {
 			Sequencer::Lane& l = m->lanes[t];
 			if (l.pattern == l.recorded)

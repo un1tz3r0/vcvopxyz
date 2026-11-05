@@ -2,7 +2,12 @@
 
 ## Next
 
-- [ ] **Pattern grid editor:** a big-screen module to see and edit the pattern playing on a grid (Vic, 2026-10-28).
+- [ ] **Pattern Editor, part 2:** edit step components from the component row (a menu of the 14 with their value
+      keys), a right-click menu on a step (copy, paste, clear notes, locks or components), and a strip of the track's
+      settings (step count, step length, note length, quantize) to edit above the roll.
+- [ ] **Pattern Editor, part 3:** select a range of notes with a box, then copy, paste and move them together.
+- [ ] **Click-test the Pattern Editor** in a running Rack: the resize, the keyboard focus and each key, a drag on a
+      note and on its end, the lane, the undo steps, and a pattern that doesn't play.
 - [ ] **Shoot Remotes' and the Song Editor's pictures** for docs/README.md's module table, docs/remotes.md and
       docs/song-editor.md (`render_modules.py`), with a song on the Song Editor's screen.
 - [ ] **Tune the songs by ear** (Vic): the wheels' drag speed, the fade curve (linear now), and whether fades should

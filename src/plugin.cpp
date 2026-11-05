@@ -12,6 +12,7 @@ void init(Plugin* p) {
 	p->addModel(modelFxBreakout);
 	p->addModel(modelRemotes);
 	p->addModel(modelSongEditor);
+	p->addModel(modelPatternEditor);
 	p->addModel(modelScreen);
 	p->addModel(modelSequencer);
 }
