@@ -12,5 +12,6 @@ extern Model* modelDrumBreakout;
 extern Model* modelFxBreakout;
 extern Model* modelRemotes;
 extern Model* modelSongEditor;
+extern Model* modelPatternEditor;
 extern Model* modelScreen;
 extern Model* modelSequencer;

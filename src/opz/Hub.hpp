@@ -19,6 +19,14 @@ The UI thread reaches the tracks through the hub too, for a Screen and a breakou
 */
 namespace opz {
 
+inline const char* const TRACK_NAMES[LANES] = {"Kick", "Snare", "Perc", "Sample", "Bass", "Lead", "Arp", "Chord", "Master", "FX 1", "FX 2"};
+
+/** A MIDI note's name: 60 is C4. */
+inline std::string noteName(int pitch) {
+	static const char* const names[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+	return string::f("%s%d", names[pitch % 12], pitch / 12 - 1);
+}
+
 /** What a track sends out through its breakout: its outputs, those patched only. */
 struct JacksOut {
 	Port outputs[TrackIds::OUTPUTS_LEN];
@@ -80,6 +88,16 @@ struct SongView {
 	Project::Chain chain;
 };
 
+/** A pattern on a Pattern Editor's screen, as the UI thread copies it out of the Sequencer: each lane's steps and
+settings, and while it plays, each lane's playhead. */
+struct PatternView {
+	int pattern = 0, playingPattern = 0, selected = 0;
+	bool playing = false;
+	Pattern lanes[LANES];
+	Settings settings[LANES];
+	int positions[LANES];          // the step each lane's playhead is on, or -1
+};
+
 struct Hub {
 	JacksOut out[2][LANES];
 	JacksIn in[2][LANES];
@@ -123,6 +141,21 @@ struct Hub {
 	/** For the UI thread: a Song Editor's screen. False if the Sequencer is busy with its patterns just now. */
 	virtual bool songView(SongView& view) = 0;
 
+	/** For the UI thread: a Pattern Editor's screen, of pattern `pattern` or, if it's -1, the one playing. False if the Sequencer is busy with its patterns just now. */
+	virtual bool patternView(PatternView& view, int pattern) = 0;
+
+	/** For the UI thread: a Pattern Editor's gesture, its steps written one at a time, then the lanes it changed
+	saved as steps of the undo history. */
+	virtual void beginEdit(int pattern) = 0;
+	virtual void editStep(int lane, int step, const Step& s) = 0;
+	virtual void endEdit() = 0;
+
+	/** For the UI thread: the name of the dial a step of a track locks as `p`, or nothing for none. */
+	virtual std::string lockName(int track, int p) = 0;
+
+	/** For the UI thread: select a track, as its track key would, in the next frame. */
+	virtual void requestTrack(int track) = 0;
+
 	// For the UI thread: the core playing a track (null for the master track), its plug's name, and the track
 	// selected.
 	virtual TrackCore* trackCore(int track) = 0;
@@ -134,6 +167,15 @@ struct Hub {
 Sequencer can go between two frames. */
 inline Hub* findHub(Module* m) {
 	for (m = m ? m->leftExpander.module : nullptr; onBus(m); m = m->leftExpander.module)
+		if (Hub* h = dynamic_cast<Hub*>(m))
+			return h;
+	return nullptr;
+}
+
+/** The hub of the row a module left of the Sequencer is on, found by walking right: a Remotes', Song Editor's or
+Pattern Editor's, for the UI thread. */
+inline Hub* findHubRight(Module* m) {
+	for (m = m ? m->rightExpander.module : nullptr; onBus(m); m = m->rightExpander.module)
 		if (Hub* h = dynamic_cast<Hub*>(m))
 			return h;
 	return nullptr;

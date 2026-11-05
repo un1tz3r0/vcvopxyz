@@ -110,80 +110,6 @@ struct SongEditor : Module {
 };
 
 
-/** An endless wheel: a drag up or a scroll turns it one step at a time, four with Ctrl. */
-struct SongWheel : widget::OpaqueWidget {
-	SongEditor* module = nullptr;
-	int wheel = 0;
-	NVGcolor cap = nvgRGB(0xe2, 0xe1, 0xdc);
-	float dragged = 0.f;
-	int turned = 0;                // for the dimple
-
-	static constexpr float STEP = 8.f; // px of drag a step
-
-	void turn(int steps) {
-		if (APP->window->getMods() & RACK_MOD_CTRL)
-			steps *= 4;
-		turned += steps;
-		if (module)
-			module->turn(wheel, steps);
-	}
-
-	void onDragStart(const DragStartEvent& e) override {
-		if (e.button != GLFW_MOUSE_BUTTON_LEFT)
-			return;
-		dragged = 0.f;
-		APP->window->cursorLock();
-	}
-
-	void onDragMove(const DragMoveEvent& e) override {
-		dragged -= e.mouseDelta.y;
-		for (; dragged >= STEP; dragged -= STEP)
-			turn(1);
-		for (; dragged <= -STEP; dragged += STEP)
-			turn(-1);
-	}
-
-	void onDragEnd(const DragEndEvent& e) override {
-		APP->window->cursorUnlock();
-	}
-
-	void onHoverScroll(const HoverScrollEvent& e) override {
-		if (e.scrollDelta.y != 0.f)
-			turn(e.scrollDelta.y > 0.f ? 1 : -1);
-		e.consume(this);
-	}
-
-	void draw(const DrawArgs& args) override {
-		NVGcontext* vg = args.vg;
-		math::Vec c = box.size.div(2.f);
-		float r = box.size.x / 2.f;
-		nvgBeginPath(vg);
-		nvgCircle(vg, c.x, c.y, r);
-		nvgFillColor(vg, nvgRGB(0x2b, 0x2b, 0x2d));
-		nvgFill(vg);
-		// Ridges round the edge, turning with it, so a turn shows.
-		float angle = turned * float(M_PI) / 12.f;
-		nvgStrokeColor(vg, nvgRGB(0x44, 0x45, 0x48));
-		nvgStrokeWidth(vg, 0.8f);
-		for (int i = 0; i < 24; i++) {
-			float a = angle + i * float(M_PI) / 12.f;
-			nvgBeginPath(vg);
-			nvgMoveTo(vg, c.x + 0.8f * r * std::cos(a), c.y + 0.8f * r * std::sin(a));
-			nvgLineTo(vg, c.x + 0.97f * r * std::cos(a), c.y + 0.97f * r * std::sin(a));
-			nvgStroke(vg);
-		}
-		nvgBeginPath(vg);
-		nvgCircle(vg, c.x, c.y, 0.72f * r);
-		nvgFillColor(vg, cap);
-		nvgFill(vg);
-		nvgBeginPath(vg);
-		nvgCircle(vg, c.x + 0.45f * r * std::sin(angle), c.y - 0.45f * r * std::cos(angle), 0.11f * r);
-		nvgFillColor(vg, nvgRGBA(0, 0, 0, 0x70));
-		nvgFill(vg);
-	}
-};
-
-
 /** The song on the glass, in boxes: the mode, transport and tempo beside MODE; the song, its length and the playhead
 beside SONG; the song's settings over the columns whose wheels turn them; then the rows, each column in its wheel's
 colour, the row edited shown inverted. Every measure is in mm from the glass's top left. */
@@ -208,9 +134,7 @@ struct SongScreen : widget::OpaqueWidget {
 	static float px2mm(float px) { return px * MM_PER_IN / SVG_DPI; }
 
 	void step() override {
-		opz::Hub* hub = nullptr;
-		for (Module* m = module ? module->rightExpander.module : nullptr; opz::onBus(m) && !hub; m = m->rightExpander.module)
-			hub = dynamic_cast<opz::Hub*>(m);
+		opz::Hub* hub = opz::findHubRight(module);
 		linked = hub && (hub->songView(view) || linked);
 		if (module && linked) {
 			module->rows = view.chain.length;
@@ -410,13 +334,13 @@ struct SongEditorWidget : ModuleWidget {
 
 		static const char* const wheels[SongEditor::WHEELS] = {"SONG", "ROW", "PATTERN", "LENGTH", "MUTES"};
 		for (int w = 0; w < SongEditor::WHEELS; w++) {
-			SongWheel* wheel = createWidget<SongWheel>(math::Vec());
+			JogWheel* wheel = createWidget<JogWheel>(math::Vec());
 			// A wheel the panel gives a size takes it (ROW); the rest are 9 mm.
 			math::Rect place = layout.box(std::string(wheels[w]) + "_WHEEL_WIDGET");
 			wheel->box.size = place.size.x > 0.f ? place.size : mm2px(math::Vec(9.f, 9.f));
 			wheel->box.pos = place.getCenter().minus(wheel->box.size.div(2.f));
-			wheel->module = module;
-			wheel->wheel = w;
+			if (module)
+				wheel->turned = [=](int steps) { module->turn(w, steps); };
 			if (w >= SongEditor::PATTERN)
 				wheel->cap = DIAL_COLORS[w - SongEditor::PATTERN];
 			addChild(wheel);
