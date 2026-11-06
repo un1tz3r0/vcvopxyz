@@ -79,8 +79,8 @@ step, so it changes all of the notes on that step.
 - **Copy step** and **Paste step** copy all of the step that you clicked: its notes, components and locks.
 - **Clear notes**, **Clear locks** and **Clear components** clear one part of the steps.
 - Below them are the 14 [step components](step-components.md). Click a component to add it with its first value, or
-  to remove it. Hold the pointer on it to choose **Off** or one of its ten values, which the menu names by what they do
-  (for example **3: 3 slots**). A spark also has the passes that it fires on.
+  to remove it. Hold the pointer on it to choose **Off** or one of its ten values. The menu names each value by what
+  it does, for example **3: 3 slots**. A spark also has the passes that it fires on.
 - A check mark shows that each of the steps has the component or the value. A dash shows that only some have it. The
   value shows at the right, or **mixed** when the steps have different values.
 
