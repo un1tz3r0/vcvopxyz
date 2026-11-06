@@ -24,23 +24,75 @@ The boxes at the top show the pattern, the track, its plug, and the track's step
 
 ## Edit with the mouse
 
-In track view:
+The palette at the top left of the roll has three tools. Click a tool, or press its key while the screen has the
+keyboard. Hold the pointer on a tool to see what it does.
+
+| Tool | Key | Result |
+| --- | --- | --- |
+| **Pointer** | P | Selects notes and moves them. |
+| **Pen** | D | Adds notes. Hold D to use the Pen until you release D. |
+| **Eraser** | E | Deletes each note that you click or drag across. |
+
+A click is a press that moves less than 3 pixels before you release it. A drag moves more. A press alone does
+nothing.
+
+With the Pointer:
 
 | Action | Result |
 | --- | --- |
-| Click an empty cell | Adds a note there. Drag before you release to move it. |
-| Click a note | Removes it. |
-| Drag a note | Moves it one step or one semitone at a time. Hold Ctrl to move it one tick at a time. |
-| Drag the end of a note | Changes its length, one step at a time. Hold Ctrl for one tick at a time. Drag past the last step for a drone. |
+| Click a note | Selects it. Hold Shift to add it to the selection, or to remove it. |
+| Click an empty cell | Clears the selection and moves the cursor. |
+| Drag a note | Moves the selection one step or one semitone at a time. Hold Shift to move it one tick at a time. |
+| Ctrl+drag a note | Copies the selection to where you release it. |
+| Drag the end of a note | Changes the length of each selected note, one step at a time. Hold Shift for one tick at a time. Drag past the last step for drones. |
+| Drag on an empty cell | Selects the notes in the box. Hold Shift to add them to the selection. |
+| Double-click an empty cell | Adds a note. |
+| Double-click a note | Deletes it. |
+
+With the Pen, click an empty cell to add a note, or drag from it to add a note and set its length. On a note, the Pen
+does what the Pointer does.
+
+A white outline shows a selected note. When the pointer is on a note, a thin outline shows the note, and a white bar
+shows the end that sets its length. **CURSOR** shows how many notes you selected.
+
+A move or a copy is all or nothing. If one note cannot go to its new place, no note moves. A step has at most four
+notes. A note can start up to 23 ticks before its step and 24 ticks after it. A tick is 1/24 of a step.
+
+The lane:
+
+| Action | Result |
+| --- | --- |
 | Drag across the lane | Sets the velocity, or the lock, of each step that you cross. |
 | Ctrl+click a lock in the lane | Removes the lock. |
-
-A step has at most four notes. A step that is full flashes red when you add a note to it. A note can start up to 23
-ticks before its step and 24 ticks after it. A tick is 1/24 of a step.
 
 In the overview, click a step to go to that track and step in track view. Click a track's name to choose the track.
 
 Each drag or click is one step of the undo history. Use Rack's **Undo** (Ctrl+Z) to undo it.
+
+### The step menu
+
+Right-click a step, in the roll, the lane, the component row or the overview, to open its menu:
+
+- **Copy step** and **Paste step** copy all of the step: its notes, components and locks.
+- **Clear notes**, **Clear locks** and **Clear components** clear one part of the step.
+- **Components** sets each of the 14 [step components](step-components.md) of the step: **Off**, or one of the ten
+  value keys.
+
+### Change what the mouse does
+
+Right-click the panel, out of the screen, and use **Mouse gestures**:
+
+| Item | Choices (the first is the default) |
+| --- | --- |
+| Click on an empty cell | Clears the selection, or adds a note |
+| Drag on an empty cell | Box-selects, or draws notes in each cell that you cross |
+| Click on a note | Selects it, or deletes it |
+| Double-click on an empty cell | Adds a note, or does nothing |
+| Double-click on a note | Deletes it, or does nothing |
+| Free timing while dragging | Shift, Ctrl or Alt |
+
+**Tool** in the same menu chooses the tool. Rack uses Alt+drag to move the rack, so Alt works for free timing only
+after the drag starts.
 
 ## Edit with the keyboard
 
@@ -48,21 +100,27 @@ Click the screen to send the computer keyboard to it. A green line around the sc
 Press Escape, or click outside the screen, to return the keyboard to Rack. Rack's Ctrl+Z, Ctrl+Shift+Z and Ctrl+S
 work while the screen has the keyboard.
 
+When you select notes, the keys that move, change and delete notes act on the selection. With no selection, they act
+on the note at the cursor.
+
 | Key | Result |
 | --- | --- |
 | Arrow keys | Move the cursor one step or one row. In the overview, up and down choose the track. |
-| Shift+Left, Shift+Right | Move the note at the cursor one step. With Ctrl, one tick. |
-| Shift+Up, Shift+Down | Move the note at the cursor one semitone. With Ctrl, one octave. |
+| Shift+Left, Shift+Right | Move the notes one step. With Ctrl, one tick. |
+| Shift+Up, Shift+Down | Move the notes one semitone. With Ctrl, one octave. |
+| Alt+Left, Alt+Right | Make the notes one step shorter or longer. With Ctrl, one tick. |
+| Alt+D | Makes the notes drones, or makes drones usual notes again. |
+| Ctrl+A | Selects all of the track's notes. |
+| Delete or Backspace | Deletes the selected notes. With no selection, clears the step at the cursor: its notes, components and locks. |
+| Ctrl+C, Ctrl+V | Copy the selected notes, and paste them with the first note on the cursor's step. The pasted notes become the selection. With no selection, copy and paste the step at the cursor. |
+| Escape | Clears the selection. With no selection, returns the keyboard to Rack. |
 | Enter or Space | Adds or removes the note at the cursor. In the overview, Enter opens track view. |
-| Alt+Left, Alt+Right | Make the note at the cursor one step shorter or longer. With Ctrl, one tick. |
-| Alt+D | Makes the note at the cursor a drone, or makes a drone a usual note again. |
 | Two digits, 00 to 99 | Set the lane's value at the cursor's step. |
 | Tab, Shift+Tab | Choose the next or the previous track. |
+| P, D, E | Choose the Pointer, the Pen or the Eraser. |
 | V | Changes the view. |
 | L, Shift+L | Show the next or the previous lane. |
 | Page Up, Page Down | Move the roll one octave. |
-| Delete or Backspace | Clears the step at the cursor: its notes, components and locks. |
-| Ctrl+C, Ctrl+V | Copy the step at the cursor, and paste it at the cursor. |
 
 When the screen has the keyboard, the mouse wheel moves the roll one semitone. Hold Shift to move it one octave.
 
@@ -91,5 +149,5 @@ You can edit a pattern that does not play. It plays your changes when the Sequen
 
 ## Not yet
 
-The component row below the lane shows each step's components, but you cannot edit them here yet. Use the
-Sequencer's [step components](step-components.md) for that.
+You cannot edit the track's settings (step count, step length, note length) here yet. Use the Sequencer's
+[track settings](track.md#step-count-and-step-length) for that.
