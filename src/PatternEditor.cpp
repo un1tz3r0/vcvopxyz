@@ -31,6 +31,39 @@ static constexpr int PAD_LOW = 53, ROWS = 24, LOCK_LANES = 16; // a drum kit's 2
 static constexpr float HEIGHT = 128.5f;
 
 enum Tool { POINTER, PEN, ERASER, TOOLS };
+
+/** What each of a component's ten value keys does, in key order 1 to 9 and 0. */
+static const char* const COMPONENT_NAMES[COMPONENTS_LEN] = {"Pulse", "Pulse hold", "Multiply", "Velocity", "Ramp up", "Ramp down",
+	"Random", "Portamento", "Sweep", "Tonality", "Jump", "Parameter spark", "Component spark", "Trigger spark"};
+static std::string componentValue(int c, int k) {
+	static const char* const RAMPS[5] = {"2", "3", "4", "5", "6"};
+	switch (c) {
+		case PULSE: return k == 9 ? "Random" : string::f("%d slot%s", k + 1, k ? "s" : "");
+		case PULSE_HOLD: return k == 9 ? "Random" : string::f("Hold %d slot%s", k + 1, k ? "s" : "");
+		case MULTIPLY: return k == 8 ? "Broken chord" : k == 9 ? "Quantize" : string::f("×%d", k + 1);
+		case VELOCITY: return k == 4 ? "As played" : k == 8 ? "Mute" : k == 9 ? "Random" : string::f("%+d", 16 * (k - 4));
+		case RAMP_UP:
+		case RAMP_DOWN:
+		case RANDOM: return string::f("%s notes over %s", RAMPS[k % 5], k < 5 ? "1 octave" : "3 octaves");
+		case PORTAMENTO: return k < 8 ? string::f("Glide %d", k + 1) : k == 8 ? "Direct" : "Random";
+		case SWEEP: {
+			static const char* const S[10] = {"Filter up", "Filter down", "Synth up", "Synth down", "Pan", "Filter up, 2 bars",
+				"Filter down, 2 bars", "Synth up, 2 bars", "Synth down, 2 bars", "Random"};
+			return S[k];
+		}
+		case TONALITY: {
+			static const char* const T[10] = {"Ignore the master", "Root only", "Octave up", "Fifth up", "Third up", "Semitone up",
+				"Semitone down", "Snap to the scale", "Snap to the chord", "Snap to root and fifth"};
+			return T[k];
+		}
+		case JUMP: {
+			static const char* const J[10] = {"To step 1", "To step 5", "To step 9", "To step 13", "Forward", "Back", "Random",
+				"Stay", "Align", "Gate step"};
+			return J[k];
+		}
+		default: return k == 8 ? "Random" : k == 9 ? "Reset the count" : string::f("%d passes", k + 1);
+	}
+}
 static const char* const TOOL_TIPS[TOOLS] = {"Pointer (P): select, move and box-select", "Pen (D): add notes, drag to set the length; hold D to draw for a moment",
 	"Eraser (E): delete the notes you click or drag across"};
 
@@ -243,7 +276,7 @@ struct PatternScreen : widget::OpaqueWidget {
 		int step, ticks;
 	};
 
-	enum Kind { NONE, PRESS, MOVE, LENGTH, BOX, ERASE, PAINT, LANE };
+	enum Kind { NONE, PRESS, MOVE, LENGTH, BOX, ERASE, PAINT, LANE, VELOCITIES };
 	struct Hit {
 		bool roll = false;
 		int step = -1, pitch = 0;
@@ -258,7 +291,7 @@ struct PatternScreen : widget::OpaqueWidget {
 		float travel = 0.f;             // px on the window
 		int mods = 0, tool = POINTER;
 		Pattern base;                   // MOVE: the track without the notes moved
-		std::vector<Moving> items;      // MOVE: the notes moved; LENGTH: the notes, their length in `note.length`
+		std::vector<Moving> items;      // MOVE: the notes moved; LENGTH, VELOCITIES: the notes as they started
 		int lead = 0;                   // the item pressed
 		int leadLength = 0;
 		bool copies = false, placed = false;
@@ -743,6 +776,14 @@ struct PatternScreen : widget::OpaqueWidget {
 				}
 				return;
 			}
+			// A drag from a step with a selected note moves the velocity of every selected note.
+			std::vector<std::pair<int, int>> notes = selection();
+			if (!lane() && std::any_of(notes.begin(), notes.end(), [&](const std::pair<int, int>& n) { return n.first == step; })) {
+				drag.kind = VELOCITIES;
+				for (auto [s, pitch] : notes)
+					drag.items.push_back(moving(s, pitch));
+				return;
+			}
 			drag.kind = LANE;
 			return;
 		}
@@ -770,10 +811,11 @@ struct PatternScreen : widget::OpaqueWidget {
 	}
 
 	void onDragStart(const DragStartEvent& e) override {
-		if (e.button != GLFW_MOUSE_BUTTON_LEFT || drag.kind != LANE)
+		if (e.button != GLFW_MOUSE_BUTTON_LEFT || (drag.kind != LANE && drag.kind != VELOCITIES))
 			return;
 		begin();
-		dragLane();
+		if (drag.kind == LANE)
+			dragLane();
 	}
 
 	/** A press that has moved 3 px: what it drags depends on the tool, what's under it and the gesture settings. */
@@ -861,6 +903,20 @@ struct PatternScreen : widget::OpaqueWidget {
 		bool loose = freeTiming(mods());
 		switch (drag.kind) {
 			case LANE: return dragLane();
+			case VELOCITIES: {
+				// By the same amount, which keeps their shape; with Ctrl, all to the value under the pointer.
+				bool same = mods() & RACK_MOD_CTRL;
+				int to = (int) std::lround((L.laneY + L.laneH - drag.at.y) / L.laneH * 127.f);
+				int by = (int) std::lround(-d.y / L.laneH * 127.f);
+				Pattern p = pattern();
+				for (const Moving& m : drag.items) {
+					Step& s = p.steps[m.step];
+					int i = s.indexOf(m.note.pitch);
+					if (i >= 0)
+						s.notes[i].velocity = (uint8_t) clamp(same ? to : m.note.velocity + by, 1, 127);
+				}
+				return put(p);
+			}
 			case ERASE: return erase(L, drag.at);
 			case PAINT: return paint(L, drag.at);
 			case BOX: {
@@ -974,7 +1030,8 @@ struct PatternScreen : widget::OpaqueWidget {
 		e.consume(this);
 	}
 
-	/** A right-click on a step: copy, paste and clear it, and set its components. False if it isn't on a step. */
+	/** A right-click on a step: copy, paste and clear it, and set its components. On a step with a selected note, the
+	clears and the components act on every step with a selected note. False if it isn't on a step. */
 	bool stepMenu(const Layout& L, math::Vec p) {
 		int step = -1;
 		if (overview()) {
@@ -993,32 +1050,79 @@ struct PatternScreen : widget::OpaqueWidget {
 			return true;
 		}
 		cursorStep = step;
-		static const char* const NAMES[COMPONENTS_LEN] = {"Pulse", "Pulse hold", "Multiply", "Velocity", "Ramp up", "Ramp down",
-			"Random", "Portamento", "Sweep", "Tonality", "Jump", "Parameter spark", "Component spark", "Trigger spark"};
-		auto change = [this, step](std::function<void(Step&)> f) {
-			Step s = pattern().steps[step];
-			f(s);
-			edit([&] { put(step, s); });
+		std::set<int> steps;
+		for (auto [s, pitch] : selection())
+			steps.insert(s);
+		if (!steps.count(step))
+			steps = {step};
+		// Every step's edit as one undo step.
+		auto change = [this, steps](std::function<void(Step&)> f) {
+			Pattern pat = pattern();
+			for (int s : steps)
+				f(pat.steps[s]);
+			edit([&] { put(pat); });
+			APP->event->setSelectedWidget(this); // the keys back to the screen, which the menu took
+		};
+		// ✔ when every step passes, – when some do.
+		auto mark = [this, steps](std::function<bool(const Step&)> f) {
+			size_t n = std::count_if(steps.begin(), steps.end(), [&](int s) { return f(pattern().steps[s]); });
+			return n == steps.size() ? CHECKMARK_STRING : n ? "–" : "";
 		};
 		ui::Menu* menu = createMenu();
-		menu->addChild(createMenuLabel(string::f("Step %d", step + 1)));
+		menu->addChild(createMenuLabel(steps.size() > 1 ? string::f("%d steps with selected notes", (int) steps.size()) : string::f("Step %d", step + 1)));
 		menu->addChild(createMenuItem("Copy step", "", [=] { clipboard().notes = false; clipboard().step = pattern().steps[step]; }));
-		menu->addChild(createMenuItem("Paste step", "", [=] { if (!clipboard().notes) change([](Step& s) { s = clipboard().step; }); }, clipboard().notes));
+		menu->addChild(createMenuItem("Paste step", "", [=] {
+			Step from = clipboard().step;
+			edit([&] { put(step, from); });
+		}, clipboard().notes));
 		menu->addChild(createMenuItem("Clear notes", "", [=] { change([](Step& s) { s.count = 0; }); }));
 		menu->addChild(createMenuItem("Clear locks", "", [=] { change([](Step& s) { s.locks = 0; std::fill(std::begin(s.lockValues), std::end(s.lockValues), 0.f); }); }));
 		menu->addChild(createMenuItem("Clear components", "", [=] { change([](Step& s) { s.clearComponents(); }); }));
 		menu->addChild(new ui::MenuSeparator);
-		menu->addChild(createMenuLabel("Components"));
-		const Step& s = pattern().steps[step];
+		menu->addChild(createMenuLabel("Components (click: on or off)"));
 		for (int c = 0; c < COMPONENTS_LEN; c++) {
-			std::string value = s.has(c) ? string::f("key %d", (s.key(c) + 1) % 10) : "";
-			menu->addChild(createSubmenuItem(NAMES[c], value, [=](ui::Menu* sub) {
-				sub->addChild(createCheckMenuItem("Off", "", [=] { return !pattern().steps[step].has(c); }, [=] { change([=](Step& s) { s.unset(c); }); }));
+			// A submenu whose item, clicked, turns the component on with its first value, or off on every step.
+			struct ComponentItem : ui::MenuItem {
+				std::function<void()> toggle;
+				std::function<ui::Menu*()> values;
+				ui::Menu* createChildMenu() override { return values(); }
+				void onAction(const ActionEvent& e) override {
+					toggle();
+				}
+			};
+			ComponentItem* item = new ComponentItem;
+			std::string all = mark([=](const Step& s) { return s.has(c); });
+			int first = pattern().steps[*steps.begin()].key(c);
+			bool same = std::all_of(steps.begin(), steps.end(), [&](int s) { return pattern().steps[s].has(c) && pattern().steps[s].key(c) == first; });
+			item->text = COMPONENT_NAMES[c];
+			item->rightText = (all.empty() ? "" : all + " ") + (same ? componentValue(c, first) : all.empty() ? "" : "mixed") + "  " + RIGHT_ARROW;
+			item->toggle = [=] {
+				bool on = all == CHECKMARK_STRING;
+				change([=](Step& s) {
+					if (on)
+						s.unset(c);
+					else if (!s.has(c))
+						s.set(c, 0);
+				});
+			};
+			item->values = [=] {
+				ui::Menu* sub = new ui::Menu;
+				sub->addChild(createMenuItem("Off", mark([=](const Step& s) { return !s.has(c); }), [=] { change([=](Step& s) { s.unset(c); }); }));
 				for (int k = 0; k < 10; k++)
-					sub->addChild(createCheckMenuItem(string::f("Value key %d", (k + 1) % 10), "",
-						[=] { const Step& s = pattern().steps[step]; return s.has(c) && s.key(c) == k; },
-						[=] { change([=](Step& s) { s.set(c, (s.values[c] & 0x30) | k); }); }));
-			}));
+					sub->addChild(createMenuItem(string::f("%d: %s", (k + 1) % 10, componentValue(c, k).c_str()),
+						mark([=](const Step& s) { return s.has(c) && s.key(c) == k; }),
+						[=] { change([=](Step& s) { s.set(c, (s.has(c) ? s.values[c] & 0x30 : 0) | k); }); }));
+				if (c >= PARAMETER_SPARK) {
+					// Which of the N passes fire, as pressing the value key again cycles on the hardware.
+					static const char* const MODES[4] = {"Fires on the last pass of N", "Fires on the first pass", "Fires on all but the last", "Fires on all but the first"};
+					sub->addChild(new ui::MenuSeparator);
+					for (int m = 0; m < 4; m++)
+						sub->addChild(createMenuItem(MODES[m], mark([=](const Step& s) { return s.has(c) && s.values[c] >> 4 == m; }),
+							[=] { change([=](Step& s) { if (s.has(c)) s.values[c] = (s.values[c] & 15) | m << 4; }); }));
+				}
+				return sub;
+			};
+			menu->addChild(item);
 		}
 		return true;
 	}
@@ -1428,8 +1532,9 @@ struct PatternScreen : widget::OpaqueWidget {
 			for (int i = 0; i < step.count; i++) {
 				const Note& n = step.notes[i];
 				float v = n.velocity / 127.f;
-				bool cursor = keys && s == cursorStep && n.pitch == cursorPitch;
-				rect(x + L.cw * 0.15f + i * bar + 0.1f, L.laneY + L.laneH * (1.f - v), bar - 0.2f, L.laneH * v, nvgTransRGBAf(color, cursor ? 1.f : 0.7f), none, 0.2f);
+				bool cursor = keys && s == cursorStep && n.pitch == cursorPitch, chosen = selected.count({s, (int) n.pitch}) && editable(s);
+				rect(x + L.cw * 0.15f + i * bar + 0.1f, L.laneY + L.laneH * (1.f - v), bar - 0.2f, L.laneH * v,
+					nvgTransRGBAf(color, chosen || cursor ? 1.f : 0.55f), chosen ? nvgRGB(0xff, 0xff, 0xff) : none, 0.2f, 1.2f);
 			}
 		}
 	}

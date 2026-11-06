@@ -63,6 +63,7 @@ The lane:
 | Action | Result |
 | --- | --- |
 | Drag across the lane | Sets the velocity, or the lock, of each step that you cross. |
+| Drag up or down from a step with a selected note | Moves the velocity of every selected note by the same amount. Hold Ctrl to give them all the velocity at the pointer. |
 | Ctrl+click a lock in the lane | Removes the lock. |
 
 In the overview, click a step to go to that track and step in track view. Click a track's name to choose the track.
@@ -71,12 +72,17 @@ Each drag or click is one step of the undo history. Use Rack's **Undo** (Ctrl+Z)
 
 ### The step menu
 
-Right-click a step, in the roll, the lane, the component row or the overview, to open its menu:
+Right-click a step, in the roll, the lane, the component row or the overview, to open its menu. If the step has a
+selected note, the clears and the components change each step that has a selected note. A component belongs to a
+step, so it changes all of the notes on that step.
 
-- **Copy step** and **Paste step** copy all of the step: its notes, components and locks.
-- **Clear notes**, **Clear locks** and **Clear components** clear one part of the step.
-- **Components** sets each of the 14 [step components](step-components.md) of the step: **Off**, or one of the ten
-  value keys.
+- **Copy step** and **Paste step** copy all of the step that you clicked: its notes, components and locks.
+- **Clear notes**, **Clear locks** and **Clear components** clear one part of the steps.
+- Below them are the 14 [step components](step-components.md). Click a component to add it with its first value, or
+  to remove it. Hold the pointer on it to choose **Off** or one of its ten values, which the menu names by what they do
+  (for example **3: 3 slots**). A spark also has the passes that it fires on.
+- A check mark shows that each of the steps has the component or the value. A dash shows that only some have it. The
+  value shows at the right, or **mixed** when the steps have different values.
 
 ### Change what the mouse does
 
