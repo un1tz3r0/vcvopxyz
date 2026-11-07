@@ -12,8 +12,12 @@ The mouse works as a DAW's clip editor does: a press is a click if it moves less
 Pointer a click selects a note and a drag moves the selection, or box-selects on an empty cell; the Pen adds notes and
 the Eraser deletes them. What each gesture does is set in the module's menu.
 
-VIEW swaps the views, FOLLOW ties the track shown to the Sequencer's selected one, LANE picks what the lane under the
-roll shows, and the octave keys scroll the roll. The PATTERN wheel shows another of the 16 patterns: the screen follows
+The roll can show what the step components play (the played roll, Playthrough): a step is as wide as the slots it
+plays, a written note that doesn't play as written is hollow, and the notes the components add are dashed, linked to
+their note by a dotted line. It shows one pass at a time, in written order with the jumps as arrows, or in play order.
+
+VIEW swaps the views, FOLLOW ties the track shown to the Sequencer's selected one (and the pass to the playhead's), LANE
+picks what the lane under the roll shows, the octave keys scroll the roll and the zoom keys zoom its steps. The PATTERN wheel shows another of the 16 patterns: the screen follows
 the pattern playing until it's turned to another. The module is as wide as its left edge is dragged, 24 to 64 HP.
 */
 #include "plugin.hpp"
@@ -83,10 +87,10 @@ static const struct {
 static const char* const GESTURE_KEYS[GESTURES] = {"emptyClick", "emptyDrag", "noteClick", "emptyDouble", "noteDouble", "freeKey"};
 
 struct PatternEditor : Module {
-	enum ParamId { VIEW_PARAM, FOLLOW_PARAM, LANE_PARAM, OCTAVE_DOWN_PARAM, OCTAVE_UP_PARAM, PARAMS_LEN };
+	enum ParamId { VIEW_PARAM, FOLLOW_PARAM, LANE_PARAM, OCTAVE_DOWN_PARAM, OCTAVE_UP_PARAM, ZOOM_OUT_PARAM, ZOOM_IN_PARAM, PARAMS_LEN };
 	enum InputId { INPUTS_LEN };
 	enum OutputId { OUTPUTS_LEN };
-	enum LightId { VIEW_LIGHT, FOLLOW_LIGHT, ENUMS(LANE_LIGHT, 3), ENUMS(KEY_LIGHT, 2 * 3), LIGHTS_LEN };
+	enum LightId { VIEW_LIGHT, FOLLOW_LIGHT, ENUMS(LANE_LIGHT, 3), ENUMS(KEY_LIGHT, 4 * 3), LIGHTS_LEN };
 	static constexpr int MIN_WIDTH = 24, MAX_WIDTH = 64;
 
 	// The screen's state, the UI thread's and saved in the patch; the lights read the atomic ones.
@@ -99,6 +103,7 @@ struct PatternEditor : Module {
 	int low[LANES] = {PAD_LOW, PAD_LOW, PAD_LOW, PAD_LOW, 31, 60, 52, 45, 52, 48, 48}; // each roll's bottom row
 	int tool = POINTER;
 	int gestures[GESTURES] = {};
+	bool played = true, playOrder = false; // the played roll, and its steps in play order
 
 	std::atomic<int> presses[PARAMS_LEN] = {}; // the keys' presses, for the UI thread to take
 	dsp::BooleanTrigger triggers[PARAMS_LEN];
@@ -111,6 +116,8 @@ struct PatternEditor : Module {
 		configButton(LANE_PARAM, "Lane: velocity, then each dial's locks");
 		configButton(OCTAVE_DOWN_PARAM, "Octave down");
 		configButton(OCTAVE_UP_PARAM, "Octave up");
+		configButton(ZOOM_OUT_PARAM, "Zoom the steps out");
+		configButton(ZOOM_IN_PARAM, "Zoom the steps in");
 		lightDivider.setDivision(64);
 	}
 
@@ -131,7 +138,7 @@ struct PatternEditor : Module {
 		lights[LANE_LIGHT + 0].setBrightness(c.r);
 		lights[LANE_LIGHT + 1].setBrightness(c.g);
 		lights[LANE_LIGHT + 2].setBrightness(c.b);
-		for (int k = 0; k < 2; k++)
+		for (int k = 0; k < 4; k++)
 			for (int i = 0; i < 3; i++)
 				lights[KEY_LIGHT + 3 * k + i].setBrightness(params[OCTAVE_DOWN_PARAM + k].getValue() > 0.f);
 	}
@@ -149,6 +156,8 @@ struct PatternEditor : Module {
 			json_array_append_new(lows, json_integer(l));
 		json_object_set_new(root, "low", lows);
 		json_object_set_new(root, "tool", json_integer(tool));
+		json_object_set_new(root, "played", json_boolean(played));
+		json_object_set_new(root, "playOrder", json_boolean(playOrder));
 		for (int g = 0; g < GESTURES; g++)
 			json_object_set_new(root, GESTURE_KEYS[g], json_integer(gestures[g]));
 		return root;
@@ -171,37 +180,48 @@ struct PatternEditor : Module {
 		for (int t = 0; t < LANES && t < (int) json_array_size(lows); t++)
 			low[t] = clamp((int) json_integer_value(json_array_get(lows, t)), 0, 127 - ROWS + 1);
 		tool = clamp(integer("tool", POINTER), 0, TOOLS - 1);
+		played = !json_is_false(json_object_get(root, "played"));
+		playOrder = json_is_true(json_object_get(root, "playOrder"));
 		for (int g = 0; g < GESTURES; g++)
 			gestures[g] = clamp(integer(GESTURE_KEYS[g], 0), 0, (int) GESTURE_MENU[g].choices.size() - 1);
 	}
 };
 
 
-/** A tool of the palette at the screen's left: its icon, lit while it's the tool, and a tooltip. */
-struct ToolButton : widget::OpaqueWidget {
-	int tool = POINTER;
-	std::function<int()> current;
-	std::function<void(int)> pick;
-	ui::Tooltip* tooltip = nullptr;
+static const char* const TOOL_ICONS[TOOLS] = {
+	"M6 2.5l13 11.2h-6.6l3.7 7.2-2.6 1.3-3.7-7.3L6 19.6z",
+	"M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
+	"M15.1 3.6l5.3 5.3a2 2 0 0 1 0 2.8L12 20h8v2H7.6l-4.1-4.1a2 2 0 0 1 0-2.8L12.3 3.6a2 2 0 0 1 2.8 0zM5 16.5l3.3 3.5h2.9l1.9-1.9-5.4-5.4z",
+};
+/** The header's two ROLL switches: the played roll, and play order. */
+static const char* const ROLL_ICONS[2] = {
+	"M2 4h2.5v16H2zM19.5 4H22v16h-2.5zM7 11h10v2H7zM10 7.5L5.5 12l4.5 4.5zM14 7.5l4.5 4.5-4.5 4.5z",
+	"M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16a8 8 0 0 1 7.6-5.5c1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z",
+};
+static const char* const ROLL_TIPS[2] = {"Played roll (U): steps as wide as they play, and the notes their components add",
+	"Play order (J): the steps in the order the playhead plays them this pass"};
 
-	static NSVGimage* icon(int tool, bool lit) {
-		static const char* const PATHS[TOOLS] = {
-			"M6 2.5l13 11.2h-6.6l3.7 7.2-2.6 1.3-3.7-7.3L6 19.6z",
-			"M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
-			"M15.1 3.6l5.3 5.3a2 2 0 0 1 0 2.8L12 20h8v2H7.6l-4.1-4.1a2 2 0 0 1 0-2.8L12.3 3.6a2 2 0 0 1 2.8 0zM5 16.5l3.3 3.5h2.9l1.9-1.9-5.4-5.4z",
-		};
-		static NSVGimage* images[TOOLS][2] = {};
-		NSVGimage*& image = images[tool][lit];
-		if (!image) {
-			std::string svg = string::f("<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><path fill='%s' d='%s'/></svg>", lit ? "#0e0e10" : "#dcdbd8", PATHS[tool]);
-			image = nsvgParse(&svg[0], "px", 96.f);
+/** An icon button on the glass, lit while its state is on, dim while it can't be used, with a tooltip. */
+struct IconButton : widget::OpaqueWidget {
+	const char* path = "";
+	std::string tip;
+	std::function<bool()> lit, usable;
+	std::function<void()> press;
+	ui::Tooltip* tooltip = nullptr;
+	NSVGimage* images[3] = {}; // unlit, lit, unusable
+
+	NSVGimage* icon(int state) {
+		static const char* const FILLS[3] = {"#dcdbd8", "#0e0e10", "#6f6e6c"};
+		if (!images[state]) {
+			std::string svg = string::f("<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><path fill='%s' d='%s'/></svg>", FILLS[state], path);
+			images[state] = nsvgParse(&svg[0], "px", 96.f);
 		}
-		return image;
+		return images[state];
 	}
 
 	void onButton(const ButtonEvent& e) override {
-		if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT && pick)
-			pick(tool);
+		if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT && press && (!usable || usable()))
+			press();
 		e.consume(this);
 	}
 
@@ -209,7 +229,7 @@ struct ToolButton : widget::OpaqueWidget {
 		if (!settings::tooltips || tooltip)
 			return;
 		tooltip = new ui::Tooltip;
-		tooltip->text = TOOL_TIPS[tool];
+		tooltip->text = tip;
 		APP->scene->addChild(tooltip);
 	}
 
@@ -225,19 +245,22 @@ struct ToolButton : widget::OpaqueWidget {
 		tooltip = nullptr;
 	}
 
-	~ToolButton() {
+	~IconButton() {
 		hide();
+		for (NSVGimage* image : images)
+			if (image)
+				nsvgDelete(image);
 	}
 
 	void drawLayer(const DrawArgs& args, int layer) override {
 		if (layer != 1)
 			return;
-		bool lit = current && current() == tool;
+		bool on = lit && lit(), off = usable && !usable();
 		nvgBeginPath(args.vg);
 		nvgRoundedRect(args.vg, 0, 0, box.size.x, box.size.y, mm2px(0.6f));
-		nvgFillColor(args.vg, lit ? nvgRGB(0xdc, 0xdb, 0xd8) : nvgRGBA(0xff, 0xff, 0xff, 0x10));
+		nvgFillColor(args.vg, on && !off ? nvgRGB(0xdc, 0xdb, 0xd8) : nvgRGBA(0xff, 0xff, 0xff, 0x10));
 		nvgFill(args.vg);
-		if (NSVGimage* image = icon(tool, lit)) {
+		if (NSVGimage* image = icon(off ? 2 : on)) {
 			nvgSave(args.vg);
 			float inset = mm2px(0.5f), scale = (box.size.x - 2 * inset) / 24.f;
 			nvgTranslate(args.vg, inset, inset);
@@ -247,6 +270,52 @@ struct ToolButton : widget::OpaqueWidget {
 		}
 	}
 };
+
+/** The roll's columns for one pass, and every note their steps trigger, where it plays. Columns are as wide as the
+slots they play, zoomed and scrolled; with the played roll off, they are the written grid. */
+struct Roll {
+	struct Column {
+		int step, w = 1, jump = -1;
+		float x = 0.f;
+		long start = -1;                 // the visit's first slot, or -1
+		bool fires = true, skipped = false;
+		int written[STEP_NOTES] = {-1, -1, -1, -1}; // each note's event that plays it as written, or -1
+	};
+	struct Event {
+		int col, step;
+		float t;                         // slots from the roll's start
+		Playthrough::Trigger tr;
+	};
+	std::vector<Column> cols;
+	std::vector<Event> events;
+	float gridX = 0.f, gridW = 1.f, slotW = 1.f, scroll = 0.f;
+
+	float at(float t) const { return gridX + t * slotW - scroll; }
+	float colX(int i) const { return at(cols[i].x); }
+	float colW(int i) const { return cols[i].w * slotW; }
+	int colAt(float x) const {
+		int i = 0;
+		while (i + 1 < (int) cols.size() && x >= colX(i + 1))
+			i++;
+		return i;
+	}
+	int stepAt(float x) const { return cols[colAt(x)].step; }
+	int colOf(int step) const {
+		for (int i = 0; i < (int) cols.size(); i++)
+			if (cols[i].step == step)
+				return i;
+		return -1;
+	}
+	bool phantom(int e) const { return cols[events[e].col].written[events[e].tr.note] != e; }
+	/** A start in ticks from step 1, under a point: the step's column split into its ticks. */
+	float ticksAt(float x) const {
+		int i = colAt(x);
+		return cols[i].step * TICKS + (x - colX(i)) / colW(i) * TICKS;
+	}
+};
+
+static constexpr float ZOOM_MAX = 6.f;
+static constexpr int PASSES = 999;
 
 
 /** The pattern on the glass. Every measure is in mm from the glass's top left; a step's columns and a pitch's rows
@@ -268,7 +337,11 @@ struct PatternScreen : widget::OpaqueWidget {
 	bool lastClickAdded = false;
 	int toolBeforeD = -1;               // while D is held: the tool to go back to if it's held, not tapped
 	double pressedD = 0.0;
-	ToolButton* tools[TOOLS];
+	IconButton* tools[TOOLS];
+	IconButton* switches[2];
+	int pass = 0;                       // the played roll's pass, from 0
+	float zoom = 1.f, scrollX = 0.f;    // the steps' zoom, and how far they're scrolled, mm
+	Playthrough playthrough;
 
 	/** A note to put back somewhere: as it was, from its step and its start in ticks from step 1. */
 	struct Moving {
@@ -276,12 +349,13 @@ struct PatternScreen : widget::OpaqueWidget {
 		int step, ticks;
 	};
 
-	enum Kind { NONE, PRESS, MOVE, LENGTH, BOX, ERASE, PAINT, LANE, VELOCITIES };
+	enum Kind { NONE, PRESS, MOVE, LENGTH, BOX, ERASE, PAINT, LANE, VELOCITIES, ZOOM, SCROLL };
 	struct Hit {
 		bool roll = false;
-		int step = -1, pitch = 0;
+		int step = -1, pitch = 0, col = -1;
 		int noteStep = -1;              // the step of the note under it, or -1
 		bool edge = false;              // on the note's end, which sets its length
+		bool phantom = false;           // on a note the step's components play: `pitch` is then the written note's
 		float x = 0.f, w = 0.f;         // the note's span, mm
 	};
 	struct DragState {
@@ -290,6 +364,7 @@ struct PatternScreen : widget::OpaqueWidget {
 		math::Vec start, at;            // mm
 		float travel = 0.f;             // px on the window
 		int mods = 0, tool = POINTER;
+		float scrollX = 0.f;            // SCROLL: where it started
 		Pattern base;                   // MOVE: the track without the notes moved
 		std::vector<Moving> items;      // MOVE: the notes moved; LENGTH, VELOCITIES: the notes as they started
 		int lead = 0;                   // the item pressed
@@ -331,14 +406,26 @@ struct PatternScreen : widget::OpaqueWidget {
 	PatternScreen() {
 		Layout L(math::Vec(1.f, 1.f));
 		for (int t = 0; t < TOOLS; t++) {
-			ToolButton* b = tools[t] = createWidget<ToolButton>(mm2px(math::Vec(L.palX, L.gridY + t * L.palStep)));
+			IconButton* b = tools[t] = createWidget<IconButton>(mm2px(math::Vec(L.palX, L.gridY + t * L.palStep)));
 			b->box.size = mm2px(math::Vec(L.palW, L.palW));
-			b->tool = t;
-			b->current = [this] { return tool(); };
-			b->pick = [this](int t) {
+			b->path = TOOL_ICONS[t];
+			b->tip = TOOL_TIPS[t];
+			b->lit = [=] { return tool() == t; };
+			b->press = [=] {
 				if (module)
 					module->tool = t;
 			};
+			addChild(b);
+		}
+		for (int i = 0; i < 2; i++) {
+			IconButton* b = switches[i] = createWidget<IconButton>(math::Vec());
+			b->box.size = mm2px(math::Vec(4.4f, 4.4f));
+			b->path = ROLL_ICONS[i];
+			b->tip = ROLL_TIPS[i];
+			b->lit = [=] { return i ? playOrder() : played(); };
+			if (i)
+				b->usable = [=] { return played(); };
+			b->press = [=] { toggleRoll(i); };
 			addChild(b);
 		}
 	}
@@ -358,6 +445,142 @@ struct PatternScreen : widget::OpaqueWidget {
 	int gesture(Gesture g) const { return module ? module->gestures[g] : 0; }
 	static int mods() { return APP->window->getMods() & RACK_MOD_MASK; }
 	int tool() const { return module ? module->tool : POINTER; }
+	bool played() const { return !module || module->played; }
+	bool playOrder() const { return module && module->played && module->playOrder; }
+	int stepCount() const { return clamp(settings().stepCount, 1, STEPS); }
+	void toggleRoll(int i) {
+		if (!module)
+			return;
+		bool& b = i ? module->playOrder : module->played;
+		b = !b;
+	}
+
+	/** Whether what plays changes from pass to pass: a ramp walks on, a spark counts passes, or a jump moves the playhead. */
+	bool passDependent() {
+		for (int s = 0; s < stepCount(); s++) {
+			const Step& st = pattern().steps[s];
+			if (st.has(RAMP_UP) || st.has(RAMP_DOWN) || st.has(JUMP))
+				return true;
+			for (int c : {PARAMETER_SPARK, COMPONENT_SPARK, TRIGGER_SPARK})
+				if (st.has(c) && st.key(c) > 0 && st.key(c) < 8)
+					return true;
+		}
+		return false;
+	}
+
+	const std::vector<Playthrough::Visit>& visits(long upTo) {
+		playthrough.use(pattern(), settings(), view.scales[track()]);
+		return playthrough.run(upTo);
+	}
+
+	/** Whether pass `p` of the played roll shows the visit that starts at `start`. In written order a pass shows each
+	step's first visit from its start on, looking two passes ahead, so a step that wide steps push on still shows. */
+	bool shows(int p, long start) {
+		long n = stepCount(), from = p * n;
+		if (start < from || start >= from + (playOrder() ? 1 : 2) * n)
+			return false;
+		if (playOrder())
+			return true;
+		const auto& vs = visits(start + 1);
+		auto v = std::find_if(vs.begin(), vs.end(), [&](const Playthrough::Visit& v) { return v.start == start; });
+		return v != vs.end() && std::none_of(vs.begin(), v, [&](const Playthrough::Visit& w) { return w.step == v->step && w.start >= from; });
+	}
+
+	/** The visit the playhead is in, if it's playing the pattern shown: its first slot, and the slot it's at. */
+	bool playing(long* start, long* slot) {
+		int t = track();
+		if (!view.playing || view.pattern != view.playingPattern || view.slots[t] < 0)
+			return false;
+		*slot = view.slots[t];
+		const auto& vs = visits(*slot + 1);
+		for (auto v = vs.rbegin(); v != vs.rend(); ++v)
+			if (v->start <= *slot) {
+				*start = v->start;
+				return true;
+			}
+		return false;
+	}
+
+	Roll roll(const Layout& L) {
+		Roll R;
+		R.gridX = L.gridX;
+		R.gridW = L.gridW;
+		int n = stepCount();
+		const Pattern& pat = pattern();
+		if (!played()) {
+			for (int s = 0; s < STEPS; s++) {
+				Roll::Column c;
+				c.step = s;
+				c.jump = pat.steps[s].has(JUMP) ? pat.steps[s].key(JUMP) : -1;
+				R.cols.push_back(c);
+				for (int i = 0; s < n && i < pat.steps[s].count; i++) {
+					const Note& note = pat.steps[s].notes[i];
+					int ticks = note.length ? note.length : settings().noteLength;
+					Playthrough::Trigger tr{i, note.pitch, note.velocity, -1, note.offset / (float) TICKS, ticks >= DRONE ? INFINITY : ticks / (float) TICKS, true, false};
+					R.events.push_back({s, s, 0.f, tr});
+				}
+			}
+		}
+		else {
+			long from = (long) pass * n;
+			const std::vector<Playthrough::Visit>& vs = visits(from + 2 * n);
+			auto add = [&](const Playthrough::Visit& v) {
+				Roll::Column c;
+				c.step = v.step;
+				c.w = v.slots;
+				c.jump = v.jump;
+				c.start = v.start;
+				c.fires = v.fires;
+				for (const Playthrough::Trigger& tr : v.triggers)
+					R.events.push_back({(int) R.cols.size(), v.step, tr.t, tr});
+				R.cols.push_back(c);
+			};
+			if (playOrder()) {
+				for (const auto& v : vs)
+					if (v.start >= from && v.start < from + n)
+						add(v);
+			}
+			else
+				for (int s = 0; s < STEPS; s++) {
+					auto v = std::find_if(vs.begin(), vs.end(), [&](const Playthrough::Visit& v) { return v.step == s && v.start >= from; });
+					if (v != vs.end())
+						add(*v);
+					else {
+						Roll::Column c;
+						c.step = s;
+						c.fires = false;
+						c.skipped = s < n;
+						R.cols.push_back(c);
+					}
+				}
+		}
+		float x = 0.f;
+		for (Roll::Column& c : R.cols) {
+			c.x = x;
+			x += c.w;
+		}
+		for (Roll::Event& e : R.events)
+			e.t += R.cols[e.col].x;
+		R.slotW = L.gridW * zoom / std::max(x, 1.f);
+		scrollX = clamp(scrollX, 0.f, L.gridW * (zoom - 1.f));
+		R.scroll = scrollX;
+		for (int e = 0; e < (int) R.events.size(); e++) {
+			const Playthrough::Trigger& tr = R.events[e].tr;
+			const Step& st = pat.steps[R.events[e].step];
+			if (tr.first && tr.spread < 0 && tr.velocity != 0 && tr.note < st.count && tr.pitch == st.notes[tr.note].pitch)
+				R.cols[R.events[e].col].written[tr.note] = e;
+		}
+		return R;
+	}
+
+	void setZoom(const Layout& L, float z, float x) {
+		float c = (x - L.gridX + scrollX) / zoom;
+		zoom = clamp(z, 1.f, ZOOM_MAX);
+		scrollX = clamp(c * zoom - (x - L.gridX), 0.f, L.gridW * (zoom - 1.f));
+	}
+	void zoomTo(const Layout& L, float x) {
+		setZoom(L, 1.f + clamp((x - L.keyX - 2.f) / (L.keyW - 4.f), 0.f, 1.f) * (ZOOM_MAX - 1.f), L.gridX + L.gridW / 2);
+	}
 	bool freeTiming(int m) const {
 		static const int KEYS[3] = {GLFW_MOD_SHIFT, RACK_MOD_CTRL, GLFW_MOD_ALT};
 		return m & KEYS[clamp(gesture(FREE_KEY), 0, 2)];
@@ -680,41 +903,67 @@ struct PatternScreen : widget::OpaqueWidget {
 			if (int n = take(PatternEditor::LANE_PARAM))
 				module->lane = (module->lane + n) % (LOCK_LANES + 1);
 			scroll(12 * (take(PatternEditor::OCTAVE_UP_PARAM) - take(PatternEditor::OCTAVE_DOWN_PARAM)));
+			Layout L(box.size);
+			if (int z = take(PatternEditor::ZOOM_IN_PARAM) - take(PatternEditor::ZOOM_OUT_PARAM))
+				setZoom(L, zoom * std::pow(1.25f, (float) z), L.gridX + L.gridW / 2);
+			// FOLLOW keeps the playhead's visit on the played roll, turning to its pass when this one doesn't show it.
+			long start, slot;
+			if (module->follow && played() && !overview() && playing(&start, &slot) && !shows(pass, start))
+				pass = std::min((int) (start / stepCount()), PASSES - 1);
 		}
 		else
 			linked = false;
 		cursorStep = clamp(cursorStep, 0, STEPS - 1);
 		cursorPitch = clamp(cursorPitch, lowest(), highest());
-		for (ToolButton* b : tools)
+		for (IconButton* b : tools)
 			b->visible = linked && !overview();
+		std::vector<Field> fields = linked && !overview() ? headerFields(Layout(box.size)) : std::vector<Field>();
+		auto roll = std::find_if(fields.begin(), fields.end(), [](const Field& f) { return std::string(f.label) == "ROLL"; });
+		for (int i = 0; i < 2; i++) {
+			switches[i]->visible = roll != fields.end();
+			if (switches[i]->visible)
+				switches[i]->box.pos = mm2px(math::Vec(roll->x + 0.8f + i * 5.f, 4.2f));
+		}
 		OpaqueWidget::step();
 	}
 
 	// The mouse
 
-	/** Where a note starts on the roll and how long it is drawn, in mm: a drone to the roll's end. */
-	void noteSpan(const Layout& L, int step, const Note& n, float* x, float* w) const {
-		int length = n.length ? n.length : settings().noteLength;
-		*x = L.gridX + (step + n.offset / (float) TICKS) * L.cw;
-		*w = length >= DRONE ? L.gridX + L.gridW - *x : std::max(length / (float) TICKS * L.cw, 0.6f);
-		*w = std::min(*w, L.gridX + L.gridW - *x);
+	/** Where note i of column c starts on the roll and how long it is drawn, in mm: where its first trigger plays it,
+	or else where it's written; a drone to the roll's end. */
+	void noteSpan(const Layout& L, const Roll& R, int c, int i, float* x, float* w) {
+		const Note& n = pattern().steps[R.cols[c].step].notes[i];
+		int e = R.cols[c].written[i], ticks = n.length ? n.length : settings().noteLength;
+		float end = L.gridX + L.gridW, length = e >= 0 ? R.events[e].tr.length : ticks >= DRONE ? INFINITY : ticks / (float) TICKS;
+		*x = e >= 0 ? R.at(R.events[e].t) : R.colX(c) + n.offset / (float) TICKS * R.slotW;
+		*w = std::isinf(length) ? end - *x : std::max(length * R.slotW, 0.6f);
+		*w = std::min(*w, end - *x);
 	}
 
-	/** The roll's cell under a point, and the note there if any. */
+	/** A trigger's span on the roll, in mm. */
+	void eventSpan(const Layout& L, const Roll& R, const Roll::Event& e, float* x, float* w) {
+		float end = L.gridX + L.gridW;
+		*x = R.at(e.t);
+		*w = std::isinf(e.tr.length) ? end - *x : std::max(e.tr.length * R.slotW, 0.5f);
+	}
+
+	/** The roll's cell under a point, and the note there if any. A note the components play answers with its written note. */
 	Hit hit(const Layout& L, math::Vec p) {
 		Hit h;
-		h.step = (int) std::floor((p.x - L.gridX) / L.cw);
-		if (p.x < L.gridX || h.step < 0 || h.step >= STEPS || p.y < L.gridY || p.y > L.gridY + L.gridH)
+		if (p.x < L.gridX || p.x > L.gridX + L.gridW || p.y < L.gridY || p.y > L.gridY + L.gridH)
 			return h;
+		Roll R = roll(L);
+		h.col = R.colAt(p.x);
+		h.step = R.cols[h.col].step;
 		h.roll = true;
 		h.pitch = low() + ROWS - 1 - (int) std::floor((p.y - L.gridY) / L.rowH);
 		const Pattern& pat = pattern();
-		for (int s = 0; s < STEPS; s++) {
-			int i = pat.steps[s].indexOf(h.pitch);
+		for (int c = 0; c < (int) R.cols.size(); c++) {
+			int s = R.cols[c].step, i = pat.steps[s].indexOf(h.pitch);
 			if (i < 0)
 				continue;
 			float x, w;
-			noteSpan(L, s, pat.steps[s].notes[i], &x, &w);
+			noteSpan(L, R, c, i, &x, &w);
 			if (p.x < x || p.x > x + std::max(w, 1.f))
 				continue;
 			h.noteStep = s;
@@ -723,27 +972,44 @@ struct PatternScreen : widget::OpaqueWidget {
 			h.edge = p.x > x + w - std::min(1.f, w / 3);
 			return h;
 		}
+		for (int e = 0; e < (int) R.events.size(); e++) {
+			const Roll::Event& ev = R.events[e];
+			const Note& n = pat.steps[ev.step].notes[ev.tr.note];
+			int top = ev.tr.spread < 0 ? ev.tr.pitch : clamp(view.scales[track()].shift(n.pitch, ev.tr.spread), 0, 127);
+			int bottom = ev.tr.spread < 0 ? ev.tr.pitch : n.pitch;
+			float x, w;
+			eventSpan(L, R, ev, &x, &w);
+			if (!R.phantom(e) || p.x < x || p.x > x + std::max(w, 1.f) || h.pitch < bottom || h.pitch > top)
+				continue;
+			h.noteStep = ev.step;
+			h.pitch = n.pitch;
+			h.phantom = true;
+			noteSpan(L, R, ev.col, ev.tr.note, &h.x, &h.w);
+			return h;
+		}
 		return h;
 	}
 
 	/** The notes of editable steps that a box in mm touches. */
 	std::vector<std::pair<int, int>> inBox(const Layout& L, math::Vec a, math::Vec b) {
 		math::Rect r = math::Rect::fromCorners(a, b);
-		std::vector<std::pair<int, int>> out;
+		std::set<std::pair<int, int>> out;
 		int lo = low(), top = lo + ROWS - 1;
 		const Pattern& pat = pattern();
-		for (int s = 0; s < STEPS; s++) {
+		Roll R = roll(L);
+		for (int c = 0; c < (int) R.cols.size(); c++) {
+			int s = R.cols[c].step;
 			if (!editable(s))
 				continue;
 			for (int i = 0; i < pat.steps[s].count; i++) {
 				const Note& n = pat.steps[s].notes[i];
 				float x, w, y = L.gridY + (top - n.pitch) * L.rowH;
-				noteSpan(L, s, n, &x, &w);
+				noteSpan(L, R, c, i, &x, &w);
 				if (n.pitch >= lo && n.pitch <= top && x < r.getRight() && x + w > r.pos.x && y < r.getBottom() && y + L.rowH > r.pos.y)
-					out.push_back({s, n.pitch});
+					out.insert({s, n.pitch});
 			}
 		}
-		return out;
+		return {out.begin(), out.end()};
 	}
 
 	void onButton(const ButtonEvent& e) override {
@@ -766,8 +1032,23 @@ struct PatternScreen : widget::OpaqueWidget {
 		drag.tool = tool();
 		if (overview())
 			return clickOverview(L, p);
-		int step = (int) std::floor((p.x - L.gridX) / L.cw);
-		if (p.x >= L.gridX && step >= 0 && step < STEPS && p.y >= L.laneY && p.y <= L.laneY + L.laneH) {
+		if (p.y < 10.f) {
+			for (const Field& f : headerFields(L))
+				if (std::string(f.label) == "PASS" && p.x >= f.x && p.x <= f.x + f.w)
+					pass = clamp(pass + (drag.mods & GLFW_MOD_SHIFT ? -1 : 1), 0, PASSES - 1);
+			return;
+		}
+		if (p.x >= L.keyX && p.x <= L.keyX + L.keyW && p.y >= L.gridY - 2.8f && p.y < L.gridY) {
+			drag.kind = ZOOM;
+			return zoomTo(L, p.x);
+		}
+		if (zoom > 1.f && p.x >= L.gridX && p.x <= L.gridX + L.gridW && p.y > L.gridY + L.gridH && p.y < L.laneY) {
+			drag.kind = SCROLL;
+			drag.scrollX = scrollX;
+			return;
+		}
+		int step = p.x >= L.gridX && p.x <= L.gridX + L.gridW ? roll(L).stepAt(p.x) : -1;
+		if (step >= 0 && p.y >= L.laneY && p.y <= L.laneY + L.laneH) {
 			if (int l = lane(); l && drag.mods == RACK_MOD_CTRL) {
 				Step s = pattern().steps[step];
 				if (editable(step) && s.locked(l - 1)) {
@@ -790,7 +1071,7 @@ struct PatternScreen : widget::OpaqueWidget {
 		drag.hit = hit(L, p);
 		if (!drag.hit.roll)
 			return;
-		cursorStep = drag.hit.step;
+		cursorStep = drag.hit.noteStep >= 0 ? drag.hit.noteStep : drag.hit.step;
 		cursorPitch = drag.hit.pitch;
 		drag.kind = PRESS;
 	}
@@ -865,7 +1146,7 @@ struct PatternScreen : widget::OpaqueWidget {
 			drag.items = {moving(h.step, h.pitch)};
 			drag.items[0].note.length = lengthOf(h.step, drag.items[0].note);
 			drag.leadLength = drag.items[0].note.length;
-			drag.hit.x = L.gridX + h.step * L.cw;
+			drag.hit.x = roll(L).colX(h.col);
 			return;
 		}
 		if (gesture(EMPTY_DRAG) == 1) {
@@ -878,7 +1159,7 @@ struct PatternScreen : widget::OpaqueWidget {
 
 	void erase(const Layout& L, math::Vec p) {
 		Hit h = hit(L, p);
-		if (h.noteStep >= 0 && editable(h.noteStep))
+		if (h.noteStep >= 0 && !h.phantom && editable(h.noteStep))
 			removeNotes({{h.noteStep, h.pitch}});
 	}
 
@@ -894,6 +1175,12 @@ struct PatternScreen : widget::OpaqueWidget {
 		drag.at = drag.at.plus(px2mm(e.mouseDelta.div(getAbsoluteZoom())));
 		drag.travel += e.mouseDelta.norm();
 		Layout L(box.size);
+		if (drag.kind == ZOOM)
+			return zoomTo(L, drag.at.x);
+		if (drag.kind == SCROLL) {
+			scrollX = clamp(drag.scrollX + (drag.at.x - drag.start.x) * zoom, 0.f, L.gridW * (zoom - 1.f));
+			return;
+		}
 		if (drag.kind == PRESS) {
 			if (drag.travel < 3.f)
 				return;
@@ -926,8 +1213,8 @@ struct PatternScreen : widget::OpaqueWidget {
 				return;
 			}
 			case MOVE: {
-				float steps = d.x / L.cw;
-				int ticks = loose ? (int) std::lround(steps * TICKS) : (int) std::lround(steps) * TICKS;
+				Roll R = roll(L);
+				int ticks = loose ? (int) std::lround(R.ticksAt(drag.at.x) - R.ticksAt(drag.start.x)) : (R.stepAt(drag.at.x) - R.stepAt(drag.start.x)) * TICKS;
 				int semitones = (int) std::lround(-d.y / L.rowH);
 				Pattern out = drag.base;
 				std::vector<std::pair<int, int>> placed;
@@ -942,7 +1229,7 @@ struct PatternScreen : widget::OpaqueWidget {
 			case LENGTH: {
 				Pattern p = pattern();
 				bool drone = drag.at.x > L.gridX + L.gridW + 1.f;
-				float ticks = (drag.at.x - drag.hit.x) / L.cw * TICKS;
+				float ticks = (drag.at.x - drag.hit.x) / roll(L).slotW * TICKS;
 				int length = loose ? (int) std::lround(ticks) : std::max(1, (int) std::lround(ticks / TICKS)) * TICKS;
 				for (const Moving& m : drag.items) {
 					Step& s = p.steps[m.step];
@@ -958,9 +1245,8 @@ struct PatternScreen : widget::OpaqueWidget {
 
 	void dragLane() {
 		Layout L(box.size);
-		int step = (int) std::floor((drag.at.x - L.gridX) / L.cw);
-		if (step >= 0 && step < STEPS)
-			setLane(step, (L.laneY + L.laneH - drag.at.y) / L.laneH);
+		if (drag.at.x >= L.gridX && drag.at.x <= L.gridX + L.gridW)
+			setLane(roll(L).stepAt(drag.at.x), (L.laneY + L.laneH - drag.at.y) / L.laneH);
 	}
 
 	void onDragEnd(const DragEndEvent& e) override {
@@ -983,6 +1269,19 @@ struct PatternScreen : widget::OpaqueWidget {
 		lastCell = cell;
 		lastClickAdded = false;
 		bool shift = drag.mods & GLFW_MOD_SHIFT;
+		if (h.phantom) {
+			// A note a component plays selects its written note.
+			std::pair<int, int> note{h.noteStep, h.pitch};
+			if (shift && selected.count(note))
+				selected.erase(note);
+			else {
+				if (!shift)
+					selected.clear();
+				selected.insert(note);
+			}
+			lastClickAt = -1.0;
+			return;
+		}
 		if (h.noteStep >= 0) {
 			std::pair<int, int> note{h.noteStep, h.pitch};
 			if (!editable(h.noteStep))
@@ -1024,9 +1323,18 @@ struct PatternScreen : widget::OpaqueWidget {
 
 	void onHoverScroll(const HoverScrollEvent& e) override {
 		// Only while the screen has the keys, so a scroll over it still moves round the rack otherwise.
-		if (!focused() || overview() || e.scrollDelta.y == 0.f)
+		if (!focused() || overview() || (e.scrollDelta.x == 0.f && e.scrollDelta.y == 0.f))
 			return;
-		scroll((e.scrollDelta.y > 0.f ? 1 : -1) * (mods() == GLFW_MOD_SHIFT ? 12 : 1));
+		// Ctrl zooms the steps, Shift or a sideways scroll moves along them, else the rows.
+		Layout L(box.size);
+		math::Vec d = e.scrollDelta;
+		float by = std::abs(d.y) >= std::abs(d.x) ? d.y : d.x, sign = by > 0.f ? 1.f : -1.f;
+		if (mods() == RACK_MOD_CTRL)
+			setZoom(L, zoom * (sign > 0.f ? 1.25f : 0.8f), clamp(px2mm(e.pos.x), L.gridX, L.gridX + L.gridW));
+		else if (mods() == GLFW_MOD_SHIFT || std::abs(d.x) > std::abs(d.y))
+			scrollX = clamp(scrollX - sign * L.gridW / 8, 0.f, L.gridW * (zoom - 1.f));
+		else
+			scroll(sign > 0.f ? 1 : -1);
 		e.consume(this);
 	}
 
@@ -1041,8 +1349,8 @@ struct PatternScreen : widget::OpaqueWidget {
 				step = (int) std::floor((p.x - L.ovX) / L.ocw);
 			}
 		}
-		else if (p.x >= L.gridX && p.y >= L.gridY)
-			step = (int) std::floor((p.x - L.gridX) / L.cw);
+		else if (p.x >= L.gridX && p.x <= L.gridX + L.gridW && p.y >= L.gridY)
+			step = roll(L).stepAt(p.x);
 		if (step < 0 || step >= STEPS || (!overview() && p.y > L.compY + L.compH))
 			return false;
 		if (!editable(step)) {
@@ -1187,6 +1495,14 @@ struct PatternScreen : widget::OpaqueWidget {
 			module->tool = POINTER;
 		else if (e.key == GLFW_KEY_E && plain)
 			module->tool = ERASER;
+		else if ((e.key == GLFW_KEY_LEFT_BRACKET || e.key == GLFW_KEY_RIGHT_BRACKET) && plain)
+			pass = clamp(pass + (e.key == GLFW_KEY_RIGHT_BRACKET ? 1 : -1), 0, PASSES - 1);
+		else if ((e.key == GLFW_KEY_U || e.key == GLFW_KEY_J) && plain)
+			toggleRoll(e.key == GLFW_KEY_J);
+		else if ((e.key == GLFW_KEY_MINUS || e.key == GLFW_KEY_EQUAL || e.key == GLFW_KEY_KP_SUBTRACT || e.key == GLFW_KEY_KP_ADD) && plain) {
+			Layout L(box.size);
+			setZoom(L, zoom * (e.key == GLFW_KEY_MINUS || e.key == GLFW_KEY_KP_SUBTRACT ? 0.8f : 1.25f), L.gridX + L.gridW / 2);
+		}
 		else if (e.key == GLFW_KEY_L && plain)
 			module->lane = (module->lane + (shift ? LOCK_LANES : 1)) % (LOCK_LANES + 1);
 		else if (e.key == GLFW_KEY_PAGE_UP || e.key == GLFW_KEY_PAGE_DOWN)
@@ -1287,6 +1603,32 @@ struct PatternScreen : widget::OpaqueWidget {
 		nvgStroke(vg);
 	}
 
+	/** A line in dashes `on` long with gaps `off` long, mm. */
+	void dashed(float x0, float y0, float x1, float y1, NVGcolor c, float on, float off, float width = 1.f) {
+		float length = std::hypot(x1 - x0, y1 - y0);
+		if (length <= 0.f)
+			return;
+		float dx = (x1 - x0) / length, dy = (y1 - y0) / length;
+		nvgBeginPath(vg);
+		for (float d = 0.f; d < length; d += on + off) {
+			float e = std::min(d + on, length);
+			nvgMoveTo(vg, mm2px(x0 + dx * d), mm2px(y0 + dy * d));
+			nvgLineTo(vg, mm2px(x0 + dx * e), mm2px(y0 + dy * e));
+		}
+		nvgStrokeColor(vg, c);
+		nvgStrokeWidth(vg, width);
+		nvgStroke(vg);
+	}
+
+	void dashedRect(float x, float y, float w, float h, NVGcolor fill, NVGcolor stroke, float on = 0.5f, float off = 0.35f) {
+		if (fill.a > 0.f)
+			rect(x, y, w, h, fill, none, 0.35f);
+		dashed(x, y, x + w, y, stroke, on, off);
+		dashed(x + w, y, x + w, y + h, stroke, on, off);
+		dashed(x + w, y + h, x, y + h, stroke, on, off);
+		dashed(x, y + h, x, y, stroke, on, off);
+	}
+
 	/** A step past the step count: dark, with faint hatching. */
 	void hatch(float x, float y, float w, float h) {
 		rect(x, y, w, h, nvgRGBA(0, 0, 0, 0x90), none, 0.f);
@@ -1367,28 +1709,55 @@ struct PatternScreen : widget::OpaqueWidget {
 		return string::uppercase(name.empty() ? string::f("P%d", l) : name.substr(0, 6));
 	}
 
-	void drawHeader(const Layout& L) {
+	struct Field {
+		float x, w;
+		const char* label;
+		std::string value;
+		NVGcolor color;
+		std::string note;
+	};
+
+	/** The header's fields, left to right; on a narrow screen the plug's goes first, so the ROLL switches stay. */
+	std::vector<Field> headerFields(const Layout& L) {
 		int t = track();
 		const Settings& s = settings();
 		Hub* h = hub();
 		bool playing = view.pattern == view.playingPattern;
 		std::string plug = h && t != MASTER ? string::uppercase(h->plugName(t)) : "-";
 		std::string length = s.noteLength >= DRONE ? "DRONE" : string::f("%g", s.noteLength / (double) TICKS);
-		struct F { float w; const char* label; std::string value; NVGcolor color; std::string note; };
-		F fields[] = {
-			{12.f, "PAT", "P" + twoDigits(view.pattern + 1), playing ? lit : ink, playing && view.playing ? ">" : ""},
-			{24.f, "TRACK", string::f("%d %s", trackNumber(t), string::uppercase(TRACK_NAMES[t]).c_str()), LANE_COLORS[t], module->follow ? "FOLLOW" : ""},
-			{21.f, "PLUG", plug.substr(0, 10), ink, ""},
-			{11.f, "STEPS", std::to_string(clamp(s.stepCount, 1, STEPS)), ink, ""},
-			{10.f, "STEP", s.stepLength ? string::f("x%d", s.stepLength) : "TRIG", ink, ""},
-			{11.f, "NOTE", length, ink, ""},
+		std::vector<Field> fields = {
+			{0.f, 12.f, "PAT", "P" + twoDigits(view.pattern + 1), playing ? lit : ink, playing && view.playing ? ">" : ""},
+			{0.f, 24.f, "TRACK", string::f("%d %s", trackNumber(t), string::uppercase(TRACK_NAMES[t]).c_str()), LANE_COLORS[t], module && module->follow ? "FOLLOW" : ""},
+			{0.f, 21.f, "PLUG", plug.substr(0, 10), ink, ""},
+			{0.f, 11.f, "STEPS", std::to_string(stepCount()), ink, ""},
+			{0.f, 10.f, "STEP", s.stepLength ? string::f("x%d", s.stepLength) : "TRIG", ink, ""},
+			{0.f, 11.f, "NOTE", length, ink, ""},
 		};
-		float x = 1.5f, y = 1.f, hh = 8.f;
-		for (const F& f : fields) {
-			field(x, y, f.w, hh, f.label, f.value, f.color, f.note);
+		if (!overview()) {
+			fields.push_back({0.f, 11.f, "ROLL", "", ink, ""});
+			if (played() && passDependent())
+				fields.push_back({0.f, 11.f, "PASS", std::to_string(pass + 1), ink, "[ ]"});
+		}
+		float total = 1.5f;
+		for (const Field& f : fields)
+			total += f.w + 1.5f;
+		if (total > L.w - 1.5f)
+			fields.erase(fields.begin() + 2);
+		float x = 1.5f;
+		for (Field& f : fields) {
+			f.x = x;
 			x += f.w + 1.5f;
 		}
-		float rest = L.w - 1.5f - x;
+		return fields;
+	}
+
+	void drawHeader(const Layout& L) {
+		int t = track();
+		std::vector<Field> fields = headerFields(L);
+		float y = 1.f, hh = 8.f;
+		for (const Field& f : fields)
+			field(f.x, y, f.w, hh, f.label, f.value, f.color, f.note);
+		float x = fields.back().x + fields.back().w + 1.5f, rest = L.w - 1.5f - x;
 		if (rest < 22.f)
 			return;
 		std::string readout = "S" + twoDigits(cursorStep + 1) + " ";
@@ -1409,11 +1778,17 @@ struct PatternScreen : widget::OpaqueWidget {
 	}
 
 	void drawRoll(const Layout& L) {
-		int t = track(), lo = low(), top = lo + ROWS - 1, steps = clamp(settings().stepCount, 1, STEPS), playhead = view.positions[t];
+		int t = track(), lo = low(), top = lo + ROWS - 1, n = stepCount();
 		const Pattern& pat = pattern();
+		const Scale& scale = view.scales[t];
 		NVGcolor color = LANE_COLORS[t];
 		bool keys = focused();
+		Roll R = roll(L);
+		float end = L.gridX + L.gridW;
 		auto rowY = [&](int pitch) { return L.gridY + (top - pitch) * L.rowH; };
+		auto mid = [&](int pitch) { return rowY(clamp(pitch, lo, top)) + L.rowH / 2; };
+		auto onRoll = [&](int pitch) { return pitch >= lo && pitch <= top; };
+		auto chosen = [&](int step, int pitch) { return editable(step) && selected.count({step, pitch}); };
 		// The keys or sounds down the side, and the rows' shading.
 		for (int p = lo; p <= top; p++) {
 			float y = rowY(p);
@@ -1425,32 +1800,94 @@ struct PatternScreen : widget::OpaqueWidget {
 			if (named && L.rowH > 1.6f)
 				text(L.keyX + L.keyW - 0.8f, y + L.rowH / 2, rowName(p), p == cursorPitch && keys ? ink : dim, std::min(2.3f, L.rowH * 0.95f), NVG_ALIGN_RIGHT);
 			if (!drum() && p % 12 == 0)
-				line(L.gridX, y + L.rowH, L.gridX + L.gridW, y + L.rowH, rule);
+				line(L.gridX, y + L.rowH, end, y + L.rowH, rule);
 		}
-		// The steps: those past the step count greyed, the playhead's lit, a line every four.
-		for (int s = 0; s < STEPS; s++) {
-			float x = L.gridX + s * L.cw;
-			if (s >= steps) {
-				hatch(x, L.gridY, L.cw, L.gridH);
-				hatch(x, L.laneY, L.cw, L.laneH);
-				hatch(x, L.compY, L.cw, L.compH);
+		// The playhead: the slot it's in on the played roll, else its step.
+		long start = -1, slot = 0;
+		int pc = -1;
+		if (played() && playing(&start, &slot)) {
+			for (int c = 0; c < (int) R.cols.size(); c++)
+				if (R.cols[c].start == start)
+					pc = c;
+		}
+		else if (!played() && view.positions[t] >= 0)
+			pc = R.colOf(view.positions[t]);
+		nvgSave(vg);
+		nvgIntersectScissor(vg, mm2px(L.gridX), 0, mm2px(L.gridW), box.size.y);
+		// The columns, as wide as the slots they play: past the step count greyed, skipped this pass darkened.
+		for (int c = 0; c < (int) R.cols.size(); c++) {
+			const Roll::Column& col = R.cols[c];
+			float x = R.colX(c), w = R.colW(c);
+			if (col.step >= n) {
+				hatch(x, L.gridY, w, L.gridH);
+				hatch(x, L.laneY, w, L.laneH);
+				hatch(x, L.compY, w, L.compH);
 			}
-			if (s == playhead)
-				rect(x, L.gridY, L.cw, L.gridH, nvgTransRGBAf(lit, 0.12f), none, 0.f);
-			line(x, L.gridY, x, L.gridY + L.gridH, s % 4 ? faint : rule);
-			text(x + L.cw / 2, L.gridY - 1.6f, std::to_string(s + 1), s == playhead ? lit : s == cursorStep && keys ? ink : dim, 2.1f, NVG_ALIGN_CENTER);
+			else if (col.skipped)
+				rect(x, L.gridY, w, L.gridH, nvgRGBA(0, 0, 0, 0x60), none, 0.f);
+			for (int j = 1; j < col.w; j++)
+				dashed(x + j * R.slotW, L.gridY, x + j * R.slotW, L.gridY + L.gridH, faint, 0.3f, 0.5f);
+			line(x, L.gridY, x, L.gridY + L.gridH, col.step % 4 && !playOrder() ? faint : rule);
+			NVGcolor number = c == pc ? lit : col.step == cursorStep && keys ? ink : col.skipped ? faint : dim;
+			text(x + w / 2, L.gridY - 1.6f, std::to_string(col.step + 1), number, 2.1f, NVG_ALIGN_CENTER);
 		}
-		rect(L.gridX, L.gridY, L.gridW, L.gridH, none, rule, 0.f);
-		if (keys && cursorPitch >= lo && cursorPitch <= top)
-			rect(L.gridX + cursorStep * L.cw, rowY(cursorPitch), L.cw, L.rowH, none, ink, 0.3f, 1.2f);
-		// The notes, those off the roll as arrows at its edge.
-		float end = L.gridX + L.gridW;
-		for (int s = 0; s < STEPS; s++)
+		if (pc >= 0) {
+			float x = played() ? R.at(R.cols[pc].x + slot - start) : R.colX(pc), w = played() ? R.slotW : R.colW(pc);
+			rect(x, L.gridY, w, L.gridH, nvgTransRGBAf(lit, 0.12f), none, 0.f);
+		}
+		drawJumps(L, R);
+		int cc = R.colOf(cursorStep);
+		if (keys && cc >= 0 && onRoll(cursorPitch))
+			rect(R.colX(cc), rowY(cursorPitch), R.colW(cc), L.rowH, none, ink, 0.3f, 1.2f);
+		nvgIntersectScissor(vg, mm2px(L.gridX), mm2px(L.gridY), mm2px(L.gridW), mm2px(L.gridH));
+		// Dotted links from each written note to the notes its components play, the glides, then those notes.
+		for (int e = 0; e < (int) R.events.size(); e++) {
+			if (!R.phantom(e))
+				continue;
+			const Roll::Event& ev = R.events[e];
+			const Note& note = pat.steps[ev.step].notes[ev.tr.note];
+			float x, w;
+			noteSpan(L, R, ev.col, ev.tr.note, &x, &w);
+			bool hot = chosen(ev.step, note.pitch);
+			dashed(x + 0.4f, mid(note.pitch), R.at(ev.t), mid(ev.tr.spread < 0 ? ev.tr.pitch : note.pitch), nvgTransRGBAf(color, hot ? 0.95f : 0.4f), 0.25f, 0.45f);
+		}
+		std::vector<int> order;
+		for (int e = 0; e < (int) R.events.size(); e++)
+			if (R.events[e].tr.spread < 0)
+				order.push_back(e);
+		std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return R.events[a].t < R.events[b].t; });
+		for (size_t i = 1; i < order.size(); i++) {
+			const Roll::Event &a = R.events[order[i - 1]], &b = R.events[order[i]];
+			if (b.tr.glide && a.t < b.t)
+				line(R.at(std::min(a.t + a.tr.length, b.t)), mid(a.tr.pitch), R.at(b.t), mid(b.tr.pitch), nvgTransRGBAf(color, 0.8f), 1.5f);
+		}
+		for (int e = 0; e < (int) R.events.size(); e++) {
+			if (!R.phantom(e))
+				continue;
+			const Roll::Event& ev = R.events[e];
+			const Note& note = pat.steps[ev.step].notes[ev.tr.note];
+			bool hot = chosen(ev.step, note.pitch);
+			float x, w;
+			eventSpan(L, R, ev, &x, &w);
+			if (ev.tr.spread >= 0) {
+				// Random: any pitch in the band.
+				float y0 = rowY(std::min(clamp(scale.shift(note.pitch, ev.tr.spread), 0, 127), top)), y1 = rowY(std::max((int) note.pitch, lo)) + L.rowH;
+				if (y1 <= y0)
+					continue;
+				dashedRect(x, y0, w, y1 - y0, nvgTransRGBAf(color, hot ? 0.25f : 0.1f), nvgTransRGBAf(color, 0.6f));
+				text(x + std::min(w, 3.f) / 2, (y0 + y1) / 2, "?", ink, 2.2f, NVG_ALIGN_CENTER);
+			}
+			else if (onRoll(ev.tr.pitch))
+				dashedRect(x, rowY(ev.tr.pitch) + 0.25f, w, L.rowH - 0.5f, ev.tr.velocity == 0 ? none : nvgTransRGBAf(color, hot ? 0.45f : 0.22f), nvgTransRGBAf(color, hot ? 1.f : 0.7f));
+		}
+		// The written notes, in each column of their step: hollow when they don't play as written; off the roll, arrows at its edge.
+		for (int c = 0; c < (int) R.cols.size(); c++) {
+			int s = R.cols[c].step;
 			for (int i = 0; i < pat.steps[s].count; i++) {
-				const Note& n = pat.steps[s].notes[i];
-				if (n.pitch < lo || n.pitch > top) {
-					bool up = n.pitch > top;
-					float x = L.gridX + (s + 0.5f) * L.cw, y = up ? L.gridY + 0.4f : L.gridY + L.gridH - 0.4f, d = up ? 1.f : -1.f;
+				const Note& note = pat.steps[s].notes[i];
+				if (!onRoll(note.pitch)) {
+					bool up = note.pitch > top;
+					float x = R.colX(c) + R.colW(c) / 2, y = up ? L.gridY + 0.4f : L.gridY + L.gridH - 0.4f, d = up ? 1.f : -1.f;
 					nvgBeginPath(vg);
 					nvgMoveTo(vg, mm2px(x - 0.9f), mm2px(y + d));
 					nvgLineTo(vg, mm2px(x + 0.9f), mm2px(y + d));
@@ -1459,23 +1896,89 @@ struct PatternScreen : widget::OpaqueWidget {
 					nvgFill(vg);
 					continue;
 				}
-				float x, w, y = rowY(n.pitch);
-				noteSpan(L, s, n, &x, &w);
-				w = std::min(w, end - x);
-				bool ghost = s >= steps, chosen = !ghost && selected.count({s, (int) n.pitch});
-				float a = ghost ? 0.18f : chosen ? 1.f : 0.8f * (0.35f + 0.65f * n.velocity / 127.f);
-				rect(x, y + 0.15f, w, L.rowH - 0.3f, nvgTransRGBAf(color, a), chosen ? nvgRGB(0xff, 0xff, 0xff) : none, 0.35f, 1.2f);
-				rect(x, y + 0.15f, 0.35f, L.rowH - 0.3f, ghost ? dim : nvgRGBA(0xff, 0xff, 0xff, 0xd0), none, 0.f);
-				if (n.length == DRONE || (!n.length && settings().noteLength >= DRONE))
+				float x, w, y = rowY(note.pitch);
+				noteSpan(L, R, c, i, &x, &w);
+				bool ghost = s >= n, picked = !ghost && chosen(s, note.pitch);
+				if (ghost || R.cols[c].written[i] >= 0) {
+					float a = ghost ? 0.18f : picked ? 1.f : 0.8f * (0.35f + 0.65f * note.velocity / 127.f);
+					rect(x, y + 0.15f, w, L.rowH - 0.3f, nvgTransRGBAf(color, a), picked ? nvgRGB(0xff, 0xff, 0xff) : none, 0.35f, 1.2f);
+					rect(x, y + 0.15f, 0.35f, L.rowH - 0.3f, ghost ? dim : nvgRGBA(0xff, 0xff, 0xff, 0xd0), none, 0.f);
+				}
+				else
+					rect(x + 0.15f, y + 0.3f, w - 0.3f, L.rowH - 0.6f, picked ? nvgTransRGBAf(color, 0.25f) : none, picked ? nvgRGB(0xff, 0xff, 0xff) : color, 0.35f, 1.2f);
+				if (note.length == DRONE || (!note.length && settings().noteLength >= DRONE))
 					text(end - 0.4f, y + L.rowH / 2, ">", glass, std::min(2.4f, L.rowH), NVG_ALIGN_RIGHT);
-				if (keys && s == cursorStep && n.pitch == cursorPitch)
+				if (keys && s == cursorStep && note.pitch == cursorPitch)
 					rect(x - 0.2f, y, w + 0.4f, L.rowH, none, nvgRGB(0xff, 0xff, 0xff), 0.4f, 1.2f);
 			}
-		if (flashStep >= 0 && system::getTime() - flashAt < 0.3)
-			rect(L.gridX + flashStep * L.cw, L.gridY, L.cw, L.gridH, nvgRGBA(0xff, 0x4d, 0x3d, 0x40), none, 0.f);
+		}
+		int fc = flashStep >= 0 && system::getTime() - flashAt < 0.3 ? R.colOf(flashStep) : -1;
+		if (fc >= 0)
+			rect(R.colX(fc), L.gridY, R.colW(fc), L.gridH, nvgRGBA(0xff, 0x4d, 0x3d, 0x40), none, 0.f);
+		nvgRestore(vg);
+		rect(L.gridX, L.gridY, L.gridW, L.gridH, none, rule, 0.f);
+		drawZoom(L);
 		drawPointer(L);
-		drawLane(L, pat, color);
-		drawComponents(L, pat);
+		drawLane(L, R, pat, color);
+		drawComponents(L, R, pat);
+	}
+
+	/** Jumps: in written order an arrow from the step to where the playhead goes next, or what decides it; in play
+	order a mark after the column. */
+	void drawJumps(const Layout& L, const Roll& R) {
+		NVGcolor color = nvgRGB(0xf2, 0xce, 0x62);
+		int n = stepCount();
+		float y = L.gridY - 0.3f;
+		for (int c = 0; c < (int) R.cols.size(); c++) {
+			const Roll::Column& col = R.cols[c];
+			if (col.jump < 0 || !col.fires || col.step >= n)
+				continue;
+			float x0 = R.colX(c) + R.colW(c) / 2;
+			if (playOrder()) {
+				line(R.colX(c) + R.colW(c), L.gridY - 2.8f, R.colX(c) + R.colW(c), L.gridY + L.gridH, nvgTransRGBAf(color, 0.7f), 1.5f);
+				continue;
+			}
+			static const int TARGETS[10] = {0, 4, 8, 12, -2, -3, -1, -4, -1, -1};
+			int k = col.jump, to = TARGETS[k] >= 0 ? TARGETS[k] % n : TARGETS[k] == -2 ? (col.step + 2) % n : TARGETS[k] == -3 ? (col.step - 1 + n) % n : TARGETS[k] == -4 ? col.step : -1;
+			int tc = to < 0 ? -1 : R.colOf(to);
+			if (tc < 0) {
+				text(x0, L.gridY - 3.4f, k == JUMP_RANDOM ? "?" : k == JUMP_ALIGN ? "ALIGN" : k == JUMP_GATE ? "GATE" : "", color, 1.8f, NVG_ALIGN_CENTER);
+				continue;
+			}
+			float x1 = to == col.step ? x0 - 0.4f : R.colX(tc) + R.colW(tc) / 2;
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, mm2px(to == col.step ? x0 + 0.4f : x0), mm2px(y));
+			if (to == col.step)
+				nvgBezierTo(vg, mm2px(x0 + 2.6f), mm2px(y - 4.f), mm2px(x0 - 2.6f), mm2px(y - 4.f), mm2px(x1), mm2px(y));
+			else
+				nvgQuadTo(vg, mm2px((x0 + x1) / 2), mm2px(y - 6.4f), mm2px(x1), mm2px(y));
+			nvgStrokeColor(vg, color);
+			nvgStrokeWidth(vg, 1.2f);
+			nvgStroke(vg);
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, mm2px(x1 - 0.5f), mm2px(y - 0.9f));
+			nvgLineTo(vg, mm2px(x1 + 0.5f), mm2px(y - 0.9f));
+			nvgLineTo(vg, mm2px(x1), mm2px(y));
+			nvgFillColor(vg, color);
+			nvgFill(vg);
+		}
+	}
+
+	/** The steps' zoom above the keys, and a scroll bar under the roll while zoomed in. */
+	void drawZoom(const Layout& L) {
+		float y = L.gridY - 1.6f, x0 = L.keyX + 2.f, x1 = L.keyX + L.keyW - 2.f, k = x0 + (x1 - x0) * (zoom - 1.f) / (ZOOM_MAX - 1.f);
+		text(L.keyX + 0.8f, y, "-", dim, 2.4f, NVG_ALIGN_CENTER);
+		text(L.keyX + L.keyW - 0.8f, y, "+", dim, 2.4f, NVG_ALIGN_CENTER);
+		line(x0, y, x1, y, rule, 1.5f);
+		line(x0, y, k, y, ink, 1.5f);
+		nvgBeginPath(vg);
+		nvgCircle(vg, mm2px(k), mm2px(y), mm2px(0.7f));
+		nvgFillColor(vg, ink);
+		nvgFill(vg);
+		if (zoom <= 1.f)
+			return;
+		rect(L.gridX, L.gridY + L.gridH + 0.35f, L.gridW, 0.8f, nvgRGBA(0xff, 0xff, 0xff, 0x0c), none, 0.4f);
+		rect(L.gridX + scrollX / zoom, L.gridY + L.gridH + 0.35f, L.gridW / zoom, 0.8f, dim, none, 0.4f);
 	}
 
 	/** What a press would do, as Rack's pointer can't change shape: the box being dragged, the note's end that sets
@@ -1495,67 +1998,109 @@ struct PatternScreen : widget::OpaqueWidget {
 		int t = tool();
 		if (h.noteStep >= 0 && t == ERASER)
 			rect(h.x, y, h.w, L.rowH, nvgRGBA(0xff, 0x4d, 0x3d, 0x70), none, 0.35f);
+		else if (h.phantom)
+			rect(h.x - 0.15f, L.gridY + (low() + ROWS - 1 - h.pitch) * L.rowH, h.w + 0.3f, L.rowH, none, nvgRGBA(0xff, 0xff, 0xff, 0x90), 0.4f, 1.f);
 		else if (h.noteStep >= 0 && h.edge)
 			rect(h.x + h.w - 0.5f, y - 0.2f, 0.5f, L.rowH + 0.4f, nvgRGB(0xff, 0xff, 0xff), none, 0.2f);
 		else if (h.noteStep >= 0)
 			rect(h.x - 0.15f, y, h.w + 0.3f, L.rowH, none, nvgRGBA(0xff, 0xff, 0xff, 0x90), 0.4f, 1.f);
-		else if (t == PEN && editable(h.step))
-			rect(L.gridX + h.step * L.cw, y, L.cw, L.rowH, nvgRGBA(0xff, 0xff, 0xff, 0x14), rule, 0.3f, 1.f);
+		else if (t == PEN && editable(h.step)) {
+			Roll R = roll(L);
+			rect(R.colX(h.col), y, R.colW(h.col), L.rowH, nvgRGBA(0xff, 0xff, 0xff, 0x14), rule, 0.3f, 1.f);
+		}
 	}
 
-	void drawLane(const Layout& L, const Pattern& pat, NVGcolor trackColor) {
+	void drawLane(const Layout& L, const Roll& R, const Pattern& pat, NVGcolor trackColor) {
 		int l = lane();
 		NVGcolor color = l ? DIAL_COLORS[(l - 1) % 4] : trackColor;
 		bool keys = focused();
-		float side = L.gridX - 2.5f;
+		float side = L.gridX - 2.5f, bottom = L.laneY + L.laneH;
 		rect(1.5f, L.laneY, side, L.laneH, nvgRGBA(0xff, 0xff, 0xff, 0x10), none, 0.5f);
 		text(1.5f + side / 2, L.laneY + 3.f, laneName(), color, 2.4f, NVG_ALIGN_CENTER);
 		if (l)
-			text(1.5f + side / 2, L.laneY + L.laneH - 2.5f, "LOCKS", dim, 2.f, NVG_ALIGN_CENTER);
+			text(1.5f + side / 2, bottom - 2.5f, "LOCKS", dim, 2.f, NVG_ALIGN_CENTER);
 		rect(L.gridX, L.laneY, L.gridW, L.laneH, none, rule, 0.f);
 		for (float f : {0.25f, 0.5f, 0.75f})
 			line(L.gridX, L.laneY + L.laneH * f, L.gridX + L.gridW, L.laneY + L.laneH * f, faint);
-		for (int s = 0; s < STEPS; s++) {
+		nvgSave(vg);
+		nvgIntersectScissor(vg, mm2px(L.gridX), mm2px(L.laneY), mm2px(L.gridW), mm2px(L.laneH));
+		for (int c = 0; c < (int) R.cols.size(); c++) {
+			int s = R.cols[c].step;
 			const Step& step = pat.steps[s];
-			float x = L.gridX + s * L.cw;
-			line(x, L.laneY, x, L.laneY + L.laneH, s % 4 ? faint : rule);
+			float x = R.colX(c), cw = std::min(R.colW(c), R.slotW);
+			line(x, L.laneY, x, bottom, s % 4 && !playOrder() ? faint : rule);
 			if (l) {
 				if (!step.locked(l - 1)) {
-					line(x + L.cw * 0.3f, L.laneY + L.laneH - 0.6f, x + L.cw * 0.7f, L.laneY + L.laneH - 0.6f, dim);
+					line(x + cw * 0.3f, bottom - 0.6f, x + cw * 0.7f, bottom - 0.6f, dim);
 					continue;
 				}
 				float v = step.lockValues[l - 1];
-				rect(x + L.cw * 0.2f, L.laneY + L.laneH * (1.f - v), L.cw * 0.6f, L.laneH * v, nvgTransRGBAf(color, 0.85f), none, 0.3f);
+				rect(x + cw * 0.2f, L.laneY + L.laneH * (1.f - v), cw * 0.6f, L.laneH * v, nvgTransRGBAf(color, 0.85f), none, 0.3f);
 				continue;
 			}
-			float bar = L.cw * 0.7f / std::max(step.count, 1);
+			// Each note's velocity, and dashed, the velocity its first trigger plays when a component changes it.
+			float bar = cw * 0.7f / std::max(step.count, 1);
 			for (int i = 0; i < step.count; i++) {
 				const Note& n = step.notes[i];
-				float v = n.velocity / 127.f;
+				float v = n.velocity / 127.f, bx = x + cw * 0.15f + i * bar + 0.1f;
 				bool cursor = keys && s == cursorStep && n.pitch == cursorPitch, chosen = selected.count({s, (int) n.pitch}) && editable(s);
-				rect(x + L.cw * 0.15f + i * bar + 0.1f, L.laneY + L.laneH * (1.f - v), bar - 0.2f, L.laneH * v,
+				rect(bx, L.laneY + L.laneH * (1.f - v), bar - 0.2f, L.laneH * v,
 					nvgTransRGBAf(color, chosen || cursor ? 1.f : 0.55f), chosen ? nvgRGB(0xff, 0xff, 0xff) : none, 0.2f, 1.2f);
+				for (const Roll::Event& e : R.events) {
+					if (e.col != c || e.tr.note != i || !e.tr.first || e.tr.velocity == n.velocity)
+						continue;
+					if (e.tr.velocity == 0)
+						text(bx + (bar - 0.2f) / 2, bottom - 1.3f, "×", ink, 2.4f, NVG_ALIGN_CENTER);
+					else {
+						float pv = e.tr.velocity < 0 ? 1.f : e.tr.velocity / 127.f;
+						dashedRect(bx, L.laneY + L.laneH * (1.f - pv), bar - 0.2f, L.laneH * pv, e.tr.velocity < 0 ? nvgTransRGBAf(color, 0.12f) : none, ink, 0.4f, 0.3f);
+					}
+					break;
+				}
 			}
 		}
+		// The later triggers of a wide step, faint where they play.
+		if (!l)
+			for (int e = 0; e < (int) R.events.size(); e++) {
+				const Roll::Event& ev = R.events[e];
+				if (!R.phantom(e) || ev.tr.velocity <= 0 || ev.t - R.cols[ev.col].x < 1.f)
+					continue;
+				float v = ev.tr.velocity / 127.f;
+				rect(R.at(ev.t) + 0.1f, L.laneY + L.laneH * (1.f - v), R.slotW * 0.12f, L.laneH * v, nvgTransRGBAf(color, 0.3f), none, 0.1f);
+			}
+		nvgRestore(vg);
 	}
 
-	/** Each step's components, by short name: the first, and + for more. A right-click on the step sets them. */
-	void drawComponents(const Layout& L, const Pattern& pat) {
+	/** Each step's components, by short name and value key: as many as fit, then how many more. A right-click on the
+	step sets them; dim while the component spark holds them back this pass. */
+	void drawComponents(const Layout& L, const Roll& R, const Pattern& pat) {
 		static const char* const NAMES[COMPONENTS_LEN] = {"PLS", "PHD", "MUL", "VEL", "R+", "R-", "RND", "POR", "SWP", "TON", "JMP", "P*", "C*", "T*"};
 		rect(1.5f, L.compY, L.gridX - 2.5f, L.compH, nvgRGBA(0xff, 0xff, 0xff, 0x10), none, 0.5f);
 		text(1.5f + (L.gridX - 2.5f) / 2, L.compY + L.compH / 2, "COMP", dim, 2.1f, NVG_ALIGN_CENTER);
-		for (int s = 0; s < STEPS; s++) {
-			const Step& step = pat.steps[s];
+		float size = std::min(2.1f, R.slotW * 0.32f);
+		nvgSave(vg);
+		nvgIntersectScissor(vg, mm2px(L.gridX), mm2px(L.compY), mm2px(L.gridW), mm2px(L.compH));
+		nvgFontSize(vg, mm2px(size));
+		for (int c = 0; c < (int) R.cols.size(); c++) {
+			const Step& step = pat.steps[R.cols[c].step];
 			if (!step.components)
 				continue;
-			int first = 0;
-			while (!step.has(first))
-				first++;
-			float x = L.gridX + s * L.cw;
-			rect(x + 0.3f, L.compY + 0.3f, L.cw - 0.6f, L.compH - 0.6f, nvgRGBA(0xff, 0xff, 0xff, 0x14), none, 0.4f);
-			bool more = step.components & ~(1u << first);
-			text(x + L.cw / 2, L.compY + L.compH / 2, std::string(NAMES[first]) + (more ? "+" : ""), ink, std::min(2.3f, L.cw * 0.32f), NVG_ALIGN_CENTER);
+			std::vector<std::string> parts;
+			for (int k = 0; k < COMPONENTS_LEN; k++)
+				if (step.has(k))
+					parts.push_back(string::f("%s%d", NAMES[k], (step.key(k) + 1) % 10));
+			size_t all = parts.size();
+			float x = R.colX(c), w = R.colW(c);
+			auto label = [&] { return string::join(parts, " ") + (parts.size() < all ? string::f(" +%d", (int) (all - parts.size())) : ""); };
+			std::string s = label();
+			while (parts.size() > 1 && px2mm(nvgTextBounds(vg, 0, 0, s.c_str(), NULL, NULL)) > w - 1.f) {
+				parts.pop_back();
+				s = label();
+			}
+			rect(x + 0.3f, L.compY + 0.3f, w - 0.6f, L.compH - 0.6f, nvgRGBA(0xff, 0xff, 0xff, 0x14), none, 0.4f);
+			text(x + w / 2, L.compY + L.compH / 2, s, R.cols[c].fires ? ink : dim, size, NVG_ALIGN_CENTER);
 		}
+		nvgRestore(vg);
 	}
 
 	void drawOverview(const Layout& L) {
@@ -1657,7 +2202,8 @@ struct ResizeHandle : widget::OpaqueWidget {
 struct PatternEditorWidget : ModuleWidget {
 	static constexpr float BEZEL_X = 3.f, BEZEL_Y = 11.f, BEZEL_H = 93.f, ROW_Y = 115.5f, LABEL_Y = 108.6f;
 	static constexpr float CAP_HEIGHT = 0.705f; // Nunito Bold's, of its em
-	static constexpr float VIEW_X = 12.f, FOLLOW_X = 26.f, LANE_X = 40.f, DOWN_X = 56.f, UP_X = 68.f;
+	static constexpr float VIEW_X = 12.f, FOLLOW_X = 26.f, LANE_X = 40.f;
+	static constexpr float KEY_X[4] = {56.f, 68.f, 82.f, 94.f}; // octave down and up, zoom out and in
 
 	PatternScreen* screen;
 	JogWheel* wheel;
@@ -1681,11 +2227,10 @@ struct PatternEditorWidget : ModuleWidget {
 		addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(mm2px(math::Vec(FOLLOW_X, ROW_Y)), module, PatternEditor::FOLLOW_PARAM, PatternEditor::FOLLOW_LIGHT));
 		addParam(createLightParamCentered<VCVLightBezel<RedGreenBlueLight>>(mm2px(math::Vec(LANE_X, ROW_Y)), module, PatternEditor::LANE_PARAM, PatternEditor::LANE_LIGHT));
 		float d = keyDiameter();
-		static const char* const symbols[2] = {"minus", "plus"};
-		for (int k = 0; k < 2; k++) {
+		for (int k = 0; k < 4; k++) {
 			RoundKey* key = createLightParam<RoundKey>(math::Vec(), module, PatternEditor::OCTAVE_DOWN_PARAM + k, PatternEditor::KEY_LIGHT + 3 * k);
-			float x = k ? UP_X : DOWN_X;
-			key->setRing(math::Rect(mm2px(math::Vec(x - d / 2, ROW_Y - d / 2)), mm2px(math::Vec(d, d))), symbols[k]);
+			float x = KEY_X[k];
+			key->setRing(math::Rect(mm2px(math::Vec(x - d / 2, ROW_Y - d / 2)), mm2px(math::Vec(d, d))), k % 2 ? "plus" : "minus");
 			addParam(key);
 		}
 
@@ -1765,13 +2310,13 @@ struct PatternEditorWidget : ModuleWidget {
 			};
 			text(w / 2, 6.3f, "pattern editor", 5.2f, title);
 			text(w / 2, HEIGHT - 2.54f, "un1tz3r0", 2.3f, footer);
-			const std::pair<float, const char*> labels[] = {{VIEW_X, "VIEW"}, {FOLLOW_X, "FOLLOW"}, {LANE_X, "LANE"}, {(DOWN_X + UP_X) / 2, "OCTAVE"}, {w - 14.f, "PATTERN"}};
+			const std::pair<float, const char*> labels[] = {{VIEW_X, "VIEW"}, {FOLLOW_X, "FOLLOW"}, {LANE_X, "LANE"}, {(KEY_X[0] + KEY_X[1]) / 2, "OCTAVE"}, {(KEY_X[2] + KEY_X[3]) / 2, "ZOOM"}, {w - 14.f, "PATTERN"}};
 			for (auto [x, label] : labels)
 				text(x, LABEL_Y, label, 2.4f, ink);
 		}
-		// The octave keys' rings, printed as the Sequencer's are.
+		// The octave and zoom keys' rings, printed as the Sequencer's are.
 		float d = keyDiameter(), ring = 0.3f * 2.16f;
-		for (float x : {DOWN_X, UP_X}) {
+		for (float x : KEY_X) {
 			nvgBeginPath(vg);
 			nvgCircle(vg, mm2px(x), mm2px(ROW_Y), mm2px((d - ring) / 2));
 			nvgStrokeColor(vg, ink);

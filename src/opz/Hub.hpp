@@ -96,6 +96,8 @@ struct PatternView {
 	Pattern lanes[LANES];
 	Settings settings[LANES];
 	int positions[LANES];          // the step each lane's playhead is on, or -1
+	long slots[LANES];             // the slot it's in, counted from the pattern's start, or -1
+	Scale scales[LANES];           // the scale each lane's ramps walk
 };
 
 struct Hub {
