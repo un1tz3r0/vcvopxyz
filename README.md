@@ -42,6 +42,14 @@ modules, put a **breakout** to the Sequencer's right. A **Screen** in the same r
 The modules in the row need no cables between them. [How it works](docs/how-it-works.md) explains the rest.
 [Patch recipes](docs/recipes.md) use it with MIDI, clocks, recorders and other modules, each with a demo patch.
 
+### More than an OP-Z: the Pattern Editor
+
+<img alt="The Pattern Editor in track view: the bass notes of a pattern on a roll, with the notes that step components add shown as dashed boxes, a jump arc over steps 13 to 15, and the velocity lane and component tags below" src="docs/assets/pattern-editor/played-roll.png">
+
+The OP-Z has no screen. The **Pattern Editor** gives its patterns a large one. Draw, move and delete notes with the
+mouse, edit velocity and parameter locks in a lane, and set step components from a menu. The played roll shows the
+notes that the components add, before you hear them. [Pattern Editor](docs/pattern-editor.md) tells how to use it.
+
 ## License
 
 MIT, see [LICENSE](LICENSE). The Nunito font in `res-src/fonts` (SIL Open Font License) is used only to generate

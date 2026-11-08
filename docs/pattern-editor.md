@@ -7,6 +7,8 @@ edits it with the mouse and the computer keyboard. Put it to the Sequencer's lef
 To change its width, drag its left edge. Its right edge stays against the Sequencer. It is 24 to 64 HP wide, and
 32 HP when you add it.
 
+<img alt="The Pattern Editor in track view with the played roll on" src="assets/pattern-editor/played-roll.png">
+
 ## The two views
 
 Click **VIEW** to change between the views. **VIEW** lights in the overview.
