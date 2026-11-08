@@ -996,4 +996,137 @@ struct Player {
 	}
 };
 
+/** What a lane's playhead plays, worked out ahead of it for the Pattern Editor, as Player::enterStep and
+Player::schedule play it: each visit to a step from the pattern's start, the slots the playhead stays there, and every
+note it triggers. A pass is a step count's worth of slots, as the sparks count them. A random amount counts as 1 and a
+random jump follows a fixed seed; a random pitch and a random velocity are left open. Keep it in step with the Player. */
+struct Playthrough {
+	struct Trigger {
+		int note;               // its index in the step
+		int pitch, velocity;    // velocity 0 when muted, -1 when random
+		int spread = -1;        // a random pitch's degrees up from the note's, or -1
+		float t, length;        // slots from the visit's start; a drone's length is INFINITY
+		bool first, glide;
+	};
+	struct Visit {
+		int step, slots, jump;  // jump: the jump component's key, or -1
+		long start;             // slots from the pattern's start
+		bool fires, notesOn;    // the component spark and the trigger spark
+		std::vector<Trigger> triggers;
+	};
+
+	Pattern pattern;
+	int stepCount = STEPS, noteLength = TICKS;
+	Scale scale;
+	std::vector<Visit> visits;
+	long slot = 0;
+	int position = -1, jump = -1, ramps[3][10] = {};
+	uint64_t seed = 1;
+
+	/** Starts over when the pattern or what it plays by has changed. */
+	void use(const Pattern& p, const Settings& s, const Scale& sc) {
+		int count = std::clamp(s.stepCount, 1, STEPS);
+		if (p == pattern && count == stepCount && s.noteLength == noteLength && sc.key == scale.key && sc.mode == scale.mode && !visits.empty())
+			return;
+		*this = Playthrough();
+		pattern = p;
+		stepCount = count;
+		noteLength = s.noteLength;
+		scale = sc;
+	}
+
+	int random(int n) {
+		seed = seed * 16807 % 2147483647;
+		return int(seed % n);
+	}
+
+	/** Plays on until a visit starts at or after `upTo`. */
+	const std::vector<Visit>& run(long upTo) {
+		while (slot < upTo)
+			visit();
+		return visits;
+	}
+
+	void visit() {
+		int n = stepCount, from = position, to;
+		switch (from < 0 ? -1 : jump) {
+			case JUMP_START: to = 0; break;
+			case JUMP_2_4: to = 4; break;
+			case JUMP_3_4: to = 8; break;
+			case JUMP_4_4: to = 12; break;
+			case JUMP_FORWARD: to = from + 2; break;
+			case JUMP_BACK: to = from - 1 + n; break;
+			case JUMP_RANDOM: to = random(n); break;
+			case JUMP_STAY: to = from; break;
+			case JUMP_ALIGN: to = int(slot % n); break;
+			default: to = from + 1; break;
+		}
+		position = to % n;
+		const Step& step = pattern.steps[position];
+		auto sparked = [&](int c) {
+			if (!step.has(c) || step.key(c) >= 8)
+				return true;
+			int value = step.values[c], k = int(slot / n % (step.key(c) + 1)), last = step.key(c);
+			switch (value >> 4) {
+				case 0: return k == last;
+				case 1: return k == 0;
+				case 2: return k != last;
+				default: return k != 0;
+			}
+		};
+		Visit v;
+		v.step = position;
+		v.start = slot;
+		v.fires = sparked(COMPONENT_SPARK);
+		v.notesOn = sparked(TRIGGER_SPARK);
+		auto on = [&](int c) { return v.fires && step.has(c); };
+		auto amount = [&](int c) { return step.key(c) == 9 ? 1 : step.key(c) + 1; };
+		int hold = on(PULSE_HOLD) ? amount(PULSE_HOLD) : 0;
+		v.slots = hold ? hold : on(PULSE) ? amount(PULSE) : 1;
+		v.jump = jump = on(JUMP) ? step.key(JUMP) : -1;
+		int multiply = on(MULTIPLY) && step.key(MULTIPLY) < 8 ? step.key(MULTIPLY) + 1 : 1;
+		bool broken = on(MULTIPLY) && step.key(MULTIPLY) == 8, grid = on(MULTIPLY) && step.key(MULTIPLY) == 9;
+		int velocityKey = on(VELOCITY) ? step.key(VELOCITY) : 4;
+		for (int j = 0; j < v.slots; j++) {
+			if (!v.notesOn || (hold && j))
+				continue;
+			for (int r = 0; r < multiply; r++) {
+				int shift = 0, spread = -1;
+				for (int c : {RAMP_UP, RAMP_DOWN, RANDOM}) {
+					if (!on(c))
+						continue;
+					int key = step.key(c), octaves = key < 5 ? 1 : 3, size;
+					const int* degrees = rampDegrees(key % 5 + 2, &size);
+					auto up = [&](int i) { return degrees[i % size] + 7 * (i / size); };
+					int walk = size * octaves + 1;
+					if (c == RANDOM) {
+						spread = up(walk - 1);
+						continue;
+					}
+					int i = ramps[c - RAMP_UP][key]++ % walk;
+					shift = c == RAMP_DOWN ? up(walk - 1 - i) - 7 * octaves : up(i);
+				}
+				for (int i = 0; i < step.count; i++) {
+					const Note& note = step.notes[i];
+					int ticks = note.length ? note.length : noteLength;
+					Trigger t;
+					t.note = i;
+					t.pitch = std::clamp(scale.shift(note.pitch, shift), 0, 127);
+					t.velocity = velocityKey == 9 ? -1 : velocityKey == 8 ? 0 : std::clamp(note.velocity + 16 * (velocityKey - 4), 1, 127);
+					t.spread = spread;
+					t.t = j + (broken ? float(i) / step.count : float(r) / multiply) + (grid ? 0.f : note.offset / float(TICKS));
+					t.length = hold ? float(hold) : ticks >= DRONE ? INFINITY : ticks / float(TICKS);
+					if (multiply > 1)
+						t.length = std::min(t.length, 1.f / multiply);
+					t.first = !j && !r;
+					t.glide = on(PORTAMENTO);
+					v.triggers.push_back(t);
+				}
+			}
+		}
+		visits.push_back(std::move(v));
+		slot += visits.back().slots;
+	}
+};
+
 } // namespace opz

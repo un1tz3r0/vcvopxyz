@@ -1446,6 +1446,8 @@ struct Sequencer : Module, Hub {
 				v.lanes[t] = lanes[t].pattern;
 				v.settings[t] = lanes[t].settings;
 				v.positions[t] = playing ? lanes[t].player.position : -1;
+				v.slots[t] = playing ? lanes[t].player.slotsPlayed - lanes[t].player.passOrigin - 1 : -1;
+				v.scales[t] = lanes[t].player.tonality.scale;
 				continue;
 			}
 			const Project::Part& part = scenes[p].parts[t];
@@ -1456,6 +1458,8 @@ struct Sequencer : Module, Hub {
 			v.settings[t].noteLength = NOTE_LENGTHS[part.noteLength];
 			v.settings[t].quantize = part.quantize;
 			v.positions[t] = -1;
+			v.slots[t] = -1;
+			v.scales[t] = lanes[t].player.tonality.scale;
 		}
 		return true;
 	}

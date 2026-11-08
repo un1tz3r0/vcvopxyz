@@ -20,7 +20,8 @@ In both views, steps past the track's step count are grey and have lines across 
 step that plays has a green background.
 
 The boxes at the top show the pattern, the track, its plug, and the track's step count, step length and note length.
-**CURSOR** shows the step and the note at the cursor.
+In track view, **ROLL** has two switches for the [played roll](#see-what-the-components-play), and **PASS** shows the
+pass. **CURSOR** shows the step and the note at the cursor.
 
 ## Edit with the mouse
 
@@ -126,9 +127,42 @@ on the note at the cursor.
 | P, D, E | Choose the Pointer, the Pen or the Eraser. |
 | V | Changes the view. |
 | L, Shift+L | Show the next or the previous lane. |
+| U, J | Turn the played roll on or off. Put its steps in written order or in play order. |
+| [ and ] | Show the pass before or the next pass. |
+| - and = | Zoom the steps out or in. |
 | Page Up, Page Down | Move the roll one octave. |
 
-When the screen has the keyboard, the mouse wheel moves the roll one semitone. Hold Shift to move it one octave.
+When the screen has the keyboard, the mouse wheel moves the roll one semitone. Hold Ctrl to zoom the steps. Hold
+Shift to move along the steps when they are zoomed in.
+
+## See what the components play
+
+The roll shows what the [step components](steps.md) play. This is the played roll. Click the left **ROLL** switch, or
+press U, to turn it off or on. With it off, the roll shows only the written notes on a grid of 16 equal steps.
+
+On the played roll:
+
+| What you see | What it means |
+| --- | --- |
+| A wide step | Pulse and pulse hold make a step as wide as the slots that it plays. A dotted line divides the slots. |
+| A solid note | A written note that plays as it is written. |
+| A hollow note | A written note that does not play as it is written. A ramp or random moves it, the velocity component mutes it, or a trigger spark stops it on this pass. |
+| A dashed note | A note that a component adds: a pulse, a ratchet, or the next note of a ramp. A dotted line connects it to its written note. Click it to select the written note. |
+| A band with **?** | Random: the note can be at any pitch in the band. |
+| A yellow arc | Jump: the step that the playhead goes to after this step. |
+| A slanted line | Portamento: the glide into the note. |
+| A dark step | The playhead does not go to this step on this pass, because of a jump. |
+| A dashed bar in the velocity lane | The velocity that plays when the velocity component changes it. A **×** shows a muted note. |
+
+Ramps, sparks and jumps can play differently on each pass. A pass is as many slots as the track's step count. When
+they do, **PASS** shows which pass the roll shows. Click **PASS** or press ] to show the next pass. Shift+click it or
+press [ to show the pass before. When **FOLLOW** is lit, **PASS** follows the playhead.
+
+The right **ROLL** switch, or J, puts the steps in the order that the playhead plays them on the pass. A step can then
+show more than one time, and a yellow line shows a jump. The roll uses the scale of the master track for ramps.
+
+Zoom the steps with the slider above the keys, the **ZOOM** keys, Ctrl and the mouse wheel, or the - and = keys. When
+the steps are zoomed in, drag the bar below the roll to move along them.
 
 ## The lane
 
@@ -142,9 +176,10 @@ A step with no lock on that dial shows a short line.
 | Control | What it does |
 | --- | --- |
 | **VIEW** | Changes between track view and the overview. |
-| **FOLLOW** | When it is lit, the screen shows the track that the Sequencer selects. A track that you choose on the screen is then also selected on the Sequencer. |
+| **FOLLOW** | When it is lit, the screen shows the track that the Sequencer selects. A track that you choose on the screen is then also selected on the Sequencer. The played roll also shows the pass that plays. |
 | **LANE** | Shows velocity, or the locks of the next dial. |
 | **OCTAVE -** and **+** | Move the roll one octave down or up. A drum track's roll does not move. |
+| **ZOOM -** and **+** | Zoom the steps out or in. |
 | **PATTERN** wheel | Shows a different pattern of the 16. Drag it up or down, or scroll on it. |
 
 The screen shows the pattern that plays, and follows a change of pattern. After you turn **PATTERN** to a different
