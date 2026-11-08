@@ -44,7 +44,7 @@ The modules in the row need no cables between them. [How it works](docs/how-it-w
 
 ### More than an OP-Z: the Pattern Editor
 
-<img alt="The Pattern Editor in track view: the bass notes of a pattern on a roll, with the notes that step components add shown as dashed boxes, a jump arc over steps 13 to 15, and the velocity lane and component tags below" src="docs/assets/pattern-editor/played-roll.png">
+<img alt="A Pattern Editor to the left of a playing Sequencer. It shows the lead track on a roll: the notes, the notes that step components add as dashed boxes, a jump arc over steps 14 to 16, and the velocity lane and component tags below" src="docs/assets/pattern-editor/with-sequencer.png">
 
 The OP-Z has no screen. The **Pattern Editor** gives its patterns a large one. Draw, move and delete notes with the
 mouse, edit velocity and parameter locks in a lane, and set step components from a menu. The played roll shows the
