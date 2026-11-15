@@ -37,5 +37,6 @@ The black keys are ten **mute groups**. Each mute group holds its own set of mut
 mute group. The display shows its number.
 
 Each [pattern](project.md#patterns) has its own ten mute groups, and remembers the one it uses. When you go to
-another pattern, its mutes come back as you left them. Thus a [chain](project.md#chains) can change the mutes from
-pattern to pattern. A new pattern starts with no mutes, and a copy of a pattern gets its mutes.
+another pattern, its mutes return to how you left them. Thus a [chain](project.md#chains) can change the mutes from
+pattern to pattern. A new pattern starts with no mutes, and a copy of a pattern gets its mutes. To copy only the mutes to other patterns, see
+[Copy a pattern](project.md#copy-a-pattern).

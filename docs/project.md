@@ -61,8 +61,17 @@ With a [Song Editor](song-editor.md), each saved chain is a song, with up to 99 
 ## Copy a pattern
 
 1. Latch **PROJECT**, then click **SHIFT**. The Sequencer copies the pattern that plays. SHIFT and the steps blink.
-2. Click each step that gets a copy.
-3. Click **SHIFT** again to stop.
+2. To paste less of the pattern, click **SHIFT** again. Each click goes to the next item in the table below, and the
+   display shows which one you have.
+3. Click each step that gets a copy.
+4. Click **SHIFT** until the display shows the project slot again, to stop.
+
+| Clicks | Display | What the steps paste |
+| --- | --- | --- |
+| 1 | **PAt** | All of the pattern: notes, settings, dials, mutes and tempo. |
+| 2 | **SEt** | The pattern's settings: each track's step count, step length, note length, quantize, polyphony, plug and dials, and the tempo. The notes stay. |
+| 3 | **t 5** | Only the track that was selected when you copied (here, track 5): its notes, settings and dials. |
+| 4 | **GrP** | Only the [mutes](mixer.md#mute-groups): all ten mute groups and the group in use. The black keys blink too. |
 
 A paste over the pattern that plays is one step of Rack's undo for each track that it changes.
 

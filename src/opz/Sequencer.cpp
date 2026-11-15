@@ -503,8 +503,11 @@ struct Sequencer : Module, Hub {
 	double patternStart = 0.0;      // the song time the pattern playing started at, for the chain to move on from
 	bool chaining = false;          // PLAY in project mode: the steps build a new chain
 	int chained = 0;                // patterns picked for it so far
-	bool copying = false;           // SHIFT in project mode copied the pattern: the steps paste it
-	Project::Scene clipboard;
+	// SHIFT clicks in project mode copy the pattern, then step through what the steps paste of it: all of it, its
+	// settings and dials, the selected track, or its mutes; then put the copy away.
+	enum Copy { NO_COPY, COPY_PATTERN, COPY_SETTINGS, COPY_TRACK, COPY_MUTES, COPIES_LEN };
+	int copying = NO_COPY, pasting = NO_COPY, copiedTrack = 0;
+	Project::Scene clipboard, pasted;
 	// What the project mode keys asked for, done when the slots' lock is free: patterns picked, a white key's chain
 	// to play or save over, pastes, going back to the chain's first pattern, and clearing every pattern.
 	int picks[CHAIN_LENGTH] = {}, picked = 0;
@@ -1671,6 +1674,34 @@ struct Sequencer : Module, Hub {
 		switchPattern(q);
 	}
 
+	/** What the copy pasted takes from the clipboard into a scene. */
+	void paste(Project::Scene& to) {
+		const Project::Scene& from = clipboard;
+		switch (pasting) {
+			case COPY_PATTERN:
+				to = from;
+				break;
+			case COPY_SETTINGS:
+				for (int t = 0; t < LANES; t++) {
+					Project::Part& part = to.parts[t];
+					Pattern steps = part.pattern;
+					part = from.parts[t];
+					part.pattern = steps;
+				}
+				to.tempo = from.tempo;
+				break;
+			case COPY_TRACK:
+				to.parts[copiedTrack] = from.parts[copiedTrack];
+				break;
+			case COPY_MUTES:
+				std::copy(std::begin(from.mutes), std::end(from.mutes), to.mutes);
+				std::copy(std::begin(from.audioMutes), std::end(from.audioMutes), to.audioMutes);
+				to.muteGroup = from.muteGroup;
+				break;
+		}
+		to.used = true;
+	}
+
 	/** What the project mode keys asked for. With the slots locked. */
 	void handlePatternRequests() {
 		for (int i = 0; i < picked; i++)
@@ -1690,9 +1721,17 @@ struct Sequencer : Module, Hub {
 			switchPattern(chain.patterns[chainAt]);
 		rewound = false;
 		// A paste over the pattern playing is an edit of each track, for the undo history; over another, it isn't.
-		for (int i = 0; i < PATTERN_COUNT; i++)
-			if (pastes >> i & 1)
-				i == pattern ? recallScene(clipboard) : (void) (scenes[i] = clipboard);
+		for (int i = 0; i < PATTERN_COUNT; i++) {
+			if (!(pastes >> i & 1))
+				continue;
+			if (i != pattern)
+				paste(scenes[i]);
+			else {
+				storeScene(pasted);
+				paste(pasted);
+				recallScene(pasted);
+			}
+		}
 		pastes = 0;
 		if (clearAll) {
 			if (songMode)
@@ -2165,8 +2204,10 @@ struct Sequencer : Module, Hub {
 				// A step plays its pattern, adds it to the chain being built, or takes the pattern copied.
 				if (e != KeyGesture::PRESS)
 					return;
-				if (copying)
+				if (copying) {
 					pastes |= 1 << i;
+					pasting = copying;
+				}
 				else if (picked < CHAIN_LENGTH)
 					picks[picked++] = i;
 			}
@@ -2200,10 +2241,12 @@ struct Sequencer : Module, Hub {
 				if (shifted)
 					shifted = false;
 				else if (projectMode) {
-					// Copies the pattern playing, for the steps to paste, or puts the copy away.
-					copying = !copying;
-					if (copying)
+					// Copies the pattern playing, for the steps to paste, then less of it, then puts the copy away.
+					copying = (copying + 1) % COPIES_LEN;
+					if (copying == COPY_PATTERN) {
 						storeScene(clipboard);
+						copiedTrack = track;
+					}
 				}
 				else
 					requestPage(NEXT_PAGE);
@@ -2710,8 +2753,9 @@ struct Sequencer : Module, Hub {
 		}
 		else if (projectMode) {
 			keyColor = led::WHITE;
+			// Copying mutes only, they blink with the steps.
 			for (int v = 0; v < PROJECTS; v++)
-				level[valueKey(v)] = v == project ? 1.f : projects[v].used ? 0.3f : 0.05f;
+				level[valueKey(v)] = copying == COPY_MUTES ? (on ? 1.f : 0.1f) : v == project ? 1.f : projects[v].used ? 0.3f : 0.05f;
 			for (int c = 0; c < SAVED_CHAINS; c++)
 				level[componentKey(c)] = !chains[c].length ? 0.f : chains[c] == chain ? 1.f : 0.3f;
 		}
@@ -2832,6 +2876,9 @@ struct Sequencer : Module, Hub {
 		}
 		if (projectMode && chaining)
 			return string::f("C%2d", std::min(chained, CHAIN_LENGTH));
+		if (projectMode && copying)
+			return copying == COPY_PATTERN ? "PAt" : copying == COPY_SETTINGS ? "SEt"
+				: copying == COPY_TRACK ? string::f("t%2d", trackNumber(copiedTrack)) : "GrP";
 		if (projectMode)
 			return string::f("P%2d", project + 1);
 		if (mixerMode)

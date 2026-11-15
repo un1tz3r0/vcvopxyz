@@ -336,7 +336,7 @@ Vic made to keep (2026-10-21).
 - **Delay time** is set by notes, as the guide has the reverb's predelay set; the guide doesn't say this of the
   delay.
 - **Not modelled:** tracks 11 and 13 to 16 (tape, perform, module, lights, motion), punch-in effects, linked tracks,
-  temporary tweaks with SHIFT, record arm, super panic, pitch bend, copying a pattern's settings or a track, bounce,
+  temporary tweaks with SHIFT, record arm, super panic, pitch bend, bounce,
   snapshots, tempo lock, the master track's effects page, sampling and MIDI settings.
 
 ## Choices made where the OP-Z guide is silent
