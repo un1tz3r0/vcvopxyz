@@ -82,6 +82,10 @@ under the slots' lock and copies back to `chains[songSlot]`; its screen reads th
 `Hub::songView`, which only try-locks, keeping the last copy when the lock is busy. Each pattern's scene keeps its
 tempo; the song's tempo, when set, overrides it, and CLOCK overrides both.
 
+Since 2.1.17, each scene also keeps its ten mute groups (`Scene::mutes`, `audioMutes`): the Sequencer's own `mutes`
+are the playing pattern's, stored and recalled with it like its notes. A project or patch saved before then has no
+`mutesPerPattern` key, and its one set of mutes goes to every pattern on load.
+
 ## Tracks
 
 `src/opz/TrackCore.hpp`. `TrackCore` is every track, drum, synth or FX: the tempo, gate edges, the LFO, the

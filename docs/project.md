@@ -20,7 +20,7 @@ A **pattern** holds every track. For each track, it holds:
 - the step count, step length, note length, quantize and polyphony,
 - the plug slot that the track plays, and its dials.
 
-A pattern also holds the mixer's mute group and its [tempo](song-editor.md#each-patterns-tempo).
+A pattern also holds the mixer's [mutes and mute groups](mixer.md#mute-groups) and its [tempo](song-editor.md#each-patterns-tempo).
 
 In project mode, the steps show the patterns. The pattern that plays lights white, and patterns with notes light
 dimly.
@@ -72,7 +72,7 @@ A project slot holds everything that makes a song:
 
 - the 16 patterns, the chain that plays and the saved chains,
 - the tempo, the swing and the metronome,
-- the mixer's levels and its ten mute groups,
+- the mixer's levels,
 - the master track and the tracks that it moves.
 
 The black keys light dim for the project slots in use, and bright for the one that plays.

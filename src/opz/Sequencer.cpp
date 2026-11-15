@@ -1101,7 +1101,7 @@ struct Sequencer : Module, Hub {
 	}
 
 	/** The pattern playing into a scene: each track's steps and settings, the dials of the engine playing it, and the
-	mute group. */
+	mute groups. */
 	void storeScene(Project::Scene& scene) {
 		for (int t = 0; t < LANES; t++) {
 			Project::Part& part = scene.parts[t];
@@ -1116,6 +1116,8 @@ struct Sequencer : Module, Hub {
 			for (int i = 0; part.hasSound && i < SOUND_PARAMS; i++)
 				part.sound[i] = paramQuantities[trackParam(t, i)]->getScaledValue();
 		}
+		std::copy(std::begin(mutes), std::end(mutes), scene.mutes);
+		std::copy(std::begin(audioMutes), std::end(audioMutes), scene.audioMutes);
 		scene.muteGroup = heldMuteGroup >= 0 ? heldMuteGroup : muteGroup;
 		scene.tempo = params[TEMPO_PARAM].getValue();
 		scene.used = true;
@@ -1140,6 +1142,8 @@ struct Sequencer : Module, Hub {
 			for (int i = 0; part.hasSound && i < SOUND_PARAMS; i++)
 				setShare(t, i, part.sound[i]);
 		}
+		std::copy(std::begin(scene.mutes), std::end(scene.mutes), mutes);
+		std::copy(std::begin(scene.audioMutes), std::end(scene.audioMutes), audioMutes);
 		muteGroup = scene.muteGroup;
 		heldMuteGroup = -1;
 		if (scene.tempo > 0.f)
@@ -1166,8 +1170,6 @@ struct Sequencer : Module, Hub {
 			p.levels[l] = params[LEVEL_PARAM + l].getValue();
 		p.metronomeSound = (int) params[METRONOME_SOUND_PARAM].getValue();
 		p.metronomeLevel = params[METRONOME_LEVEL_PARAM].getValue();
-		std::copy(std::begin(mutes), std::end(mutes), p.mutes);
-		std::copy(std::begin(audioMutes), std::end(audioMutes), p.audioMutes);
 		p.used = true;
 	}
 
@@ -1192,8 +1194,6 @@ struct Sequencer : Module, Hub {
 			params[LEVEL_PARAM + l].setValue(p.levels[l]);
 		params[METRONOME_SOUND_PARAM].setValue(p.metronomeSound);
 		params[METRONOME_LEVEL_PARAM].setValue(p.metronomeLevel);
-		std::copy(std::begin(p.mutes), std::end(p.mutes), mutes);
-		std::copy(std::begin(p.audioMutes), std::end(p.audioMutes), audioMutes);
 	}
 
 	/** Plays another of the live project's patterns, the tracks carrying on from where they are. With the slots
@@ -3040,17 +3040,28 @@ struct Sequencer : Module, Hub {
 			json_array_append_new(parts, t);
 		}
 		json_object_set_new(root, "tracks", parts);
+		json_object_set_new(root, "mutes", masksToJson(scene.mutes));
+		json_object_set_new(root, "audioMutes", masksToJson(scene.audioMutes));
 		json_object_set_new(root, "muteGroup", json_integer(scene.muteGroup));
 		if (scene.tempo > 0.f)
 			json_object_set_new(root, "bpm", json_real(scene.tempo));
 		return root;
 	}
 
-	/** A pattern from JSON; a project from 2.0.14 or earlier has the same keys, for its one pattern. */
-	static Project::Scene sceneFromJson(json_t* root) {
+	/** A pattern from JSON; a project from 2.0.14 or earlier has the same keys, for its one pattern. Before 2.1.17,
+	mutes were the project's, kept beside its patterns in `shared`, and every pattern takes them. */
+	static Project::Scene sceneFromJson(json_t* root, json_t* shared = nullptr) {
 		Project::Scene scene = blankScene();
+		if (shared) {
+			masksFromJson(json_object_get(shared, "mutes"), scene.mutes);
+			masksFromJson(json_object_get(shared, "audioMutes"), scene.audioMutes);
+			scene.used = std::any_of(std::begin(scene.mutes), std::end(scene.mutes), [](uint16_t m) { return m; })
+				|| std::any_of(std::begin(scene.audioMutes), std::end(scene.audioMutes), [](uint16_t m) { return m; });
+		}
 		if (!json_is_object(root))
 			return scene;
+		masksFromJson(json_object_get(root, "mutes"), scene.mutes);
+		masksFromJson(json_object_get(root, "audioMutes"), scene.audioMutes);
 		size_t i;
 		json_t* t;
 		json_array_foreach(json_object_get(root, "tracks"), i, t) {
@@ -3145,14 +3156,20 @@ struct Sequencer : Module, Hub {
 	/** The patterns and chains, as scenesToJson keeps them. Without them, there are none but the pattern playing. */
 	static void scenesFromJson(json_t* root, Project::Scene* scenes, int* pattern, Project::Chain* chain, Project::Chain* chains) {
 		json_t* a = json_object_get(root, "patterns");
+		json_t* shared = sharedMutes(root);
 		for (int i = 0; i < PATTERN_COUNT; i++)
-			scenes[i] = sceneFromJson(json_array_get(a, i));
+			scenes[i] = sceneFromJson(json_array_get(a, i), shared);
 		*pattern = clamp((int) json_integer_value(json_object_get(root, "pattern")), 0, PATTERN_COUNT - 1);
 		*chain = chainFromJson(json_object_get(root, "chain"));
 		if (!chain->length)
 			*chain = Project::Chain::of(*pattern);
 		for (int i = 0; i < SAVED_CHAINS; i++)
 			chains[i] = chainFromJson(json_array_get(json_object_get(root, "chains"), i));
+	}
+
+	/** A project or patch from before 2.1.17, whose mutes its patterns share, or null for a newer one. */
+	static json_t* sharedMutes(json_t* root) {
+		return json_object_get(root, "mutesPerPattern") ? nullptr : root;
 	}
 
 	/** A project slot, or null for an empty one. Its .opz file, if it came from one, goes in the patch's storage. */
@@ -3167,8 +3184,7 @@ struct Sequencer : Module, Hub {
 		json_object_set_new(root, "swing", json_real(p.swing));
 		json_object_set_new(root, "levels", json_pack("[ffff]", p.levels[0], p.levels[1], p.levels[2], p.levels[3]));
 		json_object_set_new(root, "metronome", json_pack("[if]", p.metronomeSound, p.metronomeLevel));
-		json_object_set_new(root, "mutes", masksToJson(p.mutes));
-		json_object_set_new(root, "audioMutes", masksToJson(p.audioMutes));
+		json_object_set_new(root, "mutesPerPattern", json_true());
 		return root;
 	}
 
@@ -3180,7 +3196,7 @@ struct Sequencer : Module, Hub {
 		if (json_object_get(root, "patterns"))
 			scenesFromJson(root, p.scenes, &p.pattern, &p.chain, p.chains);
 		else
-			p.scenes[0] = sceneFromJson(root);
+			p.scenes[0] = sceneFromJson(root, sharedMutes(root));
 		p.masterStyle = clamp((int) json_integer_value(json_object_get(root, "masterStyle")), (int) LATCH, (int) FREE);
 		if (json_t* j = json_object_get(root, "transposed"))
 			p.transposed = (uint16_t) json_integer_value(j) & 0xff;
@@ -3191,8 +3207,6 @@ struct Sequencer : Module, Hub {
 		json_t* metronome = json_object_get(root, "metronome");
 		p.metronomeSound = clamp((int) json_integer_value(json_array_get(metronome, 0)), 0, Metronome::SOUNDS - 1);
 		p.metronomeLevel = clamp((float) json_number_value(json_array_get(metronome, 1)), 0.f, 1.f);
-		masksFromJson(json_object_get(root, "mutes"), p.mutes);
-		masksFromJson(json_object_get(root, "audioMutes"), p.audioMutes);
 		p.used = true;
 		return p;
 	}
@@ -3420,6 +3434,7 @@ struct Sequencer : Module, Hub {
 		json_object_set_new(root, "mutes", masksToJson(mutes));
 		json_object_set_new(root, "audioMutes", masksToJson(audioMutes));
 		json_object_set_new(root, "muteGroup", json_integer(heldMuteGroup >= 0 ? heldMuteGroup : muteGroup));
+		json_object_set_new(root, "mutesPerPattern", json_true());
 		json_object_set_new(root, "plugs", plugsToJson());
 		json_object_set_new(root, "songMode", json_boolean(songMode));
 		json_object_set_new(root, "song", json_integer(songSlot));
