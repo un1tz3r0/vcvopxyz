@@ -13,7 +13,7 @@ one song. A song has up to 99 rows. Each row has three columns:
 | --- | --- | --- |
 | **PAT** | P01 to P16 | The [pattern](project.md#patterns) that the row plays. |
 | **LEN** | -, x2 to x99, 1/16 to 999/16 | **-** plays the pattern one time, to the end of its longest track. **x2** plays it two times. **5/16** plays five sixteenths, then the next row starts from step 1. |
-| **MUTE** | -, G1 to G10 | **-** uses the pattern's own [mute group](mixer.md). **G3** uses mute group 3 while the row plays. |
+| **MUTE** | -, G1 to G10 | **-** uses the pattern's own [mute group](mixer.md). **G3** uses mute group 3 of the row's pattern while the row plays. |
 
 The song also has three settings:
 

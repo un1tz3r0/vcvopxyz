@@ -14,7 +14,9 @@ always 342844 bytes: a 4-byte header, a 568-byte block of project settings and c
 bytes. All 16 are read and written, for the eight tracks, the two FX tracks and the master track, with the chain
 playing and the saved chains. Nobody has decoded the track settings' bytes, so those encodings are guesses, marked
 below. Each track's plug is read and written by its OP-Z id, and the Sequencer finds it among the track's slots.
-Everything else a file holds (mutes, the other tracks, the drum tracks' kits) is kept from the file a project was
+A pattern's mute groups are a guess after libopz: 4 bytes a group, 2 bits a track, the high one a mute; the low
+one, unexplained, is kept, and sound mutes aren't written. Everything else a file holds (the other tracks, the drum
+tracks' kits) is kept from the file a project was
 imported from, so a round trip changes only what a project models.
 */
 namespace opz {
@@ -41,9 +43,10 @@ struct Project {
 		uint32_t opzPlug = 0;           // the plug a file has the track play, by the OP-Z's id; 0 where unknown
 	};
 	/** One of the project's 16 patterns: every track's steps (each a Pattern, in Sequence.hpp's sense), settings and
-	dials, and the mute group it plays with. */
+	dials, and its ten mute groups with the one it plays. */
 	struct Scene {
 		Part parts[LANES];              // the eight tracks', the master track's, which has no sound, then the FX tracks'
+		uint16_t mutes[MUTE_GROUPS] = {}, audioMutes[MUTE_GROUPS] = {}; // a bit per lane, in each mute group
 		int muteGroup = 0;
 		float tempo = 0.f;              // its BPM, or 0 to keep the one playing
 		bool used = false;              // played or edited, so worth saving
@@ -128,7 +131,6 @@ struct Project {
 	float levels[LEVELS_LEN] = {1.f, 1.f, 0.f, 1.f};
 	int metronomeSound = 0;
 	float metronomeLevel = 0.f;
-	uint16_t mutes[MUTE_GROUPS] = {}, audioMutes[MUTE_GROUPS] = {};
 	bool used = false;                  // saved or imported at least once
 	std::vector<uint8_t> opz;           // the file it came from, for everything it doesn't model
 };
@@ -138,7 +140,7 @@ namespace opzfile {
 
 constexpr size_t SIZE = 342844, PATTERNS = 572, PATTERN = 21392;
 constexpr size_t LIVE_CHAIN = 484, LEVELS = 516, TEMPO = 520, SWING = 565, METRONOME_LEVEL = 566, METRONOME_SOUND = 567, CHAIN = 568;
-constexpr size_t TRACK_CHUNKS = 0, NOTES = 192, STEP_CHUNKS = 7232, SOUNDS = 21056;
+constexpr size_t TRACK_CHUNKS = 0, NOTES = 192, STEP_CHUNKS = 7232, SOUNDS = 21056, MUTES = 21344, MUTE_GROUP = 21388;
 constexpr int SLOTS = 55, UNITS = 6200;      // note slots per step; note duration units per step
 constexpr int HEADER = 0x49;
 /** Each lane's track among a file's 16: the eight in order, the master track, the OP-Z's 12th, then FX 1 and 2. */
@@ -252,6 +254,12 @@ inline bool read(const std::vector<uint8_t>& f, Project& p, std::string* error) 
 /** One of a file's patterns into a scene. */
 inline void readScene(const std::vector<uint8_t>& f, size_t at, Project::Scene& scene) {
 	scene.used = true;
+	for (int g = 0; g < MUTE_GROUPS; g++) {
+		scene.mutes[g] = scene.audioMutes[g] = 0;
+		for (int t = 0; t < LANES; t++)
+			scene.mutes[g] |= (f[at + MUTES + 4 * g + FILE_TRACK[t] / 4] >> (2 * (FILE_TRACK[t] % 4) + 1) & 1) << t;
+	}
+	scene.muteGroup = f[at + MUTE_GROUP] < MUTE_GROUPS ? f[at + MUTE_GROUP] : 0;
 	for (int t = 0; t < LANES; t++) {
 		Project::Part& part = scene.parts[t];
 		int ft = FILE_TRACK[t];
@@ -321,6 +329,13 @@ inline std::vector<uint8_t> write(const Project& p) {
 
 /** A scene over one of a file's patterns. */
 inline void writeScene(std::vector<uint8_t>& f, size_t at, const Project::Scene& scene) {
+	for (int g = 0; g < MUTE_GROUPS; g++)
+		for (int t = 0; t < LANES; t++) {
+			uint8_t& b = f[at + MUTES + 4 * g + FILE_TRACK[t] / 4];
+			uint8_t bit = 2 << 2 * (FILE_TRACK[t] % 4);
+			b = scene.mutes[g] >> t & 1 ? b | bit : b & ~bit;
+		}
+	f[at + MUTE_GROUP] = (uint8_t) scene.muteGroup;
 	for (int t = 0; t < LANES; t++) {
 		const Project::Part& part = scene.parts[t];
 		int ft = FILE_TRACK[t];

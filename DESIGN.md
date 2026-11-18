@@ -82,6 +82,10 @@ under the slots' lock and copies back to `chains[songSlot]`; its screen reads th
 `Hub::songView`, which only try-locks, keeping the last copy when the lock is busy. Each pattern's scene keeps its
 tempo; the song's tempo, when set, overrides it, and CLOCK overrides both.
 
+Since 2.1.17, each scene also keeps its ten mute groups (`Scene::mutes`, `audioMutes`): the Sequencer's own `mutes`
+are the playing pattern's, stored and recalled with it like its notes. A project or patch saved before then has no
+`mutesPerPattern` key, and its one set of mutes goes to every pattern on load.
+
 ## Tracks
 
 `src/opz/TrackCore.hpp`. `TrackCore` is every track, drum, synth or FX: the tempo, gate edges, the LFO, the
@@ -332,7 +336,7 @@ Vic made to keep (2026-10-21).
 - **Delay time** is set by notes, as the guide has the reverb's predelay set; the guide doesn't say this of the
   delay.
 - **Not modelled:** tracks 11 and 13 to 16 (tape, perform, module, lights, motion), punch-in effects, linked tracks,
-  temporary tweaks with SHIFT, record arm, super panic, pitch bend, copying a pattern's settings or a track, bounce,
+  temporary tweaks with SHIFT, record arm, super panic, pitch bend, bounce,
   snapshots, tempo lock, the master track's effects page, sampling and MIDI settings.
 
 ## Choices made where the OP-Z guide is silent

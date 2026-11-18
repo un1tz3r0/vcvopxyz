@@ -43,7 +43,7 @@ keys latch on a click. A step and **SHIFT** latch on a long press or a Ctrl+clic
 | Hold project, hold a value key: save a project | Latch **PROJECT**, then long-press or Ctrl+click a black key. |
 | Hold project, press a step: play a pattern | Latch **PROJECT**, then click a step. |
 | Hold project, press play, then steps: a chain | Latch **PROJECT**, click **PLAY**, click steps, then click **PLAY**. |
-| Hold project, press shift, then steps: copy a pattern | Latch **PROJECT**, click **SHIFT**, click steps, then click **SHIFT**. |
+| Hold project, press shift once, twice or three times, then steps: copy a pattern, its settings or a track | Latch **PROJECT**, click **SHIFT** one to three times, click steps, then click **SHIFT** until copy stops. A fourth click copies only the mutes. |
 | Hold mixer, press a step: mute | Latch **MIXER**, then click the step. Latch **SHIFT** first to mute only the sound. |
 | Hold tempo, turn the green dial, type or tap | Latch **TEMPO**, then do the same. |
 | Triple-click an index key: index lock | Not necessary. The index keys always latch. |
@@ -75,5 +75,4 @@ keys latch on a click. A step and **SHIFT** latch on a long press or a Ctrl+clic
 - The Sample engine. The other engines are plugs.
 - Punch-in effects, linked tracks, temporary tweaks with SHIFT, and record arm.
 - Super panic, pitch bend, bounce, snapshots and tempo lock.
-- Copying a pattern's settings or a track.
 - The master track's effects page, sampling, and the MIDI settings.

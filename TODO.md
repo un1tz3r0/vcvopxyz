@@ -55,7 +55,7 @@ Whatever turns up off the plan's path, each for a PR of its own afterwards.
       the jacks' own context menus, the module's **Voltage ranges** submenu, and a patch saved and loaded.
 - [ ] **OP-Z project files** are untested on a real OP-Z. Check an export loads, and work out the track settings'
       bytes (step count, step length, note length, quantize) and swing, which are guesses.
-- [ ] Write the mixer's mutes into exported project files.
+- [ ] Check the guessed mute bytes of exported project files on an OP-Z.
 - [ ] A Screen shows the dials' own values, not the locks of the step playing.
 - [ ] Exported project files hold micro timing from −12 to +11 ticks, as the OP-Z's own do, so notes further off the
       step than that are pulled in.
